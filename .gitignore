@@ -1,0 +1,58 @@
+# ============================================
+# Root .gitignore for ai_app monorepo
+# ============================================
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Credentials (NEVER commit these)
+*.pem
+invoker.json
+credentials.json
+**/invoker.json
+**/credentials.json
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Terraform state (contains secrets)
+**/.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+terraform.tfvars
+*.auto.tfvars
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js
+.next/
+out/
+build/
+
+# Python (if any)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Logs
+*.log
+logs/
+
+# Misc
+.vercel
+.turbo

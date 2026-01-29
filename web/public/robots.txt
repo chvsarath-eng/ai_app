@@ -1,0 +1,12 @@
+# robots.txt for img2x.com
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /book/
+
+# Sitemaps
+Sitemap: https://img2x.com/sitemap.xml
+
+# Crawl-delay (optional, adjust if needed)
+Crawl-delay: 1

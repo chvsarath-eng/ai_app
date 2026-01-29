@@ -1,0 +1,55 @@
+# ============================================
+# Terraform Variables Example
+# ============================================
+# Copy this file to terraform.tfvars and fill in your values
+# NEVER commit terraform.tfvars to version control!
+
+# ============================================
+# Required: GCP Project Configuration
+# ============================================
+
+project_id   = "your-gcp-project-id"
+github_owner = "your-github-username"
+github_repo  = "ai_app"
+
+# ============================================
+# Required: SMTP Configuration
+# ============================================
+
+smtp_host = "smtp.hostinger.com"
+smtp_port = "587"
+smtp_user = "team@img2x.com"
+smtp_pass = "your-smtp-password"
+
+# ============================================
+# Required: Story Service Configuration
+# ============================================
+
+story_service_url = "https://story-api-XXXXXX.us-central1.run.app"
+
+# Paste the entire service account JSON here (escape quotes if needed)
+# Or use: story_invoker_credentials_json = file("path/to/invoker.json")
+story_invoker_credentials_json = <<EOF
+{
+  "type": "service_account",
+  "project_id": "your-project",
+  "private_key_id": "...",
+  "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n",
+  "client_email": "invoker@your-project.iam.gserviceaccount.com",
+  "client_id": "...",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token"
+}
+EOF
+
+# ============================================
+# Optional: Deployment Configuration
+# ============================================
+
+# region             = "us-central1"
+# service_name       = "img2x-web"
+# artifact_repo_name = "img2x-repo"
+# min_instances      = 0
+# max_instances      = 10
+# cpu                = "1"
+# memory             = "512Mi"

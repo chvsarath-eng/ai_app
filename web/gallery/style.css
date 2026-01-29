@@ -1,0 +1,290 @@
+:root {
+    --primary-bg: #f3f4f6;
+    --text-main: #1f2937;
+    --book-width: 260px;
+    --book-height: 260px;
+    --book-thickness: 24px;
+    --book-bg: #01060f;
+    --page-gradient: linear-gradient(90deg,
+            #fff 0%, #f9f9f9 5%, #fff 10%, #f9f9f9 15%, #fff 20%, #f9f9f9 25%,
+            #fff 30%, #f9f9f9 35%, #fff 40%, #f9f9f9 45%, #fff 50%, #f9f9f9 55%,
+            #fff 60%, #f9f9f9 65%, #fff 70%, #f9f9f9 75%, #fff 80%, #f9f9f9 85%,
+            #fff 90%, #f9f9f9 95%, #fff 100%);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    background-color: var(--primary-bg);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    padding: 10px 0;
+    /* Reduced padding */
+    color: var(--text-main);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+
+.gallery-container {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 40px 50px;
+    /* Reduced vertical gap */
+    width: fit-content;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 20px;
+    justify-items: center;
+}
+
+@keyframes firstBookIntro {
+    0% {
+        transform: rotateY(0deg);
+    }
+
+    50% {
+        transform: rotateY(-30deg);
+    }
+
+    100% {
+        transform: rotateY(0deg);
+    }
+}
+
+@keyframes staggeredIntro {
+    0% {
+        transform: rotateY(0deg);
+    }
+
+    50% {
+        transform: rotateY(-30deg);
+    }
+
+    100% {
+        transform: rotateY(0deg);
+    }
+}
+
+.book-container {
+    perspective: 1200px;
+    transform-style: preserve-3d;
+    width: var(--book-width);
+    height: var(--book-height);
+}
+
+.book {
+    width: var(--book-width);
+    height: var(--book-height);
+    position: relative;
+    transform-style: preserve-3d;
+    transform: rotateY(0deg);
+    transition: transform 1s ease;
+}
+
+/* Sequential Staggered Animation */
+.book-container:nth-child(1) .book {
+    animation: firstBookIntro 2s ease-out 0s 1;
+    /* Removed forwards and explicit transform to allow hover interaction */
+}
+
+.book-container:nth-child(2) .book {
+    animation: staggeredIntro 2.5s ease-in-out 0.5s 1;
+}
+
+.book-container:nth-child(3) .book {
+    animation: staggeredIntro 2.5s ease-in-out 3s 1;
+}
+
+.book-container:nth-child(4) .book {
+    animation: staggeredIntro 2.5s ease-in-out 5.5s 1;
+}
+
+.book-container:nth-child(5) .book {
+    animation: staggeredIntro 2.5s ease-in-out 8s 1;
+}
+
+.book-container:nth-child(6) .book {
+    animation: staggeredIntro 2.5s ease-in-out 10.5s 1;
+}
+
+.book-container:hover .book {
+    transform: rotateY(-30deg);
+}
+
+/* Front Face */
+.book>.front-face {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--book-width);
+    height: var(--book-height);
+    transform: translateZ(calc(var(--book-thickness) / 2));
+    background-color: var(--book-bg);
+    border-radius: 0 2px 2px 0;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+}
+
+/* Pages (Right Side) */
+.book::before {
+    position: absolute;
+    content: ' ';
+    left: 0;
+    top: 3px;
+    width: calc(var(--book-thickness) - 4px);
+    height: calc(var(--book-height) - 6px);
+    transform: translateX(calc(var(--book-width) - (var(--book-thickness) / 2) - 2px)) rotateY(90deg);
+    background: var(--page-gradient);
+    z-index: 5;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
+}
+
+/* Spine Face */
+.book>.spine {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--book-thickness);
+    height: var(--book-height);
+    transform: translateX(calc(var(--book-thickness) / -2)) rotateY(-90deg);
+    background-color: #01060f;
+    background-image: linear-gradient(to bottom,
+            rgba(255, 255, 255, 0.1) 0%,
+            transparent 10%,
+            transparent 90%,
+            rgba(0, 0, 0, 0.2) 100%);
+    z-index: 10;
+}
+
+/* Back Cover */
+.book::after {
+    position: absolute;
+    top: 0;
+    left: 0;
+    content: ' ';
+    width: var(--book-width);
+    height: var(--book-height);
+    transform: translateZ(calc(var(--book-thickness) / -2));
+    background-color: #01060f;
+    border-radius: 0 2px 2px 0;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+}
+
+.cover {
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    position: relative;
+}
+
+/* Lighting Realism Overlay */
+.cover-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(to right,
+            rgba(0, 0, 0, 0.5) 0%,
+            rgba(0, 0, 0, 0.1) 3%,
+            transparent 8%,
+            rgba(255, 255, 255, 0.05) 15%,
+            transparent 30%);
+    z-index: 15;
+}
+
+/* Paper Texture on Cover */
+.cover::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url('https://www.transparenttextures.com/patterns/felt.png');
+    opacity: 0.1;
+    mix-blend-mode: multiply;
+    z-index: 12;
+}
+
+
+
+.container .front:after {
+    content: '';
+    position: absolute;
+    top: 1px;
+    bottom: 1px;
+    left: -1px;
+    width: 1px;
+}
+
+.container .cover-overlay {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 10px;
+    bottom: 0;
+    width: 4px;
+    background: rgba(0, 0, 0, 0.2);
+    box-shadow: 1px 0 2px rgba(255, 255, 255, 0.1);
+    z-index: 5;
+}
+
+/* Edge highlight */
+.container .front:before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 2px;
+    background: rgba(255, 255, 255, 0.2);
+    z-index: 10;
+}
+
+.container h2 {
+    width: 400px;
+    height: 40px;
+    color: var(--text-color);
+    font-size: 15px;
+    line-height: 40px;
+    padding-right: 20px;
+    text-align: right;
+    transform-origin: 0 0;
+    transform: rotate(90deg) translateY(-40px);
+    margin: 0;
+}
+
+.left-side h2 span:first-child {
+    font-weight: 400;
+    font-size: 13px;
+    padding-right: 20px;
+}
+
+.left-side h2 span:last-child {
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.alternate-1 {
+    --book-bg: linear-gradient(45deg, #e0d0d0 0%, #f4e8e8 100%);
+    --spine-bg: #e5d5d5;
+}
+
+.alternate-2 {
+    --book-bg: linear-gradient(45deg, #d0d0e0 0%, #e8e8f4 100%);
+    --spine-bg: #d5d5e5;
+}
+
+footer {
+    text-align: center;
+    padding: 10px;
+    opacity: 0.6;
+    font-size: 0.8rem;
+}

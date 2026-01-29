@@ -1,0 +1,287 @@
+.slider {
+  width: 100%;
+  min-height: 600px;
+  position: relative;
+}
+
+.slider input {
+  display: none;
+}
+
+.testimonials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-height: 540px;
+  perspective: 500px;
+  margin-top: 2.5rem;
+  overflow: hidden;
+}
+
+.item {
+  max-width: 30rem;
+  border-radius: 1.5rem;
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  top: 0;
+  position: absolute;
+  box-sizing: border-box;
+  background-color: #fff;
+  padding: 28px;
+  width: 460px;
+  text-align: center;
+  transition: transform 0.45s ease, opacity 0.45s ease;
+  transform-style: preserve-3d;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
+  user-select: none;
+  cursor: pointer;
+}
+
+.mycard {
+  height: 100%;
+  width: 100%;
+  max-width: 28rem;
+  margin: 0 auto;
+}
+
+.cardtitle {
+  font-weight: 700;
+  color: #111827;
+  text-align: center;
+  letter-spacing: -0.01em;
+}
+
+.cardimg {
+  margin: 1.75rem auto;
+  width: 210px;
+  height: 210px;
+  object-fit: cover;
+  border-radius: 22px;
+  border: 8px solid rgba(168, 85, 247, 0.12);
+  box-shadow: 0 20px 36px rgba(15, 23, 42, 0.16);
+}
+
+.carddescription {
+  color: #6b7280;
+  text-align: center;
+  line-height: 1.6;
+  font-size: 1rem;
+}
+
+.cardmeta {
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #4b5563;
+}
+
+.dots {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 10px;
+  gap: 8px;
+}
+
+.dots label {
+  display: block;
+  height: 7px;
+  width: 7px;
+  border-radius: 9999px;
+  cursor: pointer;
+  background-color: rgba(148, 163, 184, 0.7);
+  transition: transform 0.2s, background-color 0.2s;
+}
+
+@media (max-width: 640px) {
+  .slider {
+    min-height: auto;
+  }
+
+  .testimonials {
+    justify-content: flex-start;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 16px;
+    padding: 0 8px 8px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .item {
+    position: relative;
+    width: min(360px, 84vw);
+    padding: 22px;
+    transform: none !important;
+    opacity: 1 !important;
+    scroll-snap-align: center;
+    flex: 0 0 auto;
+  }
+
+  .cardimg {
+    width: 180px;
+    height: 180px;
+  }
+
+  .dots {
+    display: none;
+  }
+}
+
+/* First */
+:global(#t-1:checked) ~ .dots label[for="t-1"] {
+  transform: scale(1.9);
+  background-color: #111827;
+}
+:global(#t-1:checked) ~ .dots label[for="t-2"] {
+  transform: scale(1.4);
+}
+:global(#t-1:checked) ~ .testimonials label[for="t-1"] {
+  z-index: 4;
+}
+:global(#t-1:checked) ~ .testimonials label[for="t-2"] {
+  transform: translateX(300px) translateZ(-90px) translateY(-15px);
+  z-index: 3;
+  opacity: 0.9;
+}
+:global(#t-1:checked) ~ .testimonials label[for="t-3"] {
+  transform: translateX(600px) translateZ(-180px) translateY(-30px);
+  z-index: 2;
+  opacity: 0.7;
+}
+:global(#t-1:checked) ~ .testimonials label[for="t-4"] {
+  transform: translateX(900px) translateZ(-270px) translateY(-45px);
+  z-index: 1;
+  opacity: 0.5;
+}
+:global(#t-1:checked) ~ .testimonials label[for="t-5"] {
+  transform: translateX(1200px) translateZ(-360px) translateY(-60px);
+  opacity: 0.3;
+}
+
+/* Second */
+:global(#t-2:checked) ~ .dots label[for="t-1"] {
+  transform: scale(1.4);
+}
+:global(#t-2:checked) ~ .dots label[for="t-2"] {
+  transform: scale(1.9);
+  background-color: #111827;
+}
+:global(#t-2:checked) ~ .dots label[for="t-3"] {
+  transform: scale(1.4);
+}
+:global(#t-2:checked) ~ .testimonials label[for="t-1"] {
+  transform: translateX(-300px) translateZ(-90px) translateY(-15px);
+  opacity: 0.9;
+}
+:global(#t-2:checked) ~ .testimonials label[for="t-2"] {
+  z-index: 3;
+}
+:global(#t-2:checked) ~ .testimonials label[for="t-3"] {
+  transform: translateX(300px) translateZ(-90px) translateY(-15px);
+  z-index: 2;
+  opacity: 0.9;
+}
+:global(#t-2:checked) ~ .testimonials label[for="t-4"] {
+  transform: translateX(600px) translateZ(-180px) translateY(-30px);
+  z-index: 1;
+  opacity: 0.7;
+}
+:global(#t-2:checked) ~ .testimonials label[for="t-5"] {
+  transform: translateX(900px) translateZ(-270px) translateY(-45px);
+  opacity: 0.5;
+}
+
+/* Third */
+:global(#t-3:checked) ~ .dots label[for="t-2"] {
+  transform: scale(1.4);
+}
+:global(#t-3:checked) ~ .dots label[for="t-3"] {
+  transform: scale(1.9);
+  background-color: #111827;
+}
+:global(#t-3:checked) ~ .dots label[for="t-4"] {
+  transform: scale(1.4);
+}
+:global(#t-3:checked) ~ .testimonials label[for="t-1"] {
+  transform: translateX(-600px) translateZ(-180px) translateY(-30px);
+  opacity: 0.7;
+}
+:global(#t-3:checked) ~ .testimonials label[for="t-2"] {
+  transform: translateX(-300px) translateZ(-90px) translateY(-15px);
+  opacity: 0.9;
+}
+:global(#t-3:checked) ~ .testimonials label[for="t-3"] {
+  z-index: 3;
+}
+:global(#t-3:checked) ~ .testimonials label[for="t-4"] {
+  transform: translateX(300px) translateZ(-90px) translateY(-15px);
+  z-index: 2;
+  opacity: 0.9;
+}
+:global(#t-3:checked) ~ .testimonials label[for="t-5"] {
+  transform: translateX(600px) translateZ(-180px) translateY(-30px);
+  opacity: 0.7;
+}
+
+/* Fourth */
+:global(#t-4:checked) ~ .dots label[for="t-3"] {
+  transform: scale(1.4);
+}
+:global(#t-4:checked) ~ .dots label[for="t-4"] {
+  transform: scale(1.9);
+  background-color: #111827;
+}
+:global(#t-4:checked) ~ .dots label[for="t-5"] {
+  transform: scale(1.4);
+}
+:global(#t-4:checked) ~ .testimonials label[for="t-1"] {
+  transform: translateX(-900px) translateZ(-270px) translateY(-45px);
+  opacity: 0.5;
+}
+:global(#t-4:checked) ~ .testimonials label[for="t-2"] {
+  transform: translateX(-600px) translateZ(-180px) translateY(-30px);
+  opacity: 0.7;
+}
+:global(#t-4:checked) ~ .testimonials label[for="t-3"] {
+  transform: translateX(-300px) translateZ(-90px) translateY(-15px);
+  z-index: 2;
+  opacity: 0.9;
+}
+:global(#t-4:checked) ~ .testimonials label[for="t-4"] {
+  z-index: 3;
+}
+:global(#t-4:checked) ~ .testimonials label[for="t-5"] {
+  transform: translateX(300px) translateZ(-90px) translateY(-15px);
+  opacity: 0.9;
+}
+
+/* Fifth */
+:global(#t-5:checked) ~ .dots label[for="t-4"] {
+  transform: scale(1.4);
+}
+:global(#t-5:checked) ~ .dots label[for="t-5"] {
+  transform: scale(1.9);
+  background-color: #111827;
+}
+:global(#t-5:checked) ~ .testimonials label[for="t-1"] {
+  transform: translateX(-1200px) translateZ(-360px) translateY(-60px);
+  opacity: 0.3;
+}
+:global(#t-5:checked) ~ .testimonials label[for="t-2"] {
+  transform: translateX(-900px) translateZ(-270px) translateY(-45px);
+  z-index: 1;
+  opacity: 0.5;
+}
+:global(#t-5:checked) ~ .testimonials label[for="t-3"] {
+  transform: translateX(-600px) translateZ(-180px) translateY(-30px);
+  z-index: 2;
+  opacity: 0.7;
+}
+:global(#t-5:checked) ~ .testimonials label[for="t-4"] {
+  transform: translateX(-300px) translateZ(-90px) translateY(-15px);
+  z-index: 3;
+  opacity: 0.9;
+}
+:global(#t-5:checked) ~ .testimonials label[for="t-5"] {
+  z-index: 4;
+}

@@ -1,0 +1,155 @@
+@import "tailwindcss";
+
+/* Tailwind v4: make `dark:` class-based (not OS-based) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* Material-ish light palette (M3 inspired) */
+  --md-primary: #6750a4;
+  --md-surface: #fffbfe;
+  --md-surface-container: #f3edf7;
+  --md-outline: #cac4d0;
+  --md-on-surface: #1c1b1f;
+  --md-on-surface-variant: #49454f;
+
+  --background: var(--md-surface);
+  --foreground: var(--md-on-surface);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+/* Soft-fade edges so images blend into the page background */
+.img2xSoftEdges {
+  -webkit-mask-image: radial-gradient(ellipse closest-side, rgba(0, 0, 0, 1) 72%, rgba(0, 0, 0, 0) 100%);
+  mask-image: radial-gradient(ellipse closest-side, rgba(0, 0, 0, 1) 72%, rgba(0, 0, 0, 0) 100%);
+}
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: rgba(103, 80, 164, 0.20);
+}
+
+@keyframes siriGlowShift {
+  0% { background-position: 0% 50%; filter: drop-shadow(0 10px 26px rgba(249, 115, 22, 0.18)); }
+  50% { background-position: 100% 50%; filter: drop-shadow(0 14px 30px rgba(236, 72, 153, 0.18)); }
+  100% { background-position: 0% 50%; filter: drop-shadow(0 10px 26px rgba(168, 85, 247, 0.16)); }
+}
+
+.siriGlowText {
+  background-image: linear-gradient(90deg, #f97316, #ec4899, #a855f7, #f97316);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: siriGlowShift 4.2s ease-in-out infinite;
+}
+
+.ultraGlowText {
+  background-image: linear-gradient(90deg, #7c3aed, #ec4899, #f97316, #7c3aed);
+  background-size: 260% 260%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: siriGlowShift 3.6s ease-in-out infinite;
+  text-shadow: 0 0 6px rgba(168, 85, 247, 0.18), 0 0 12px rgba(236, 72, 153, 0.14);
+}
+
+.siriGlowRing {
+  position: relative;
+  display: inline-flex;
+  border-radius: 9999px;
+  padding: 2px;
+}
+
+.siriGlowRing::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border-radius: inherit;
+  background-image: linear-gradient(90deg, #f97316, #ec4899, #a855f7, #f97316);
+  background-size: 300% 300%;
+  animation: siriGlowShift 4.2s ease-in-out infinite;
+  filter: blur(18px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.siriGlowRing::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: linear-gradient(90deg, #f97316, #ec4899, #a855f7, #f97316);
+  background-size: 300% 300%;
+  animation: siriGlowShift 4.2s ease-in-out infinite;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.siriGlowRingInner {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(202, 196, 208, 0.7);
+  padding: 10px 14px;
+  box-shadow: 0 16px 45px rgba(10, 10, 15, 0.10);
+}
+
+.siriAmbientCard {
+  position: relative;
+  --siri-card-radius: 24px; /* matches Tailwind rounded-3xl */
+  border-radius: var(--siri-card-radius);
+  isolation: isolate;
+}
+
+.siriAmbientCard::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: calc(var(--siri-card-radius) + 6px);
+  background-image: linear-gradient(90deg, #f97316, #ec4899, #a855f7, #f97316);
+  background-size: 300% 300%;
+  animation: siriGlowShift 7.2s ease-in-out infinite;
+  filter: blur(16px);
+  opacity: 0.24;
+  pointer-events: none;
+}
+
+.siriAmbientCard::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: calc(var(--siri-card-radius) + 1px);
+  background-image: linear-gradient(90deg, #f97316, #ec4899, #a855f7, #f97316);
+  background-size: 300% 300%;
+  animation: siriGlowShift 7.2s ease-in-out infinite;
+  opacity: 0.30;
+  pointer-events: none;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  padding: 1px;
+}
