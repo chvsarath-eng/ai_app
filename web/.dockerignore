@@ -14,7 +14,6 @@ out
 !.env.example
 
 # Credentials
-*.json
 invoker.json
 credentials.json
 

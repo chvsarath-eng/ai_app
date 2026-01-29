@@ -214,36 +214,35 @@ resource "google_cloud_run_v2_service_iam_member" "public_access" {
 }
 
 # ============================================
-# Cloud Build Trigger (GitHub) - Optional
+# Cloud Build Trigger (GitHub)
 # ============================================
-# Uncomment this block after connecting GitHub to Cloud Build
-# Go to: GCP Console > Cloud Build > Triggers > Connect Repository
 
-# resource "google_cloudbuild_trigger" "deploy" {
-#   name        = "${var.service_name}-deploy"
-#   description = "Deploy img2x-web on push to main"
-#   location    = var.region
-#
-#   # GitHub trigger configuration
-#   github {
-#     owner = var.github_owner
-#     name  = var.github_repo
-#
-#     push {
-#       branch = "^main$"
-#     }
-#   }
-#
-#   filename = "web/cloudbuild.yaml"
-#
-#   substitutions = {
-#     _REGION       = var.region
-#     _REPO         = var.artifact_repo_name
-#     _SERVICE_NAME = var.service_name
-#   }
-#
-#   depends_on = [google_project_service.apis]
-# }
+resource "google_cloudbuild_trigger" "deploy" {
+  count       = var.enable_cloudbuild_trigger ? 1 : 0
+  name        = "${var.service_name}-deploy"
+  description = "Deploy img2x-web on push to main"
+  location    = "global"
+
+  # GitHub trigger configuration
+  github {
+    owner = var.github_owner
+    name  = var.github_repo
+
+    push {
+      branch = "^main$"
+    }
+  }
+
+  filename = "web/cloudbuild.yaml"
+
+  substitutions = {
+    _REGION       = var.region
+    _REPO         = var.artifact_repo_name
+    _SERVICE_NAME = var.service_name
+  }
+
+  depends_on = [google_project_service.apis]
+}
 
 # ============================================
 # Outputs

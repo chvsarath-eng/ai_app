@@ -9,6 +9,7 @@ import { Controller, useForm } from 'react-hook-form'
 import { ImageIcon, Mail, Wand2, Book, Sparkles } from 'lucide-react'
 
 import { createStorybookJob } from '@/lib/storybookApi'
+import { outputTypes } from '@/types/storybook'
 import type { Theme, OutputType } from '@/types/storybook'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -26,7 +27,7 @@ const formSchema = z.object({
   storyline: z.string().trim().min(1, 'Storyline is required').max(180, 'Keep it under 180 characters'),
   email: z.string().trim().min(1, 'Email is required').email('Enter a valid email'),
   confirmEmail: z.string().trim().min(1, 'Please confirm your email').email('Enter a valid email'),
-  outputType: z.enum(['DIGI_BOOK', 'LULU_BOOK'], { required_error: 'Please select a book type' })
+  outputType: z.enum(outputTypes, { message: 'Please select a book type' })
 }).refine((values) => values.email === values.confirmEmail, {
   path: ['confirmEmail'],
   message: 'Emails do not match'

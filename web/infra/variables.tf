@@ -23,6 +23,12 @@ variable "github_repo" {
   default     = ""
 }
 
+variable "enable_cloudbuild_trigger" {
+  description = "Whether to create the Cloud Build trigger via Terraform"
+  type        = bool
+  default     = false
+}
+
 # ============================================
 # Secret Values (sensitive)
 # ============================================

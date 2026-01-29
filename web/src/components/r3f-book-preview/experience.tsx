@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { easing } from 'maath'
 import { useMemo, useRef } from 'react'
 import { Vector3 } from 'three'
+import type { Group } from 'three'
 
 import { Book } from './book'
 
@@ -15,7 +16,7 @@ export function Experience ({
   isReceded?: boolean
   onSelectPage: (nextPage: number) => void
 }) {
-  const bookGroupRef = useRef<THREE.Group>(null)
+  const bookGroupRef = useRef<Group>(null)
 
   const targets = useMemo(() => {
     // No recede behavior — book stays in place since shadow is removed
