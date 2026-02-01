@@ -4,45 +4,37 @@ import * as React from 'react'
 import { CheckCircle2, XCircle } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
-function ExampleThumb ({
-  label,
-  variant,
-  src
-}: {
-  label: string
-  variant: 'good' | 'bad'
-  src: string
-}) {
-  return (
-    <div
-      className={cn(
-        'relative mx-auto w-full max-w-[180px] shrink-0 snap-start overflow-hidden rounded-2xl border bg-white p-2.5 shadow-sm sm:max-w-[240px] sm:p-3',
-        variant === 'good' ? 'border-emerald-200/70' : 'border-red-200/70'
-      )}
-    >
-      <div className="mb-2 flex items-center gap-2 text-xs font-semibold tracking-tight sm:text-sm">
-        {variant === 'good'
-          ? <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
-          : <XCircle className="h-4 w-4 text-red-600" aria-hidden="true" />}
-        {label}
-      </div>
-      <div className={cn(
-        'relative aspect-square w-full overflow-hidden rounded-xl border',
-        variant === 'good' ? 'border-emerald-200' : 'border-red-200'
-      )}>
-        <img
-          src={src}
-          alt={label}
-          className="h-full w-full object-cover"
-          loading="lazy"
-        />
-      </div>
-    </div>
-  )
-}
+const STORAGE_KEY = 'img2x-skip-photo-guide'
+
+const STEPS = [
+  {
+    type: 'good' as const,
+    src: '/guidelines/good-front.png',
+    title: 'Use photos like this',
+    desc: 'Straight-on headshot with even lighting'
+  },
+  {
+    type: 'bad' as const,
+    src: '/guidelines/bad-side-angle.png',
+    title: 'Avoid side angles',
+    desc: 'Face should look directly at camera'
+  },
+  {
+    type: 'bad' as const,
+    src: '/guidelines/bad-smile.png',
+    title: 'Avoid open-mouth smiles',
+    desc: 'Neutral expression works best'
+  },
+  {
+    type: 'bad' as const,
+    src: '/guidelines/bad-low-quality.png',
+    title: 'Avoid blurry photos',
+    desc: 'Use high-quality, sharp images'
+  }
+]
 
 export function PhotoGuidelinesDialog ({
   isOpen,
@@ -53,134 +45,165 @@ export function PhotoGuidelinesDialog ({
   onOpenChange: (open: boolean) => void
   onContinue: () => void
 }) {
-  const contentRef = React.useRef<HTMLDivElement | null>(null)
-  const [scale, setScale] = React.useState(1)
+  const [step, setStep] = React.useState(0)
+  const [dontShowAgain, setDontShowAgain] = React.useState(false)
+  const [shouldSkip, setShouldSkip] = React.useState(false)
 
+  // Check localStorage on mount to see if user opted out
   React.useEffect(() => {
-    if (!isOpen) return
-    setScale(1)
-  }, [isOpen])
+    if (typeof window !== 'undefined') {
+      const skip = localStorage.getItem(STORAGE_KEY) === 'true'
+      setShouldSkip(skip)
+    }
+  }, [])
 
+  // If dialog opens and user has opted out, skip immediately
   React.useEffect(() => {
-    if (!isOpen) return
-    setScale(1)
-    const computeScale = () => {
-      const el = contentRef.current
-      if (!el) return
+    if (isOpen && shouldSkip) {
+      onOpenChange(false)
+      onContinue()
+    }
+  }, [isOpen, shouldSkip, onOpenChange, onContinue])
 
-      if (window.innerWidth < 640) {
-        setScale(1)
-        return
+  // Reset step when dialog opens
+  React.useEffect(() => {
+    if (isOpen && !shouldSkip) {
+      setStep(0)
+      setDontShowAgain(false)
+    }
+  }, [isOpen, shouldSkip])
+
+  const currentStep = STEPS[step]
+  const isLastStep = step === STEPS.length - 1
+  const isGood = currentStep.type === 'good'
+
+  function handleNext () {
+    if (isLastStep) {
+      // Save preference if checked
+      if (dontShowAgain && typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, 'true')
+        setShouldSkip(true)
       }
-
-      const padding = 16
-      const maxW = window.innerWidth - padding * 2
-      const maxH = window.innerHeight - padding * 2
-
-      const rect = el.getBoundingClientRect()
-      const next = Math.min(1, maxW / rect.width, maxH / rect.height)
-      setScale(Math.max(0.72, next))
+      onOpenChange(false)
+      onContinue()
+    } else {
+      setStep(prev => prev + 1)
     }
+  }
 
-    const frame = requestAnimationFrame(computeScale)
-    const onResize = () => computeScale()
-
-    window.addEventListener('resize', onResize)
-    return () => {
-      cancelAnimationFrame(frame)
-      window.removeEventListener('resize', onResize)
-    }
-  }, [isOpen])
+  // Don't render if user opted out
+  if (shouldSkip && isOpen) {
+    return null
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent
-        ref={contentRef}
-        className="max-w-3xl overflow-y-auto p-4 sm:overflow-visible sm:p-6"
-        style={{ ['--dialog-scale' as unknown as string]: scale } as React.CSSProperties}
-      >
-        <DialogHeader>
-          <DialogTitle className="text-lg leading-tight sm:text-xl">Choose a photo that works best</DialogTitle>
-          <DialogDescription className="text-sm leading-relaxed sm:text-base">
-            Best results come from a <strong>straight-on headshot</strong> with even lighting.
-            Avoid side angles, open-mouth smiles, and blurry photos.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-[340px] p-0 gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Photo guidelines</DialogTitle>
 
-        <div className="mt-4 sm:hidden">
-          <Button
-            type="button"
-            className="w-full shadow-sm"
-            onClick={() => {
-              onOpenChange(false)
-              onContinue()
-            }}
+        {/* Progress dots */}
+        <div className="flex items-center justify-center gap-2 pt-5 pb-3">
+          {STEPS.map((_, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setStep(idx)}
+              aria-label={`Go to step ${idx + 1}`}
+              className={cn(
+                'h-2 w-2 rounded-full transition-all duration-200',
+                idx === step
+                  ? 'w-6 bg-violet-600'
+                  : idx < step
+                    ? 'bg-violet-300'
+                    : 'bg-zinc-200'
+              )}
+            />
+          ))}
+        </div>
+
+        {/* Step content with transition */}
+        <div className="relative px-5 pb-5">
+          <div
+            key={step}
+            className="animate-in fade-in slide-in-from-right-4 duration-200"
           >
-            Upload photo
-          </Button>
-        </div>
+            {/* Image card */}
+            <div
+              className={cn(
+                'mx-auto w-full max-w-[240px] overflow-hidden rounded-2xl border p-3 shadow-sm transition-colors',
+                isGood
+                  ? 'border-emerald-200 bg-emerald-50/50'
+                  : 'border-red-200 bg-red-50/50'
+              )}
+            >
+              {/* Badge */}
+              <div className="mb-2 flex items-center gap-2">
+                {isGood ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                    <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                      Good
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-4 w-4 text-red-600" aria-hidden="true" />
+                    <span className="text-xs font-semibold uppercase tracking-wide text-red-700">
+                      Avoid
+                    </span>
+                  </>
+                )}
+              </div>
 
-        <div className="mt-5 sm:mt-6">
-          <section className="rounded-3xl border border-zinc-200/70 bg-zinc-50/60 p-4 shadow-sm sm:p-5">
-            <div className="mb-3 flex items-center justify-between sm:mb-4">
-              <div className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
-                  Good
-                </span>
-                <span className="text-xs text-zinc-500">Use this</span>
+              {/* Photo */}
+              <div
+                className={cn(
+                  'relative aspect-square w-full overflow-hidden rounded-xl border',
+                  isGood ? 'border-emerald-200' : 'border-red-200'
+                )}
+              >
+                <img
+                  src={currentStep.src}
+                  alt={currentStep.title}
+                  className="h-full w-full object-cover"
+                />
               </div>
             </div>
 
-            <div className="mx-auto max-w-[220px] sm:max-w-[260px]">
-              <ExampleThumb
-                variant="good"
-                label="Straight-on headshot"
-                src="/guidelines/good-front.png"
+            {/* Text */}
+            <div className="mt-4 text-center">
+              <h3 className="text-base font-semibold text-zinc-900">
+                {currentStep.title}
+              </h3>
+              <p className="mt-1 text-sm text-zinc-500">
+                {currentStep.desc}
+              </p>
+            </div>
+
+            {/* Button */}
+            <Button
+              type="button"
+              onClick={handleNext}
+              className="mt-5 w-full h-11 text-sm font-semibold"
+            >
+              {isLastStep ? 'Upload my photo' : 'Got it, next'}
+            </Button>
+
+            {/* Don't show again checkbox */}
+            <label className="mt-4 flex items-center justify-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={dontShowAgain}
+                onChange={e => setDontShowAgain(e.target.checked)}
+                className="h-4 w-4 rounded border-zinc-300 text-violet-600 focus:ring-violet-500"
               />
-            </div>
-
-            <div className="mt-4 border-t border-zinc-200/70 pt-4">
-              <div className="mb-3 flex items-center justify-between sm:mb-4">
-                <div className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-                  <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-700">
-                    Avoid
-                  </span>
-                  <span className="text-xs text-zinc-500">Common failure cases</span>
-                </div>
-                <span className="text-[11px] text-zinc-500 sm:hidden">Swipe to see more</span>
-              </div>
-
-              <div className="-mx-2 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 px-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-4 sm:overflow-visible sm:pb-0 sm:px-0">
-                <ExampleThumb variant="bad" label="Side angle" src="/guidelines/bad-side-angle.png" />
-                <ExampleThumb variant="bad" label="Open-mouth smile" src="/guidelines/bad-smile.png" />
-                <ExampleThumb variant="bad" label="Blurry / low quality" src="/guidelines/bad-low-quality.png" />
-              </div>
-            </div>
-          </section>
-        </div>
-
-        <div className="mt-5 hidden flex-col gap-3 sm:flex sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-2 sm:ml-auto sm:flex-row">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                onOpenChange(false)
-                onContinue()
-              }}
-            >
-              Continue to upload
-            </Button>
+              <span className="text-xs text-zinc-500">
+                Don&apos;t show this again
+              </span>
+            </label>
           </div>
         </div>
       </DialogContent>
     </Dialog>
   )
 }
-
