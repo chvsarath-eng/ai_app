@@ -5,11 +5,11 @@ export default async function OrderPage ({
   searchParams
 }: {
   params: Promise<{ orderId: string }>
-  searchParams: Promise<{ type?: string }>
+  searchParams: Promise<{ type?: string, txn?: string }>
 }) {
   const { orderId } = await params
-  const { type } = await searchParams
+  const { type, txn } = await searchParams
   const outputType = type === 'LULU_BOOK' ? 'LULU_BOOK' : 'DIGI_BOOK'
   
-  return <OrderConfirmation orderId={orderId} outputType={outputType} />
+  return <OrderConfirmation orderId={orderId} outputType={outputType} transactionId={txn} />
 }

@@ -64,7 +64,16 @@
 - Default: analytics_storage denied until user accepts
 - Banner shows at bottom of page for first-time visitors
 
-### 3. Performance Optimization
+### 4. Paddle Payment Integration ✅ DONE (Feb 1, 2026)
+- Pricing: Digital $14.99 / Hardcover $39.99
+- Checkout overlay integration
+- Automatic tax calculation (Merchant of Record)
+- Shipping address collection for hardcover
+- Webhook: `transaction.completed` → order confirmation email
+- Invoice/receipt download
+- Analytics events: checkout_opened, checkout_completed, etc.
+
+### 5. Performance Optimization
 - [ ] Add `next/image` optimization for all images
 - [ ] Implement lazy loading for images
 - [ ] Add image alt texts everywhere
@@ -296,11 +305,11 @@
 3. ✅ Create sitemap
 4. ✅ Add robots.txt
 5. [ ] Verify all images have alt text
-6. [ ] Set up Google Search Console
-7. [ ] Submit sitemap to Google
+6. ✅ Set up Google Search Console
+7. ✅ Submit sitemap to Google
 
 ### This Week:
-1. [ ] Set up Google Analytics
+1. ✅ Set up Google Analytics
 2. [ ] Optimize all images
 3. [ ] Create blog section
 4. [ ] Write first 3 blog posts
@@ -371,5 +380,5 @@
 
 ---
 
-**Last Updated:** January 24, 2026
-**Next Review:** February 24, 2026
+**Last Updated:** February 1, 2026
+**Next Review:** March 1, 2026

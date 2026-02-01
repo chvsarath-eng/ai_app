@@ -1,8 +1,10 @@
 'use client'
 
+import { trackEvent } from '@/lib/analytics'
+
 export interface PaddleEventData {
   name: string
-  data?: {
+  data?: Record<string, unknown> & {
     transaction_id?: string
     status?: string
   }
@@ -32,6 +34,14 @@ export interface PaddleCheckoutOptions {
   }>
   customer?: {
     email?: string
+    address?: {
+      countryCode?: string
+      postalCode?: string
+      region?: string
+      city?: string
+      line1?: string
+      line2?: string
+    }
   }
   customData?: Record<string, string>
   successUrl?: string
@@ -76,12 +86,32 @@ export function initializePaddle(callbacks?: PaddleCheckoutCallbacks) {
       token: clientToken,
       eventCallback: (event: PaddleEventData) => {
         console.log('Paddle event:', event.name, event.data)
+        const eventData = event?.data && typeof event.data === 'object'
+          ? (event.data as Record<string, unknown>)
+          : {}
+        const errorData = typeof eventData.error === 'object' && eventData.error
+          ? (eventData.error as Record<string, unknown>)
+          : undefined
+        const errorCode = typeof errorData?.code === 'string' ? errorData.code : undefined
+        const errorType = typeof errorData?.type === 'string' ? errorData.type : undefined
+        const transactionId = typeof event.data?.transaction_id === 'string'
+          ? event.data.transaction_id
+          : undefined
+
+        if (event.name === 'checkout.loaded') {
+          trackEvent('checkout_opened', { source: 'paddle' })
+        }
+        if (event.name === 'checkout.error') {
+          trackEvent('checkout_failed', { error_code: errorCode, error_type: errorType })
+        }
         
-        if (event.name === 'checkout.completed' && event.data?.transaction_id) {
-          currentCallbacks?.onSuccess?.(event.data.transaction_id)
+        if (event.name === 'checkout.completed' && transactionId) {
+          trackEvent('checkout_completed', { transaction_id: transactionId })
+          currentCallbacks?.onSuccess?.(transactionId)
         }
         
         if (event.name === 'checkout.closed') {
+          trackEvent('checkout_closed')
           currentCallbacks?.onClose?.()
         }
       }

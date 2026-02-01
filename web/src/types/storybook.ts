@@ -6,12 +6,23 @@ export const outputTypes = ['DIGI_BOOK', 'LULU_BOOK'] as const
 
 export type OutputType = (typeof outputTypes)[number]
 
+export type ShippingAddress = {
+  fullName: string
+  line1: string
+  line2?: string
+  city: string
+  region: string
+  postalCode: string
+  countryCode: string
+}
+
 export type CreateJobRequest = {
   imageFile: File
   theme: Theme
   storyline: string
   email: string
   outputType: OutputType
+  shippingAddress?: ShippingAddress
 }
 
 export type JobStage =

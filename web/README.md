@@ -9,7 +9,8 @@ Next.js (App Router) frontend for img2x — a personalized storybook generator t
 - React Hook Form + Zod
 - React Query
 - Three.js / @react-three/fiber for 3D previews
-- Nodemailer for contact form delivery
+- Paddle Billing for payments (checkout overlay, webhooks, tax)
+- Nodemailer for transactional emails (SMTP)
 
 ## Project Structure
 
@@ -28,8 +29,11 @@ web/
 
 Key entry points:
 - `src/app/page.tsx` — Home page
-- `src/app/order/[orderId]/page.tsx` — Order confirmation
+- `src/app/order/[orderId]/page.tsx` — Order confirmation (with receipt download)
 - `src/app/api/storybook/*` — Server routes that call the story service
+- `src/app/api/checkout/route.ts` — Paddle checkout initiation
+- `src/app/api/webhooks/paddle/route.ts` — Paddle webhook handler
+- `src/app/api/paddle/transactions/[transactionId]/invoice/route.ts` — Invoice PDF redirect
 - `src/app/api/contact/route.ts` — Contact form email
 
 ## Local Development
@@ -54,8 +58,15 @@ Required variables:
 - **Auth (choose one)**:
   - `GOOGLE_APPLICATION_CREDENTIALS` or `STORY_INVOKER_CREDENTIALS_PATH`
   - OR `STORY_INVOKER_CREDENTIALS_JSON`
-- SMTP credentials for contact form:
+- SMTP credentials for transactional emails:
   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`
+- **Paddle payment** (sandbox or production):
+  - `NEXT_PUBLIC_PADDLE_ENVIRONMENT` — `sandbox` or `production`
+  - `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` — Client-side token
+  - `NEXT_PUBLIC_PADDLE_PRICE_DIGITAL` — Digital book price ID
+  - `NEXT_PUBLIC_PADDLE_PRICE_HARDCOVER` — Hardcover price ID
+  - `PADDLE_API_KEY` — Server-side API key
+  - `PADDLE_WEBHOOK_SECRET` — Webhook signature verification
 
 ### 3) Run dev server
 
@@ -90,6 +101,33 @@ Terraform creates:
 - Secret Manager secrets
 - Cloud Run service (`img2x-web`)
 - IAM roles
+
+### Required GCP Secrets
+
+Before deploying, ensure these secrets exist in Secret Manager:
+
+```bash
+# Create Paddle secrets (one-time setup)
+gcloud secrets create paddle-api-key --replication-policy="automatic" --project=imgstr
+gcloud secrets create paddle-webhook-secret --replication-policy="automatic" --project=imgstr
+
+# Add secret values
+echo -n "YOUR_PADDLE_API_KEY" | gcloud secrets versions add paddle-api-key --data-file=- --project=imgstr
+echo -n "YOUR_PADDLE_WEBHOOK_SECRET" | gcloud secrets versions add paddle-webhook-secret --data-file=- --project=imgstr
+```
+
+**All required secrets:**
+| Secret Name | Description |
+|-------------|-------------|
+| `smtp-host` | SMTP server hostname |
+| `smtp-port` | SMTP port (587) |
+| `smtp-user` | SMTP username (team@img2x.com) |
+| `smtp-pass` | SMTP password |
+| `story-service-url` | Story service Cloud Run URL |
+| `story-invoker-credentials` | Service account JSON for story service |
+| `paddle-client-token` | Paddle client-side token |
+| `paddle-api-key` | Paddle server-side API key |
+| `paddle-webhook-secret` | Paddle webhook signature verification |
 
 ### CI/CD Pipeline
 
@@ -145,10 +183,16 @@ gcloud builds submit --config=web/cloudbuild.yaml --substitutions=COMMIT_SHA=$(g
 
 ## API Flow (High Level)
 
-1. User submits photo + details
-2. `/api/storybook/generate` requests a job from the Cloud Run story service (with ID token)
-3. Job ID returned → order confirmation page
-4. Results are emailed to the user
+1. User uploads photo + enters details (name, theme, email)
+2. User selects book type (Digital $14.99 / Hardcover $39.99)
+3. For hardcover: user enters shipping address
+4. Click "Create My Book" → Paddle checkout overlay opens
+5. User completes payment (Paddle handles tax)
+6. On success → `/api/storybook/generate` creates job in story service
+7. Redirect to order confirmation page (with transaction ID)
+8. Paddle webhook (`transaction.completed`) triggers order confirmation email
+9. Story service generates book (async)
+10. Book-ready email sent with download link or shipping info
 
 ## Troubleshooting
 
@@ -168,6 +212,51 @@ gcloud builds submit --config=web/cloudbuild.yaml --substitutions=COMMIT_SHA=$(g
 | Contact form fails | SMTP misconfiguration | Check `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` |
 | 500 errors | Check Cloud Run logs | `gcloud run services logs read img2x-web --region us-central1` |
 
+### Paddle Errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| Checkout 403 Forbidden | Domain not approved | Add domain in Paddle Dashboard → Checkout Settings |
+| Checkout 400 `transaction_default_checkout_url_not_set` | Missing default URL | Set in Paddle Dashboard → Checkout Settings → Default Payment Link |
+| `$PADDLE_CLIENT_TOKEN` literal in headers | Build arg not passed | Check `cloudbuild.yaml` secretEnv and build-arg format |
+| Webhook signature invalid | Wrong secret | Verify `PADDLE_WEBHOOK_SECRET` matches Paddle notification setting |
+| Webhook 401 after secret update | Trailing newline in secret | See "GCP Secrets Best Practices" below |
+| Order email not sent | Webhook lacks customer email | Handler fetches email via Paddle API using `customer_id` |
+| Invoice PDF 404 | Wrong API URL | Use `sandbox-api.paddle.com` for sandbox, `api.paddle.com` for production |
+
 ### Slow Builds
 
 If `gcloud builds submit` is slow (uploading 300+ MiB), ensure `.gcloudignore` exists and excludes `node_modules/`.
+
+### GCP Secrets Best Practices
+
+**Avoid trailing newlines when creating secrets!**
+
+PowerShell piping adds a trailing newline which breaks signature verification:
+
+```powershell
+# BAD - adds trailing newline
+"secret_value" | gcloud secrets versions add SECRET_NAME --data-file=- --project=PROJECT
+
+# GOOD - write to file without newline first
+[System.IO.File]::WriteAllText("$env:TEMP\secret.txt", "secret_value")
+gcloud secrets versions add SECRET_NAME --data-file="$env:TEMP\secret.txt" --project=PROJECT
+```
+
+On Linux/Mac, use `echo -n`:
+```bash
+echo -n "secret_value" | gcloud secrets versions add SECRET_NAME --data-file=- --project=PROJECT
+```
+
+**To check if a secret has a trailing newline:**
+```powershell
+gcloud secrets versions access latest --secret=SECRET_NAME --project=PROJECT | ForEach-Object { $_.Length }
+# If you see two numbers (e.g., "70" and "0"), there's a trailing newline
+```
+
+**To fix an existing secret:**
+```powershell
+[System.IO.File]::WriteAllText("$env:TEMP\secret.txt", "correct_secret_value")
+gcloud secrets versions add SECRET_NAME --data-file="$env:TEMP\secret.txt" --project=PROJECT
+# Then redeploy Cloud Run to pick up the new version
+```

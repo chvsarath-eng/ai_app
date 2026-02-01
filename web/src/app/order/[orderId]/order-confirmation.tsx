@@ -8,7 +8,15 @@ import { Button } from '@/components/ui/button'
 
 type OutputType = 'DIGI_BOOK' | 'LULU_BOOK'
 
-export function OrderConfirmation ({ orderId, outputType }: { orderId: string; outputType: OutputType }) {
+export function OrderConfirmation ({
+  orderId,
+  outputType,
+  transactionId
+}: {
+  orderId: string
+  outputType: OutputType
+  transactionId?: string
+}) {
   const isDigital = outputType === 'DIGI_BOOK'
   return (
     <div className="relative min-h-[85vh]">
@@ -113,6 +121,20 @@ export function OrderConfirmation ({ orderId, outputType }: { orderId: string; o
               <span className="text-xs text-zinc-500">Order ID</span>
               <span className="font-mono text-xs text-zinc-600">{orderId}</span>
             </div>
+
+            {transactionId ? (
+              <div className="mt-3 flex items-center justify-between rounded-lg bg-zinc-50 px-4 py-3">
+                <span className="text-xs text-zinc-500">Receipt</span>
+                <a
+                  className="text-xs font-medium text-violet-600 hover:text-violet-700 underline"
+                  href={`/api/paddle/transactions/${transactionId}/invoice`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Download PDF
+                </a>
+              </div>
+            ) : null}
           </div>
 
           {/* Estimated time indicator */}
@@ -140,6 +162,13 @@ export function OrderConfirmation ({ orderId, outputType }: { orderId: string; o
               </Link>
             </Button>
           </div>
+
+          <p className="mt-6 text-center text-sm text-zinc-500">
+            Need help? Email{' '}
+            <a className="text-violet-600 hover:text-violet-700 underline" href="mailto:team@img2x.com">
+              team@img2x.com
+            </a>
+          </p>
 
         </div>
       </div>

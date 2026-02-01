@@ -68,6 +68,7 @@ export default function PrivacyPage () {
           <li><strong>Service Delivery:</strong> To create, process, and deliver your personalized storybooks</li>
           <li><strong>Account Management:</strong> To create and manage your account, authenticate users, and provide customer support</li>
           <li><strong>Payment Processing:</strong> To process transactions and send receipts</li>
+          <li><strong>Tax and Compliance:</strong> To calculate taxes, validate addresses, and comply with legal obligations based on billing or shipping location</li>
           <li><strong>Communication:</strong> To send order confirmations, delivery updates, and respond to inquiries</li>
           <li><strong>Service Improvement:</strong> To analyze usage patterns, improve AI algorithms, enhance features, and optimize user experience</li>
           <li><strong>Security:</strong> To detect, prevent, and address fraud, abuse, security issues, and technical problems</li>

@@ -12,7 +12,7 @@ steps:
       - '--build-arg'
       - 'NEXT_PUBLIC_PADDLE_ENVIRONMENT=sandbox'
       - '--build-arg'
-      - 'NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=$$PADDLE_CLIENT_TOKEN'
+      - 'NEXT_PUBLIC_PADDLE_CLIENT_TOKEN'
       - '--build-arg'
       - 'NEXT_PUBLIC_PADDLE_PRICE_DIGITAL=pri_01kgbfsfghbddqsaz0t77m50qy'
       - '--build-arg'
@@ -23,7 +23,7 @@ steps:
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:latest'
       - '.'
     dir: 'web'
-    secretEnv: ['PADDLE_CLIENT_TOKEN']
+    secretEnv: ['NEXT_PUBLIC_PADDLE_CLIENT_TOKEN']
 
   # Step 2: Push the Docker image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
@@ -57,7 +57,7 @@ steps:
       - '--max-instances'
       - '10'
       - '--set-secrets'
-      - 'SMTP_HOST=smtp-host:latest,SMTP_PORT=smtp-port:latest,SMTP_USER=smtp-user:latest,SMTP_PASS=smtp-pass:latest,STORY_SERVICE_URL=story-service-url:latest,STORY_INVOKER_CREDENTIALS_JSON=story-invoker-credentials:latest'
+      - 'SMTP_HOST=smtp-host:latest,SMTP_PORT=smtp-port:latest,SMTP_USER=smtp-user:latest,SMTP_PASS=smtp-pass:latest,STORY_SERVICE_URL=story-service-url:latest,STORY_INVOKER_CREDENTIALS_JSON=story-invoker-credentials:latest,PADDLE_API_KEY=paddle-api-key:latest,PADDLE_WEBHOOK_SECRET=paddle-webhook-secret:latest'
 
 # Substitution variables (can be overridden in trigger)
 substitutions:
@@ -69,7 +69,7 @@ substitutions:
 availableSecrets:
   secretManager:
     - versionName: projects/imgstr/secrets/paddle-client-token/versions/latest
-      env: 'PADDLE_CLIENT_TOKEN'
+      env: 'NEXT_PUBLIC_PADDLE_CLIENT_TOKEN'
 
 # Build options
 options:

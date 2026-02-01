@@ -75,6 +75,10 @@ export default function RefundPage () {
           <li>Customs delays or duties for international orders</li>
           <li>Minor color variations inherent to printing processes</li>
         </ul>
+        <p className="text-sm text-zinc-700 mt-4">
+          Shipping charges and taxes are calculated at checkout. These fees are generally non-refundable once the book
+          has shipped, except where required by law.
+        </p>
       </section>
 
       <section className="mt-10 space-y-4">

@@ -36,6 +36,17 @@ export async function createStorybookJob (req: CreateJobRequest): Promise<{ jobI
   form.append('email', req.email)
   form.append('output_type', req.outputType)
   form.append('keep_job_dir', 'false')
+  if (req.shippingAddress) {
+    form.append('shipping_name', req.shippingAddress.fullName)
+    form.append('shipping_address1', req.shippingAddress.line1)
+    if (req.shippingAddress.line2) {
+      form.append('shipping_address2', req.shippingAddress.line2)
+    }
+    form.append('shipping_city', req.shippingAddress.city)
+    form.append('shipping_region', req.shippingAddress.region)
+    form.append('shipping_postal_code', req.shippingAddress.postalCode)
+    form.append('shipping_country', req.shippingAddress.countryCode)
+  }
 
   const res = await fetch('/api/storybook/generate', {
     method: 'POST',

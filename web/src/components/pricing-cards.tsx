@@ -92,6 +92,7 @@ export function PricingCards () {
                     <span className="text-lg text-zinc-400 line-through">{p.originalPrice}</span>
                   </div>
                   <p className="mt-1 text-xs font-medium text-orange-600">Limited time offer</p>
+                  <p className="mt-1 text-xs text-zinc-500">Tax calculated at checkout.</p>
                 </CardHeader>
 
                 <CardContent className="space-y-2.5 pb-6">

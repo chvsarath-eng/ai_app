@@ -4,7 +4,7 @@ import * as React from 'react'
 import { CheckCircle2, XCircle } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
 const STORAGE_KEY = 'img2x-skip-photo-guide'
@@ -100,6 +100,9 @@ export function PhotoGuidelinesDialog ({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[340px] p-0 gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Photo guidelines</DialogTitle>
+        <DialogDescription className="sr-only">
+          Photo upload guidance for best results.
+        </DialogDescription>
 
         {/* Progress dots */}
         <div className="flex items-center justify-center gap-2 pt-5 pb-3">

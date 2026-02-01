@@ -177,7 +177,8 @@ export default function TermsPage () {
         <h3 className="text-lg font-semibold text-zinc-900 mt-6">6.3 Taxes</h3>
         <p className="text-sm text-zinc-700">
           Prices do not include applicable sales tax, VAT, or other taxes. You are responsible for all taxes 
-          associated with your purchase. We will collect and remit taxes as required by law.
+          associated with your purchase. Taxes are calculated and displayed at checkout based on your location. 
+          We will collect and remit taxes as required by law.
         </p>
 
         <h3 className="text-lg font-semibold text-zinc-900 mt-6">6.4 Promotional Offers</h3>
