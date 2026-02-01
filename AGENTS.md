@@ -21,6 +21,19 @@ This document provides everything an AI agent needs to understand and work on th
 
 ---
 
+## Domain & Hosting
+
+| Domain | Maps To | Region |
+|--------|---------|--------|
+| `img2x.com` | img2x-web (Cloud Run) | us-central1 |
+| `www.img2x.com` | img2x-web (Cloud Run) | us-central1 |
+
+**DNS:** Managed in GCP Cloud Run domain mappings
+
+**SSL:** Automatic via Google-managed certificates
+
+---
+
 ## System Architecture
 
 ```
@@ -216,9 +229,10 @@ See `.cursor/rules/coding-standards.mdc` for details.
 - Photo guidelines UI (step-by-step carousel)
 - SEO metadata + structured data
 - CI/CD pipeline
+- Google Search Console (verified, sitemap submitted - 9 pages indexed)
+- Domain mapping (img2x.com + www.img2x.com)
 
 ### 🔄 In Progress
-- Google Search Console setup
 - Google Analytics integration
 
 ### 📋 Backlog
