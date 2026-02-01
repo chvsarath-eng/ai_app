@@ -28,6 +28,7 @@
     "next": "16.1.1",
     "nodemailer": "^7.0.12",
     "react": "19.2.3",
+    "react-cookie-consent": "^10.0.1",
     "react-dom": "19.2.3",
     "react-hook-form": "^7.69.0",
     "tailwind-merge": "^3.4.0",
