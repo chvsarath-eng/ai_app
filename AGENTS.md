@@ -231,9 +231,10 @@ See `.cursor/rules/coding-standards.mdc` for details.
 - CI/CD pipeline
 - Google Search Console (verified, sitemap submitted - 9 pages indexed)
 - Domain mapping (img2x.com + www.img2x.com)
+- Google Analytics 4 (Measurement ID: G-Q12Z62SK1Q)
 
 ### 🔄 In Progress
-- Google Analytics integration
+- (None currently)
 
 ### 📋 Backlog
 - Blog section for SEO content
