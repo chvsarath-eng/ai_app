@@ -7,6 +7,32 @@ import { Check, Sparkles, Book } from 'lucide-react'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
+// Base prices in USD
+const BASE_PRICES = {
+  digital: 14.99,
+  hardcover: 39.99
+}
+
+// Currency symbols mapping
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$', EUR: '€', GBP: '£', INR: '₹',
+  JPY: '¥', AUD: 'A$', CAD: 'C$', BRL: 'R$',
+  CNY: '¥', KRW: '₩', MXN: '$', SGD: 'S$',
+  CHF: 'CHF', HKD: 'HK$', SEK: 'kr', NOK: 'kr',
+  DKK: 'kr', NZD: 'NZ$', ZAR: 'R', THB: '฿',
+  PLN: 'zł', CZK: 'Kč', HUF: 'Ft', TRY: '₺',
+  ILS: '₪', PHP: '₱', MYR: 'RM', IDR: 'Rp',
+  RON: 'lei', ISK: 'kr'
+}
+
+// Currencies supported by Frankfurter API (ECB rates)
+const SUPPORTED_CURRENCIES = new Set([
+  'USD', 'EUR', 'GBP', 'INR', 'JPY', 'AUD', 'CAD', 'BRL',
+  'CNY', 'CHF', 'HKD', 'KRW', 'MXN', 'SGD', 'THB', 'TRY',
+  'ZAR', 'SEK', 'NOK', 'DKK', 'NZD', 'PLN', 'CZK', 'HUF',
+  'ILS', 'PHP', 'MYR', 'IDR', 'RON', 'ISK', 'BGN'
+])
+
 interface LocalizedPrices {
   currencyCode: string
   currencySymbol: string
@@ -23,20 +49,44 @@ const DEFAULT_PRICES: LocalizedPrices = {
   isLocalized: false
 }
 
+// Format price with currency symbol
+function formatPrice(amount: number, currencyCode: string, symbol: string): string {
+  // Currencies that typically don't use decimals
+  const noDecimalCurrencies = ['JPY', 'KRW', 'IDR', 'VND', 'HUF']
+  const useDecimals = !noDecimalCurrencies.includes(currencyCode)
+  
+  const formattedAmount = useDecimals 
+    ? amount.toFixed(2) 
+    : Math.round(amount).toLocaleString()
+  
+  // Symbol-after currencies
+  const symbolAfterCurrencies = ['SEK', 'NOK', 'DKK', 'ISK', 'CZK', 'PLN', 'HUF']
+  if (symbolAfterCurrencies.includes(currencyCode)) {
+    return `${formattedAmount} ${symbol}`
+  }
+  
+  return `${symbol}${formattedAmount}`
+}
+
 // Calculate "original" price (double the sale price for 50% off display)
 function getOriginalPrice(salePrice: string, currencySymbol: string): string {
-  // Extract number from price string
   const numMatch = salePrice.match(/[\d.,]+/)
   if (!numMatch) return salePrice
   
-  const num = parseFloat(numMatch[0].replace(',', '.'))
-  const original = (num * 2).toFixed(2)
+  const num = parseFloat(numMatch[0].replace(/,/g, ''))
+  const original = num * 2
   
-  // Format based on currency position
+  // Check if original price has decimals
+  const hasDecimals = salePrice.includes('.')
+  const formattedOriginal = hasDecimals 
+    ? original.toFixed(2) 
+    : Math.round(original).toLocaleString()
+  
+  // Check symbol position
   if (salePrice.startsWith(currencySymbol)) {
-    return `${currencySymbol}${original}`
+    return `${currencySymbol}${formattedOriginal}`
   }
-  return `${original} ${currencySymbol}`
+  return `${formattedOriginal} ${currencySymbol}`
 }
 
 export function PricingCards () {
@@ -44,21 +94,59 @@ export function PricingCards () {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    async function fetchPrices() {
+    async function fetchLocalizedPrices() {
       try {
-        const response = await fetch('/api/paddle/prices')
-        if (response.ok) {
-          const data = await response.json()
-          setPrices(data)
+        // Step 1: Detect user's country and currency from IP (client-side)
+        const geoResponse = await fetch('https://ipapi.co/json/')
+        if (!geoResponse.ok) throw new Error('Geo detection failed')
+        
+        const geoData = await geoResponse.json()
+        const detectedCurrency = geoData.currency || 'USD'
+        
+        // If USD or unsupported currency, use default
+        if (detectedCurrency === 'USD' || !SUPPORTED_CURRENCIES.has(detectedCurrency)) {
+          setIsLoading(false)
+          return
         }
+        
+        // Step 2: Get exchange rate from Frankfurter (free, no API key)
+        const rateResponse = await fetch(
+          `https://api.frankfurter.dev/v1/latest?base=USD&symbols=${detectedCurrency}`
+        )
+        if (!rateResponse.ok) throw new Error('Exchange rate fetch failed')
+        
+        const rateData = await rateResponse.json()
+        const rate = rateData.rates?.[detectedCurrency]
+        
+        if (!rate) throw new Error('No rate found')
+        
+        // Step 3: Convert prices
+        const symbol = CURRENCY_SYMBOLS[detectedCurrency] || detectedCurrency
+        const digitalLocal = BASE_PRICES.digital * rate
+        const hardcoverLocal = BASE_PRICES.hardcover * rate
+        
+        setPrices({
+          currencyCode: detectedCurrency,
+          currencySymbol: symbol,
+          digital: {
+            price: formatPrice(digitalLocal, detectedCurrency, symbol),
+            priceRaw: Math.round(digitalLocal * 100)
+          },
+          hardcover: {
+            price: formatPrice(hardcoverLocal, detectedCurrency, symbol),
+            priceRaw: Math.round(hardcoverLocal * 100)
+          },
+          isLocalized: true
+        })
       } catch (error) {
         console.error('Failed to fetch localized prices:', error)
+        // Keep default USD prices on error
       } finally {
         setIsLoading(false)
       }
     }
     
-    fetchPrices()
+    fetchLocalizedPrices()
   }, [])
 
   const products = [
