@@ -57,7 +57,7 @@ export default function Home () {
         about: {
           '@id': 'https://img2x.com/#organization',
         },
-        description: 'Turn your photos into ultra-photorealistic storybooks with AI. Perfect for children\'s books, romantic love stories, pet adventures, retirement gifts, anniversaries, and more. Digital books $19.99, Premium Hardcover $59.99.',
+        description: 'Turn your photos into ultra-photorealistic storybooks with AI. Perfect for children\'s books, romantic love stories, pet adventures, retirement gifts, anniversaries, and more. Digital books $14.99, Premium Hardcover $39.99.',
         keywords: 'personalized storybook, AI photo book, custom love story, pet memorial book, retirement gift book, children\'s book creator, couple storybook, anniversary gift, graduation gift',
       },
       {
@@ -75,7 +75,7 @@ export default function Home () {
           '@type': 'Offer',
           url: 'https://img2x.com/#pricing',
           priceCurrency: 'USD',
-          price: '19.99',
+          price: '14.99',
           priceValidUntil: '2026-12-31',
           availability: 'https://schema.org/InStock',
           itemCondition: 'https://schema.org/NewCondition',
@@ -101,7 +101,7 @@ export default function Home () {
           '@type': 'Offer',
           url: 'https://img2x.com/#pricing',
           priceCurrency: 'USD',
-          price: '59.99',
+          price: '39.99',
           priceValidUntil: '2026-12-31',
           availability: 'https://schema.org/InStock',
           itemCondition: 'https://schema.org/NewCondition',
@@ -203,7 +203,7 @@ export default function Home () {
             name: 'What\'s the difference between Digital and Premium Hardcover books?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'Digital books ($19.99) are interactive HTML files you can view on any device and share instantly. Premium Hardcover books ($59.99) are professionally printed 8.5" × 8.5" physical books with 24 pages, premium color printing, matte finish—perfect as keepsake gifts.',
+              text: 'Digital books ($14.99) are interactive HTML files you can view on any device and share instantly. Premium Hardcover books ($39.99) are professionally printed 8.5" × 8.5" physical books with 24 pages, premium color printing, matte finish—perfect as keepsake gifts.',
             },
           },
           {

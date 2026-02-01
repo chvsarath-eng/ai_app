@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMutation } from '@tanstack/react-query'
 import { z } from 'zod'
@@ -9,6 +10,7 @@ import { Controller, useForm } from 'react-hook-form'
 import { ImageIcon, Mail, Wand2, Book, Sparkles } from 'lucide-react'
 
 import { createStorybookJob } from '@/lib/storybookApi'
+import { initializePaddle, openPaddleCheckout, getPriceIdForOutputType } from '@/lib/paddle'
 import { outputTypes } from '@/types/storybook'
 import type { Theme, OutputType } from '@/types/storybook'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -44,6 +46,11 @@ function stitchPrompt (values: FormOutput) {
 export function GeneratorCard ({ className }: { className?: string }) {
   const router = useRouter()
 
+  // Initialize Paddle on mount
+  useEffect(() => {
+    initializePaddle()
+  }, [])
+
   const form = useForm<FormInput>({
     resolver: zodResolver(formSchema),
     mode: 'onSubmit',
@@ -62,14 +69,48 @@ export function GeneratorCard ({ className }: { className?: string }) {
   const createJobMutation = useMutation({
     mutationFn: async (values: FormInput) => {
       const parsed = formSchema.parse(values)
-      const res = await createStorybookJob({
-        imageFile: parsed.imageFile,
-        theme: 'Custom' as Theme,
-        storyline: stitchPrompt(parsed),
-        email: parsed.email,
-        outputType: parsed.outputType as OutputType
+      const priceId = getPriceIdForOutputType(parsed.outputType as OutputType)
+
+      return new Promise<{ jobId: string, outputType: string }>((resolve, reject) => {
+        openPaddleCheckout(
+          {
+            items: [{ priceId, quantity: 1 }],
+            customer: { email: parsed.email },
+            customData: {
+              name: parsed.name,
+              age: parsed.age.toString(),
+              storyline: parsed.storyline,
+              outputType: parsed.outputType
+            },
+            settings: {
+              displayMode: 'overlay',
+              theme: 'light'
+            }
+          },
+          {
+            onSuccess: async (transactionId) => {
+              console.log('Payment successful, transaction:', transactionId)
+              // Only create job after payment succeeds
+              try {
+                const res = await createStorybookJob({
+                  imageFile: parsed.imageFile,
+                  theme: 'Custom' as Theme,
+                  storyline: stitchPrompt(parsed),
+                  email: parsed.email,
+                  outputType: parsed.outputType as OutputType
+                })
+                resolve({ ...res, outputType: parsed.outputType })
+              } catch (err) {
+                reject(err)
+              }
+            },
+            onClose: () => {
+              // User closed checkout without completing
+              reject(new Error('Checkout cancelled'))
+            }
+          }
+        )
       })
-      return { ...res, outputType: parsed.outputType }
     },
     onSuccess: ({ jobId, outputType }) => {
       router.push(`/order/${jobId}?type=${outputType}`)
@@ -270,7 +311,7 @@ export function GeneratorCard ({ className }: { className?: string }) {
                           <span className="font-semibold text-zinc-900">Digital Book</span>
                         </div>
                         <p className="mt-1 text-xs text-zinc-600">Interactive HTML flipbook</p>
-                        <p className="mt-2 text-lg font-bold text-violet-600">$19.99</p>
+                        <p className="mt-2 text-lg font-bold text-violet-600">$14.99</p>
                         {field.value === 'DIGI_BOOK' && (
                           <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-violet-500 text-white">
                             <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
@@ -301,7 +342,7 @@ export function GeneratorCard ({ className }: { className?: string }) {
                           <span className="font-semibold text-zinc-900">Premium Hardcover</span>
                         </div>
                         <p className="mt-1 text-xs text-zinc-600">8.5×8.5" printed book</p>
-                        <p className="mt-2 text-lg font-bold text-emerald-600">$59.99</p>
+                        <p className="mt-2 text-lg font-bold text-emerald-600">$39.99</p>
                         {field.value === 'LULU_BOOK' && (
                           <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white">
                             <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">

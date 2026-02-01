@@ -48,7 +48,7 @@ const faq = [
   },
   {
     q: 'Can I preview the book before ordering the physical copy?',
-    a: 'Not currently, but we recommend ordering the Digital Book first ($19.99) to see the full story and illustrations. If you love it, you can then order the Premium Hardcover version. The digital and physical versions contain identical content.'
+    a: 'Not currently, but we recommend ordering the Digital Book first ($14.99) to see the full story and illustrations. If you love it, you can then order the Premium Hardcover version. The digital and physical versions contain identical content.'
   },
   {
     q: 'What payment methods do you accept?',

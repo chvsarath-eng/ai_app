@@ -106,6 +106,7 @@ ai_app/
     │   │   ├── ui/                # Shadcn UI base components
     │   │   ├── generator-card/    # Photo upload + generation flow
     │   │   ├── photo-guidelines-dialog.tsx  # Photo tips carousel
+    │   │   ├── cookie-consent.tsx # GDPR cookie consent banner
     │   │   ├── r3f-book-preview/  # 3D book viewer (Three.js)
     │   │   └── ...
     │   │
@@ -232,6 +233,7 @@ See `.cursor/rules/coding-standards.mdc` for details.
 - Google Search Console (verified, sitemap submitted - 9 pages indexed)
 - Domain mapping (img2x.com + www.img2x.com)
 - Google Analytics 4 (Measurement ID: G-Q12Z62SK1Q)
+- Cookie Consent Banner (GDPR compliant, react-cookie-consent + GA Consent Mode)
 
 ### 🔄 In Progress
 - (None currently)

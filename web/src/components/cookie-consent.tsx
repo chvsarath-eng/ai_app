@@ -37,30 +37,34 @@ export function CookieConsentBanner() {
       onDecline={handleDecline}
       cookieName="img2x-cookie-consent"
       style={{
-        background: 'rgba(30, 30, 30, 0.95)',
-        backdropFilter: 'blur(8px)',
+        background: 'rgba(255, 255, 255, 0.98)',
+        backdropFilter: 'blur(12px)',
         padding: '16px 24px',
         alignItems: 'center',
-        fontSize: '14px'
+        fontSize: '14px',
+        color: '#3f3f46',
+        boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.08)',
+        borderTop: '1px solid rgba(139, 92, 246, 0.1)'
       }}
       buttonStyle={{
-        background: '#7c3aed',
+        background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
         color: 'white',
         fontSize: '14px',
         fontWeight: '600',
         padding: '10px 24px',
-        borderRadius: '8px',
+        borderRadius: '10px',
         border: 'none',
-        cursor: 'pointer'
+        cursor: 'pointer',
+        boxShadow: '0 2px 8px rgba(124, 58, 237, 0.3)'
       }}
       declineButtonStyle={{
         background: 'transparent',
-        color: '#a1a1aa',
+        color: '#71717a',
         fontSize: '14px',
         fontWeight: '500',
         padding: '10px 24px',
-        borderRadius: '8px',
-        border: '1px solid #3f3f46',
+        borderRadius: '10px',
+        border: '1px solid #e4e4e7',
         cursor: 'pointer',
         marginRight: '8px'
       }}
@@ -73,7 +77,7 @@ export function CookieConsentBanner() {
       We use cookies to analyze site traffic and improve your experience.{' '}
       <a
         href="/privacy"
-        style={{ color: '#a78bfa', textDecoration: 'underline' }}
+        style={{ color: '#7c3aed', textDecoration: 'underline' }}
       >
         Learn more
       </a>
