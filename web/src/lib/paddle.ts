@@ -148,7 +148,7 @@ export function openPaddleCheckout(
     settings: {
       displayMode: 'overlay',
       theme: 'light',
-      locale: 'en',
+      // No locale specified - Paddle auto-detects based on customer's browser/location
       ...options.settings
     }
   })

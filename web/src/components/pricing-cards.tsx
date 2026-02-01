@@ -1,51 +1,106 @@
+'use client'
+
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Check, Sparkles, Book } from 'lucide-react'
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
-const products = [
-  {
-    name: 'Digital Book',
-    icon: Sparkles,
-    description: 'Interactive HTML book that mimics a real flipbook experience',
-    originalPrice: '$29.99',
-    salePrice: '$14.99',
-    discount: '50% OFF',
-    cta: 'Get Digital Book',
-    href: '/#try',
-    image: '/brand/digitalbook_preview.png',
-    highlights: [
-      'Instant delivery via email',
-      'Interactive page-flip experience',
-      '4K ultra-realistic AI-generated images',
-      'Works on any device',
-      'Share with friends & family'
-    ],
-    isPopular: true
-  },
-  {
-    name: 'Premium Hardcover Book',
-    icon: Book,
-    description: '24-page premium color book',
-    originalPrice: '$79.99',
-    salePrice: '$39.99',
-    discount: '50% OFF',
-    cta: 'Order Hardcover',
-    href: '/#try',
-    image: '/brand/hardcover-preview.png',
-    highlights: [
-      '8.5" × 8.5" square',
-      'Hardcover case wrap with matte finish',
-      '80# white coated paper',
-      '4K ultra-realistic AI-generated images',
-      'Ships worldwide'
-    ],
-    isPopular: false
+interface LocalizedPrices {
+  currencyCode: string
+  currencySymbol: string
+  digital: { price: string, priceRaw: number }
+  hardcover: { price: string, priceRaw: number }
+  isLocalized: boolean
+}
+
+const DEFAULT_PRICES: LocalizedPrices = {
+  currencyCode: 'USD',
+  currencySymbol: '$',
+  digital: { price: '$14.99', priceRaw: 1499 },
+  hardcover: { price: '$39.99', priceRaw: 3999 },
+  isLocalized: false
+}
+
+// Calculate "original" price (double the sale price for 50% off display)
+function getOriginalPrice(salePrice: string, currencySymbol: string): string {
+  // Extract number from price string
+  const numMatch = salePrice.match(/[\d.,]+/)
+  if (!numMatch) return salePrice
+  
+  const num = parseFloat(numMatch[0].replace(',', '.'))
+  const original = (num * 2).toFixed(2)
+  
+  // Format based on currency position
+  if (salePrice.startsWith(currencySymbol)) {
+    return `${currencySymbol}${original}`
   }
-] as const
+  return `${original} ${currencySymbol}`
+}
 
 export function PricingCards () {
+  const [prices, setPrices] = useState<LocalizedPrices>(DEFAULT_PRICES)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchPrices() {
+      try {
+        const response = await fetch('/api/paddle/prices')
+        if (response.ok) {
+          const data = await response.json()
+          setPrices(data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch localized prices:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
+    fetchPrices()
+  }, [])
+
+  const products = [
+    {
+      name: 'Digital Book',
+      icon: Sparkles,
+      description: 'Interactive HTML book that mimics a real flipbook experience',
+      originalPrice: getOriginalPrice(prices.digital.price, prices.currencySymbol),
+      salePrice: prices.digital.price,
+      discount: '50% OFF',
+      cta: 'Get Digital Book',
+      href: '/#try',
+      image: '/brand/digitalbook_preview.png',
+      highlights: [
+        'Instant delivery via email',
+        'Interactive page-flip experience',
+        '4K ultra-realistic AI-generated images',
+        'Works on any device',
+        'Share with friends & family'
+      ],
+      isPopular: true
+    },
+    {
+      name: 'Premium Hardcover Book',
+      icon: Book,
+      description: '24-page premium color book',
+      originalPrice: getOriginalPrice(prices.hardcover.price, prices.currencySymbol),
+      salePrice: prices.hardcover.price,
+      discount: '50% OFF',
+      cta: 'Order Hardcover',
+      href: '/#try',
+      image: '/brand/hardcover-preview.png',
+      highlights: [
+        '8.5" × 8.5" square',
+        'Hardcover case wrap with matte finish',
+        '80# white coated paper',
+        '4K ultra-realistic AI-generated images',
+        'Ships worldwide'
+      ],
+      isPopular: false
+    }
+  ]
   return (
     <div className="grid gap-6 xl:grid-cols-2">
       {products.map((p) => {
@@ -88,11 +143,25 @@ export function PricingCards () {
 
                   {/* Pricing */}
                   <div className="mt-4 flex items-baseline gap-2">
-                    <span className="text-3xl font-bold tracking-tight text-zinc-900">{p.salePrice}</span>
-                    <span className="text-lg text-zinc-400 line-through">{p.originalPrice}</span>
+                    {isLoading ? (
+                      <>
+                        <span className="h-9 w-24 animate-pulse rounded bg-zinc-200" />
+                        <span className="h-6 w-16 animate-pulse rounded bg-zinc-100" />
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-3xl font-bold tracking-tight text-zinc-900">{p.salePrice}</span>
+                        <span className="text-lg text-zinc-400 line-through">{p.originalPrice}</span>
+                      </>
+                    )}
                   </div>
                   <p className="mt-1 text-xs font-medium text-orange-600">Limited time offer</p>
-                  <p className="mt-1 text-xs text-zinc-500">Tax calculated at checkout.</p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {prices.isLocalized 
+                      ? `Price in ${prices.currencyCode}. Tax calculated at checkout.`
+                      : 'Local currency & tax calculated at checkout.'
+                    }
+                  </p>
                 </CardHeader>
 
                 <CardContent className="space-y-2.5 pb-6">
