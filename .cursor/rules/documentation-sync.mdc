@@ -1,0 +1,25 @@
+---
+description: Auto-update documentation when architecture or processes change
+alwaysApply: true
+---
+
+# Documentation Sync Rules
+
+When making changes, automatically update relevant documentation:
+
+## README.md Updates Required For:
+- CI/CD changes (cloudbuild.yaml, Dockerfile, .gcloudignore)
+- New environment variables
+- New API endpoints (routes in src/app/api/)
+- Project structure changes
+- Deployment process changes
+- New dependencies with special setup
+
+## After Architecture Changes:
+1. Update the "Project Structure" section if folders change
+2. Update "API Flow" if request handling changes
+3. Add troubleshooting entries for new error patterns
+
+## Commit Practice:
+- Include doc updates in the same commit as code changes
+- If docs are complex, create a follow-up commit immediately after

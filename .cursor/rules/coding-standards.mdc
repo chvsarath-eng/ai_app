@@ -1,0 +1,40 @@
+---
+description: JavaScript/React coding standards for img2x
+globs: "**/*.{js,jsx,ts,tsx}"
+alwaysApply: false
+---
+
+# Coding Standards
+
+## Style (Standard.js)
+- 2 space indentation
+- Single quotes (except to avoid escaping)
+- No semicolons
+- No unused variables
+- Space after keywords, before function parens
+
+## React Patterns
+```jsx
+// Component definition
+export function MyComponent({ prop1, prop2 }) {
+  const [state, setState] = useState(null)
+  
+  // Early returns for loading/error states
+  if (!data) return <Loading />
+  
+  return <div>...</div>
+}
+```
+
+## Naming
+- Components: PascalCase (`PhotoGuidelinesDialog`)
+- Functions/variables: camelCase (`handleSubmit`)
+- Directories: kebab-case (`generator-card/`)
+- Files: kebab-case for components (`photo-guidelines-dialog.tsx`)
+
+## Imports Order
+1. React/Next.js
+2. Third-party libraries
+3. Local components (@/components/)
+4. Local utilities (@/lib/)
+5. Types (@/types/)

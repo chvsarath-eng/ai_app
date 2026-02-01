@@ -1,0 +1,27 @@
+---
+description: Cloud Run deployment process and CI/CD rules
+alwaysApply: true
+---
+
+# Deployment Rules
+
+## Manual Deploy Command
+Always run from **repo root** (ai_app/), NOT from web/:
+
+```bash
+gcloud builds submit --config=web/cloudbuild.yaml --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD) .
+```
+
+## Build Pipeline (cloudbuild.yaml)
+1. Docker build in `web/` directory
+2. Push to Artifact Registry: `us-central1-docker.pkg.dev/imgstr/img2x-repo/img2x-web`
+3. Deploy to Cloud Run: `img2x-web` service
+
+## Before Deploying:
+- Run `npm run build` locally to catch TypeScript errors
+- Ensure `.gcloudignore` excludes node_modules/
+- Commit all changes first
+
+## Monitor Builds:
+- Console: https://console.cloud.google.com/cloud-build/builds
+- Production: https://img2x.com
