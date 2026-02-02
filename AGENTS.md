@@ -303,6 +303,7 @@ See `.cursor/rules/coding-standards.mdc` for details.
   - Checkout overlay (sandbox mode)
   - Tax calculation (tax-exclusive display)
   - Shipping address collection (hardcover orders)
+  - Email prefilled for checkout; Paddle collects address in overlay
   - Webhook handling (`transaction.completed`, `transaction.payment_failed`)
   - Order confirmation emails from `team@img2x.com`
   - Invoice/receipt download via Paddle API
@@ -354,6 +355,8 @@ See `web/SEO_CHECKLIST.md` for detailed SEO roadmap.
 11. **Payment Success UX:** Replaced generic Paddle success modal with inline branded success state showing order details, receipt download, and "Create Another Book" button for better UX.
 
 12. **Paddle Webhook Customer Email:** The `transaction.completed` webhook only includes `customer_id`, NOT the customer's email. Must call Paddle API (`GET /customers/{id}`) to fetch customer details including email before sending order confirmation emails.
+
+13. **Paddle Address Prefill Validation:** Prefilling `customer.address` can trigger `validation.no_validation_set` errors. Prefill only the email and let Paddle collect address details in the overlay.
 
 ---
 
