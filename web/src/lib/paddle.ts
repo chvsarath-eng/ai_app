@@ -19,9 +19,20 @@ declare global {
       Initialize: (options: { 
         token: string
         eventCallback?: (event: PaddleEventData) => void
+        checkout?: {
+          settings?: {
+            displayMode?: 'overlay' | 'inline'
+            frameTarget?: string
+            frameInitialHeight?: number
+            frameStyle?: string
+            variant?: 'one-page' | 'multi-page'
+            theme?: 'light' | 'dark'
+          }
+        }
       }) => void
       Checkout: {
         open: (options: PaddleCheckoutOptions) => void
+        close: () => void
       }
     }
   }
@@ -76,8 +87,17 @@ export const PADDLE_ENVIRONMENT = (process.env.NEXT_PUBLIC_PADDLE_ENVIRONMENT ||
 
 let paddleInitialized = false
 let currentCallbacks: PaddleCheckoutCallbacks | null = null
+let currentInlineConfig: { frameTarget?: string; frameInitialHeight?: number } | null = null
 
-export function initializePaddle(callbacks?: PaddleCheckoutCallbacks) {
+export interface InitializePaddleOptions {
+  callbacks?: PaddleCheckoutCallbacks
+  inlineConfig?: {
+    frameTarget: string
+    frameInitialHeight?: number
+  }
+}
+
+export function initializePaddle(options?: InitializePaddleOptions) {
   if (typeof window === 'undefined' || !window.Paddle) {
     return
   }
@@ -89,9 +109,20 @@ export function initializePaddle(callbacks?: PaddleCheckoutCallbacks) {
     return
   }
 
+  // Store inline config if provided
+  if (options?.inlineConfig) {
+    currentInlineConfig = options.inlineConfig
+  }
+
+  // Store callbacks if provided
+  if (options?.callbacks) {
+    currentCallbacks = options.callbacks
+  }
+
   if (!paddleInitialized) {
     window.Paddle.Environment.set(PADDLE_ENVIRONMENT)
-    window.Paddle.Initialize({ 
+    
+    const initOptions: Parameters<NonNullable<typeof window.Paddle>['Initialize']>[0] = {
       token: clientToken,
       eventCallback: (event: PaddleEventData) => {
         const eventData = event?.data && typeof event.data === 'object'
@@ -124,13 +155,30 @@ export function initializePaddle(callbacks?: PaddleCheckoutCallbacks) {
           currentCallbacks?.onClose?.()
         }
       }
-    })
+    }
+
+    // If inline config is provided, add checkout settings for inline mode
+    if (currentInlineConfig?.frameTarget) {
+      initOptions.checkout = {
+        settings: {
+          displayMode: 'inline',
+          frameTarget: currentInlineConfig.frameTarget,
+          frameInitialHeight: currentInlineConfig.frameInitialHeight || 450,
+          frameStyle: 'width: 100%; min-width: 312px; background-color: transparent; border: none;',
+          variant: 'one-page',
+          theme: 'light'
+        }
+      }
+    }
+
+    window.Paddle.Initialize(initOptions)
     paddleInitialized = true
   }
-  
-  if (callbacks) {
-    currentCallbacks = callbacks
-  }
+}
+
+// Legacy function signature for backward compatibility
+export function initializePaddleLegacy(callbacks?: PaddleCheckoutCallbacks) {
+  initializePaddle({ callbacks })
 }
 
 export function openPaddleCheckout(
@@ -149,18 +197,37 @@ export function openPaddleCheckout(
   }
 
   if (!paddleInitialized) {
-    initializePaddle(callbacks)
+    initializePaddle({ callbacks })
   }
+
+  // For inline mode, don't override displayMode settings
+  const isInlineMode = currentInlineConfig?.frameTarget || options.settings?.displayMode === 'inline'
 
   window.Paddle.Checkout.open({
     ...options,
-    settings: {
-      displayMode: 'overlay',
-      theme: 'light',
-      // No locale specified - Paddle auto-detects based on customer's browser/location
-      ...options.settings
-    }
+    settings: isInlineMode
+      ? {
+          displayMode: 'inline',
+          frameTarget: currentInlineConfig?.frameTarget || options.settings?.frameTarget,
+          frameInitialHeight: options.settings?.frameInitialHeight || 450,
+          frameStyle: options.settings?.frameStyle || 'width: 100%; min-width: 312px; background-color: transparent; border: none;',
+          variant: 'one-page',
+          theme: 'light',
+          ...options.settings
+        }
+      : {
+          displayMode: 'overlay',
+          theme: 'light',
+          variant: 'multi-page',
+          ...options.settings
+        }
   })
+}
+
+export function closePaddleCheckout() {
+  if (typeof window !== 'undefined' && window.Paddle) {
+    window.Paddle.Checkout.close()
+  }
 }
 
 export function getPriceIdForOutputType(outputType: 'DIGI_BOOK' | 'LULU_BOOK'): string {

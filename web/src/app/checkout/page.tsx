@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
 import { CreditCard, ChevronLeft, ShieldCheck, Truck, Clock } from 'lucide-react'
 import { useCheckoutStore } from '@/lib/checkout-store'
 import { initializePaddle, openPaddleCheckout } from '@/lib/paddle'
@@ -44,7 +43,7 @@ export default function CheckoutPage () {
 
   const isHardcover = store.outputType === 'LULU_BOOK'
 
-  // Check if we have product data
+  // Check if we have product data and initialize Paddle
   useEffect(() => {
     initializePaddle()
 
@@ -243,15 +242,14 @@ export default function CheckoutPage () {
         shipping_level: selectedShipping?.level
       })
 
-      // Open Paddle checkout with the server-created transaction
-      // The transaction already includes: items (product + shipping), customer email, address for tax
+      // Open Paddle checkout overlay with multi-page layout
       openPaddleCheckout(
         {
           transactionId,
           settings: {
             displayMode: 'overlay',
             theme: 'light',
-            variant: 'one-page',
+            variant: 'multi-page',
             allowLogout: false
           }
         },
@@ -504,7 +502,6 @@ export default function CheckoutPage () {
         <div className="mt-8 pt-6 border-t border-zinc-200">
           <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-zinc-400">
             <div className="flex items-center gap-2">
-              <Image src="/brand/paddle-badge.svg" alt="Paddle" width={60} height={20} className="opacity-60" onError={(e) => { e.currentTarget.style.display = 'none' }} />
               <span>Secure payments by Paddle</span>
             </div>
             <div className="flex items-center gap-1.5">
