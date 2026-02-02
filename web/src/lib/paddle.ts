@@ -47,9 +47,13 @@ export interface PaddleCheckoutOptions {
   successUrl?: string
   settings?: {
     displayMode?: 'overlay' | 'inline'
+    variant?: 'one-page' | 'multi-page'
     theme?: 'light' | 'dark'
     locale?: string
     successUrl?: string
+    frameTarget?: string
+    frameInitialHeight?: number
+    frameStyle?: string
   }
 }
 
@@ -156,4 +160,57 @@ export function openPaddleCheckout(
 
 export function getPriceIdForOutputType(outputType: 'DIGI_BOOK' | 'LULU_BOOK'): string {
   return outputType === 'DIGI_BOOK' ? PADDLE_PRICES.DIGITAL : PADDLE_PRICES.HARDCOVER
+}
+
+export interface InlineCheckoutOptions {
+  frameTarget: string
+  items: Array<{
+    priceId: string
+    quantity: number
+  }>
+  customer?: {
+    email?: string
+    address?: {
+      countryCode?: string
+      postalCode?: string
+      region?: string
+      city?: string
+      line1?: string
+      line2?: string
+    }
+  }
+  customData?: Record<string, string>
+}
+
+export function openInlineCheckout(
+  options: InlineCheckoutOptions,
+  callbacks?: PaddleCheckoutCallbacks
+) {
+  if (typeof window === 'undefined' || !window.Paddle) {
+    console.error('Paddle not loaded')
+    return
+  }
+
+  // Store callbacks for event handling
+  if (callbacks) {
+    currentCallbacks = callbacks
+  }
+
+  if (!paddleInitialized) {
+    initializePaddle(callbacks)
+  }
+
+  window.Paddle.Checkout.open({
+    items: options.items,
+    customer: options.customer,
+    customData: options.customData,
+    settings: {
+      displayMode: 'inline',
+      variant: 'one-page',
+      theme: 'light',
+      frameTarget: options.frameTarget,
+      frameInitialHeight: 450,
+      frameStyle: 'width: 100%; min-width: 312px; background-color: transparent; border: none;'
+    }
+  })
 }

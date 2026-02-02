@@ -2,34 +2,18 @@
 
 import * as React from 'react'
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useMutation } from '@tanstack/react-query'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Controller, useForm } from 'react-hook-form'
-import { ImageIcon, Mail, Wand2, Book, Sparkles } from 'lucide-react'
+import { ImageIcon, Wand2, Book, Sparkles } from 'lucide-react'
 
 import { createStorybookJob } from '@/lib/storybookApi'
 import { initializePaddle, openPaddleCheckout, getPriceIdForOutputType } from '@/lib/paddle'
+import { useCheckoutStore } from '@/lib/checkout-store'
 import { outputTypes } from '@/types/storybook'
 import type { Theme, OutputType } from '@/types/storybook'
-
-// Shipping option from Lulu API
-interface ShippingOption {
-  level: string
-  description: string
-  shipping_cost: number
-  book_price: number
-  total: number
-  currency: string
-}
-
-interface ShippingCostResponse {
-  valid: boolean
-  book_price: number
-  shipping_options: ShippingOption[]
-  currency: string
-  errors?: string[]
-}
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -37,113 +21,15 @@ import { cn } from '@/lib/utils'
 import { trackEvent } from '@/lib/analytics'
 import { UploadDropzone } from '@/components/generator-card/upload-dropzone'
 import { StorylineInput } from '@/components/generator-card/storyline-input'
-import { EmailInput } from '@/components/generator-card/email-input'
 import { GenerateButton } from '@/components/generator-card/generate-button'
 import { PaymentSuccess } from '@/components/generator-card/payment-success'
-
-const COUNTRIES = [
-  { code: 'US', name: 'United States' },
-  { code: 'CA', name: 'Canada' },
-  { code: 'GB', name: 'United Kingdom' },
-  { code: 'AU', name: 'Australia' },
-  { code: 'NZ', name: 'New Zealand' },
-  { code: 'IE', name: 'Ireland' },
-  { code: 'DE', name: 'Germany' },
-  { code: 'FR', name: 'France' },
-  { code: 'ES', name: 'Spain' },
-  { code: 'PT', name: 'Portugal' },
-  { code: 'IT', name: 'Italy' },
-  { code: 'NL', name: 'Netherlands' },
-  { code: 'BE', name: 'Belgium' },
-  { code: 'CH', name: 'Switzerland' },
-  { code: 'AT', name: 'Austria' },
-  { code: 'SE', name: 'Sweden' },
-  { code: 'NO', name: 'Norway' },
-  { code: 'DK', name: 'Denmark' },
-  { code: 'FI', name: 'Finland' },
-  { code: 'PL', name: 'Poland' },
-  { code: 'CZ', name: 'Czechia' },
-  { code: 'HU', name: 'Hungary' },
-  { code: 'RO', name: 'Romania' },
-  { code: 'GR', name: 'Greece' },
-  { code: 'TR', name: 'Turkey' },
-  { code: 'IL', name: 'Israel' },
-  { code: 'AE', name: 'United Arab Emirates' },
-  { code: 'SA', name: 'Saudi Arabia' },
-  { code: 'IN', name: 'India' },
-  { code: 'CN', name: 'China' },
-  { code: 'JP', name: 'Japan' },
-  { code: 'KR', name: 'South Korea' },
-  { code: 'SG', name: 'Singapore' },
-  { code: 'MY', name: 'Malaysia' },
-  { code: 'TH', name: 'Thailand' },
-  { code: 'VN', name: 'Vietnam' },
-  { code: 'PH', name: 'Philippines' },
-  { code: 'ID', name: 'Indonesia' },
-  { code: 'HK', name: 'Hong Kong' },
-  { code: 'TW', name: 'Taiwan' },
-  { code: 'MX', name: 'Mexico' },
-  { code: 'BR', name: 'Brazil' },
-  { code: 'AR', name: 'Argentina' },
-  { code: 'CL', name: 'Chile' },
-  { code: 'CO', name: 'Colombia' },
-  { code: 'PE', name: 'Peru' },
-  { code: 'ZA', name: 'South Africa' }
-]
 
 const formSchema = z.object({
   imageFile: z.instanceof(File, { message: 'Please upload a photo' }),
   name: z.string().trim().min(1, 'Name is required').max(60, 'Keep it under 60 characters'),
   age: z.coerce.number().int().min(1, 'Enter a valid age').max(120, 'Enter a valid age'),
   storyline: z.string().trim().min(1, 'Storyline is required').max(180, 'Keep it under 180 characters'),
-  email: z.string().trim().min(1, 'Email is required').email('Enter a valid email'),
-  confirmEmail: z.string().trim().min(1, 'Please confirm your email').email('Enter a valid email'),
-  outputType: z.enum(outputTypes, { message: 'Please select a book type' }),
-  shippingName: z.string().trim().optional(),
-  shippingAddress1: z.string().trim().optional(),
-  shippingAddress2: z.string().trim().optional(),
-  shippingCity: z.string().trim().optional(),
-  shippingRegion: z.string().trim().optional(),
-  shippingPostalCode: z.string().trim().optional(),
-  shippingCountry: z.string().trim().optional()
-}).superRefine((values, ctx) => {
-  if (values.email !== values.confirmEmail) {
-    ctx.addIssue({
-      path: ['confirmEmail'],
-      code: z.ZodIssueCode.custom,
-      message: 'Emails do not match'
-    })
-  }
-
-  if (values.outputType !== 'LULU_BOOK') return
-
-  const requiredFields = [
-    { key: 'shippingName', label: 'Full name' },
-    { key: 'shippingAddress1', label: 'Street address' },
-    { key: 'shippingCity', label: 'City' },
-    { key: 'shippingRegion', label: 'State/Region' },
-    { key: 'shippingPostalCode', label: 'ZIP/Postal code' },
-    { key: 'shippingCountry', label: 'Country' }
-  ] as const
-
-  requiredFields.forEach(({ key, label }) => {
-    const value = values[key]
-    if (!value || value.trim().length === 0) {
-      ctx.addIssue({
-        path: [key],
-        code: z.ZodIssueCode.custom,
-        message: `${label} is required`
-      })
-    }
-  })
-
-  if (values.shippingCountry && values.shippingCountry.length !== 2) {
-    ctx.addIssue({
-      path: ['shippingCountry'],
-      code: z.ZodIssueCode.custom,
-      message: 'Select a valid country'
-    })
-  }
+  outputType: z.enum(outputTypes, { message: 'Please select a book type' })
 })
 
 type FormInput = z.input<typeof formSchema>
@@ -155,6 +41,9 @@ function stitchPrompt (values: FormOutput) {
 }
 
 export function GeneratorCard ({ className }: { className?: string }) {
+  const router = useRouter()
+  const setProductInfo = useCheckoutStore((state) => state.setProductInfo)
+
   // Success state for inline payment confirmation
   const [successData, setSuccessData] = useState<{
     transactionId: string
@@ -162,11 +51,8 @@ export function GeneratorCard ({ className }: { className?: string }) {
     outputType: OutputType
   } | null>(null)
 
-  // Shipping cost state for hardcover orders
-  const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([])
-  const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(null)
-  const [shippingLoading, setShippingLoading] = useState(false)
-  const [shippingError, setShippingError] = useState<string | null>(null)
+  // Preview URL for uploaded image
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
 
   // Initialize Paddle on mount
   useEffect(() => {
@@ -180,190 +66,42 @@ export function GeneratorCard ({ className }: { className?: string }) {
       name: '',
       age: undefined,
       storyline: '',
-      email: '',
-      confirmEmail: '',
-      outputType: undefined,
-      shippingName: '',
-      shippingAddress1: '',
-      shippingAddress2: '',
-      shippingCity: '',
-      shippingRegion: '',
-      shippingPostalCode: '',
-      shippingCountry: ''
+      outputType: undefined
     }
   })
-  const emailValue = form.watch('email')
-  const confirmEmailValue = form.watch('confirmEmail')
-  const outputTypeValue = form.watch('outputType')
-  const requiresShipping = outputTypeValue === 'LULU_BOOK'
-
-  // Watch shipping address fields for auto-fetch
-  const shippingName = form.watch('shippingName')
-  const shippingAddress1 = form.watch('shippingAddress1')
-  const shippingCity = form.watch('shippingCity')
-  const shippingRegion = form.watch('shippingRegion')
-  const shippingPostalCode = form.watch('shippingPostalCode')
-  const shippingCountry = form.watch('shippingCountry')
-
-  // Fetch shipping cost when address is complete
-  const fetchShippingCost = async () => {
-    if (!shippingName || !shippingAddress1 || !shippingCity || !shippingRegion || !shippingPostalCode || !shippingCountry) {
-      return
-    }
-
-    setShippingLoading(true)
-    setShippingError(null)
-    setShippingOptions([])
-    setSelectedShipping(null)
-
-    try {
-      const response = await fetch('/api/lulu/shipping-cost', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shipping_address: {
-            name: shippingName,
-            street1: shippingAddress1,
-            street2: form.getValues('shippingAddress2') || '',
-            city: shippingCity,
-            state_code: shippingRegion,
-            postcode: shippingPostalCode,
-            country_code: shippingCountry
-          },
-          quantity: 1
-        })
-      })
-
-      const data: ShippingCostResponse = await response.json()
-
-      if (!data.valid) {
-        setShippingError(data.errors?.join(', ') || 'Invalid shipping address')
-        return
-      }
-
-      setShippingOptions(data.shipping_options)
-      // Auto-select first (cheapest) option
-      if (data.shipping_options.length > 0) {
-        setSelectedShipping(data.shipping_options[0])
-      }
-    } catch (err) {
-      console.error('Failed to fetch shipping cost:', err)
-      setShippingError('Failed to calculate shipping. Please try again.')
-    } finally {
-      setShippingLoading(false)
-    }
-  }
-
-  // Fetch shipping cost when all address fields are filled
-  useEffect(() => {
-    if (requiresShipping && shippingName && shippingAddress1 && shippingCity && shippingRegion && shippingPostalCode && shippingCountry) {
-      // Debounce the fetch
-      const timer = setTimeout(() => {
-        fetchShippingCost()
-      }, 500)
-      return () => clearTimeout(timer)
-    }
-  }, [requiresShipping, shippingName, shippingAddress1, shippingCity, shippingRegion, shippingPostalCode, shippingCountry])
+  const storylineValue = form.watch('storyline')
 
   const createJobMutation = useMutation({
     mutationFn: async (values: FormInput) => {
       const parsed = formSchema.parse(values)
-      const priceId = getPriceIdForOutputType(parsed.outputType as OutputType)
-      const shippingAddress = parsed.outputType === 'LULU_BOOK'
-        ? {
-            fullName: parsed.shippingName?.trim() ?? '',
-            line1: parsed.shippingAddress1?.trim() ?? '',
-            line2: parsed.shippingAddress2?.trim() || undefined,
-            city: parsed.shippingCity?.trim() ?? '',
-            region: parsed.shippingRegion?.trim() ?? '',
-            postalCode: parsed.shippingPostalCode?.trim() ?? '',
-            countryCode: parsed.shippingCountry?.trim().toUpperCase() ?? ''
-          }
-        : undefined
 
-      trackEvent('checkout_opened', {
-        output_type: parsed.outputType,
-        price_id: priceId
-      })
-
-      const customData: Record<string, string> = {
+      // Store product info and navigate to checkout page
+      // Both digital and hardcover now go through checkout page with inline Paddle
+      setProductInfo({
+        imageFile: parsed.imageFile,
+        imagePreviewUrl: imagePreviewUrl || '',
         name: parsed.name,
-        age: parsed.age.toString(),
+        age: parsed.age,
         storyline: parsed.storyline,
-        outputType: parsed.outputType
-      }
-
-      if (shippingAddress) {
-        customData.shippingName = shippingAddress.fullName
-        customData.shippingAddress1 = shippingAddress.line1
-        if (shippingAddress.line2) customData.shippingAddress2 = shippingAddress.line2
-        customData.shippingCity = shippingAddress.city
-        customData.shippingRegion = shippingAddress.region
-        customData.shippingPostalCode = shippingAddress.postalCode
-        customData.shippingCountry = shippingAddress.countryCode
-        // Include selected shipping option for backend processing
-        if (selectedShipping) {
-          customData.shippingLevel = selectedShipping.level
-          customData.shippingCost = selectedShipping.shipping_cost.toString()
-          customData.orderTotal = selectedShipping.total.toString()
-        }
-      }
-
-      return new Promise<{ jobId: string, outputType: string, transactionId?: string }>((resolve, reject) => {
-        openPaddleCheckout(
-          {
-            items: [{ priceId, quantity: 1 }],
-            customer: shippingAddress
-              ? {
-                  email: parsed.email,
-                  address: {
-                    countryCode: shippingAddress.countryCode,
-                    postalCode: shippingAddress.postalCode,
-                    region: shippingAddress.region,
-                    city: shippingAddress.city,
-                    line1: shippingAddress.line1,
-                    line2: shippingAddress.line2
-                  }
-                }
-              : { email: parsed.email },
-            customData,
-            settings: {
-              displayMode: 'overlay',
-              theme: 'light'
-            }
-          },
-          {
-            onSuccess: async (transactionId) => {
-              console.log('Payment successful, transaction:', transactionId)
-              // Only create job after payment succeeds
-              try {
-                const res = await createStorybookJob({
-                  imageFile: parsed.imageFile,
-                  theme: 'Custom' as Theme,
-                  storyline: stitchPrompt(parsed),
-                  email: parsed.email,
-                  outputType: parsed.outputType as OutputType,
-                  shippingAddress
-                })
-                resolve({ ...res, outputType: parsed.outputType, transactionId })
-              } catch (err) {
-                reject(err)
-              }
-            },
-            onClose: () => {
-              // User closed checkout without completing
-              reject(new Error('Checkout cancelled'))
-            }
-          }
-        )
+        outputType: parsed.outputType as OutputType
       })
+
+      trackEvent('checkout_started', {
+        output_type: parsed.outputType
+      })
+
+      router.push('/checkout')
+      return { jobId: '', outputType: parsed.outputType, redirected: true }
     },
-    onSuccess: ({ jobId, outputType, transactionId }) => {
+    onSuccess: (result) => {
+      // Don't show success if redirected to checkout page
+      if (result.redirected) return
+
       // Show inline success state instead of navigating
       setSuccessData({
-        transactionId: transactionId || '',
-        jobId,
-        outputType: outputType as OutputType
+        transactionId: result.transactionId || '',
+        jobId: result.jobId,
+        outputType: result.outputType as OutputType
       })
     }
   })
@@ -425,7 +163,16 @@ export function GeneratorCard ({ className }: { className?: string }) {
               render={({ field }) => (
                 <UploadDropzone
                   value={field.value}
-                  onChange={(file) => field.onChange(file)}
+                  onChange={(file) => {
+                    field.onChange(file)
+                    // Create preview URL for checkout page
+                    if (file) {
+                      const url = URL.createObjectURL(file)
+                      setImagePreviewUrl(url)
+                    } else {
+                      setImagePreviewUrl(null)
+                    }
+                  }}
                   isDisabled={createJobMutation.isPending}
                 />
               )}
@@ -500,53 +247,7 @@ export function GeneratorCard ({ className }: { className?: string }) {
               : null}
           </div>
 
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2" htmlFor="email">
-              <Mail className="h-4 w-4 text-zinc-500" aria-hidden="true" />
-              Email
-            </Label>
-            <EmailInput
-              id="email"
-              placeholder="you@domain.com"
-              autoComplete="email"
-              isDisabled={createJobMutation.isPending}
-              {...form.register('email')}
-            />
-            {form.formState.errors.email?.message
-              ? (
-                <p className="text-sm text-red-600" role="alert">
-                  {form.formState.errors.email.message}
-                </p>
-              )
-              : null}
-          </div>
-
-          {emailValue
-            ? (
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2" htmlFor="confirmEmail">
-                  <Mail className="h-4 w-4 text-zinc-500" aria-hidden="true" />
-                  Confirm email
-                </Label>
-                <EmailInput
-                  id="confirmEmail"
-                  placeholder="Re-enter your email"
-                  autoComplete="email"
-                  isDisabled={createJobMutation.isPending}
-                  {...form.register('confirmEmail')}
-                />
-                {form.formState.errors.confirmEmail?.message
-                  ? (
-                    <p className="text-sm text-red-600" role="alert">
-                      {form.formState.errors.confirmEmail.message}
-                    </p>
-                  )
-                  : null}
-              </div>
-              )
-            : null}
-
-          {confirmEmailValue
+          {storylineValue
             ? (
               <div className="space-y-3">
                 <Label className="flex items-center gap-2">
@@ -634,216 +335,6 @@ export function GeneratorCard ({ className }: { className?: string }) {
               )
             : null}
 
-          {requiresShipping
-            ? (
-              <div className="space-y-4 rounded-xl border border-zinc-200/70 bg-zinc-50/40 p-4">
-                <h4 className="text-sm font-semibold text-zinc-900">Shipping details</h4>
-                <div className="space-y-2">
-                  <Label htmlFor="shippingName">Full name</Label>
-                  <Input
-                    id="shippingName"
-                    placeholder="Full name"
-                    autoComplete="name"
-                    disabled={createJobMutation.isPending}
-                    {...form.register('shippingName')}
-                  />
-                  {form.formState.errors.shippingName?.message
-                    ? (
-                      <p className="text-sm text-red-600" role="alert">
-                        {form.formState.errors.shippingName.message}
-                      </p>
-                    )
-                    : null}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="shippingAddress1">Street address</Label>
-                  <Input
-                    id="shippingAddress1"
-                    placeholder="Street address"
-                    autoComplete="address-line1"
-                    disabled={createJobMutation.isPending}
-                    {...form.register('shippingAddress1')}
-                  />
-                  {form.formState.errors.shippingAddress1?.message
-                    ? (
-                      <p className="text-sm text-red-600" role="alert">
-                        {form.formState.errors.shippingAddress1.message}
-                      </p>
-                    )
-                    : null}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="shippingAddress2">Address line 2 (optional)</Label>
-                  <Input
-                    id="shippingAddress2"
-                    placeholder="Apt, suite, unit, etc."
-                    autoComplete="address-line2"
-                    disabled={createJobMutation.isPending}
-                    {...form.register('shippingAddress2')}
-                  />
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="shippingCity">City</Label>
-                    <Input
-                      id="shippingCity"
-                      placeholder="City"
-                      autoComplete="address-level2"
-                      disabled={createJobMutation.isPending}
-                      {...form.register('shippingCity')}
-                    />
-                    {form.formState.errors.shippingCity?.message
-                      ? (
-                        <p className="text-sm text-red-600" role="alert">
-                          {form.formState.errors.shippingCity.message}
-                        </p>
-                      )
-                      : null}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="shippingRegion">State/Region</Label>
-                    <Input
-                      id="shippingRegion"
-                      placeholder="State or region"
-                      autoComplete="address-level1"
-                      disabled={createJobMutation.isPending}
-                      {...form.register('shippingRegion')}
-                    />
-                    {form.formState.errors.shippingRegion?.message
-                      ? (
-                        <p className="text-sm text-red-600" role="alert">
-                          {form.formState.errors.shippingRegion.message}
-                        </p>
-                      )
-                      : null}
-                  </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="shippingPostalCode">ZIP/Postal code</Label>
-                    <Input
-                      id="shippingPostalCode"
-                      placeholder="ZIP/Postal code"
-                      autoComplete="postal-code"
-                      disabled={createJobMutation.isPending}
-                      {...form.register('shippingPostalCode')}
-                    />
-                    {form.formState.errors.shippingPostalCode?.message
-                      ? (
-                        <p className="text-sm text-red-600" role="alert">
-                          {form.formState.errors.shippingPostalCode.message}
-                        </p>
-                      )
-                      : null}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="shippingCountry">Country</Label>
-                    <select
-                      id="shippingCountry"
-                      autoComplete="country"
-                      disabled={createJobMutation.isPending}
-                      className="flex h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      {...form.register('shippingCountry')}
-                    >
-                      <option value="">Select a country</option>
-                      {COUNTRIES.map((country) => (
-                        <option key={country.code} value={country.code}>
-                          {country.name}
-                        </option>
-                      ))}
-                    </select>
-                    {form.formState.errors.shippingCountry?.message
-                      ? (
-                        <p className="text-sm text-red-600" role="alert">
-                          {form.formState.errors.shippingCountry.message}
-                        </p>
-                      )
-                      : null}
-                  </div>
-                </div>
-
-                {/* Shipping Options */}
-                {shippingLoading && (
-                  <div className="flex items-center gap-2 text-sm text-zinc-500">
-                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Calculating shipping cost...
-                  </div>
-                )}
-
-                {shippingError && (
-                  <p className="text-sm text-red-600" role="alert">
-                    {shippingError}
-                  </p>
-                )}
-
-                {shippingOptions.length > 0 && (
-                  <div className="space-y-3">
-                    <Label>Select shipping method</Label>
-                    <div className="space-y-2">
-                      {shippingOptions.map((option) => (
-                        <label
-                          key={option.level}
-                          className={cn(
-                            'flex cursor-pointer items-center justify-between rounded-lg border p-3 transition-colors',
-                            selectedShipping?.level === option.level
-                              ? 'border-emerald-500 bg-emerald-50'
-                              : 'border-zinc-200 hover:border-zinc-300'
-                          )}
-                        >
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="radio"
-                              name="shippingOption"
-                              value={option.level}
-                              checked={selectedShipping?.level === option.level}
-                              onChange={() => setSelectedShipping(option)}
-                              className="h-4 w-4 text-emerald-600"
-                            />
-                            <div>
-                              <p className="text-sm font-medium text-zinc-900">{option.description}</p>
-                            </div>
-                          </div>
-                          <p className="text-sm font-semibold text-zinc-900">
-                            +${option.shipping_cost.toFixed(2)}
-                          </p>
-                        </label>
-                      ))}
-                    </div>
-
-                    {/* Order Summary */}
-                    {selectedShipping && (
-                      <div className="mt-4 rounded-lg bg-zinc-100 p-4">
-                        <h5 className="text-sm font-semibold text-zinc-900 mb-2">Order Summary</h5>
-                        <div className="space-y-1 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-zinc-600">Hardcover Book</span>
-                            <span className="text-zinc-900">${selectedShipping.book_price.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-zinc-600">Shipping</span>
-                            <span className="text-zinc-900">${selectedShipping.shipping_cost.toFixed(2)}</span>
-                          </div>
-                          <div className="flex justify-between border-t border-zinc-200 pt-2 mt-2">
-                            <span className="font-semibold text-zinc-900">Total</span>
-                            <span className="font-bold text-emerald-600">${selectedShipping.total.toFixed(2)}</span>
-                          </div>
-                        </div>
-                        <p className="text-xs text-zinc-500 mt-2">Tax calculated at checkout</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              )
-            : null}
-
           {formError
             ? (
               <p className="text-sm text-red-600" role="alert">
@@ -853,15 +344,9 @@ export function GeneratorCard ({ className }: { className?: string }) {
             : null}
 
           <GenerateButton
-            isLoading={createJobMutation.isPending || shippingLoading}
+            isLoading={createJobMutation.isPending}
             hasPhoto={Boolean(form.watch('imageFile'))}
-            disabled={requiresShipping && !selectedShipping}
           />
-          {requiresShipping && !selectedShipping && shippingOptions.length === 0 && !shippingLoading && shippingName && shippingAddress1 && shippingCity && (
-            <p className="text-xs text-zinc-500 text-center">
-              Complete shipping address to see delivery options
-            </p>
-          )}
         </form>
       </CardContent>
       </Card>

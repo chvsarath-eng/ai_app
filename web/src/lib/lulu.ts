@@ -138,18 +138,20 @@ const SHIPPING_DESCRIPTIONS: Record<string, string> = {
 }
 
 /**
- * Calculate shipping cost and validate address
+ * Calculate shipping cost and get available shipping options
  * 
- * This calls Lulu's cost calculation endpoint which:
+ * This calls Lulu's shipping-options endpoint which:
+ * - Returns all available shipping options with costs
  * - Validates the shipping address
- * - Returns available shipping options with costs
- * - Returns manufacturing cost
  */
 export async function calculateShippingCost(
   shippingAddress: ShippingAddress,
   quantity: number = 1
 ): Promise<CostCalculationResult> {
+  // Build payload for /shipping-options/ endpoint
+  // Note: Uses 'country' not 'country_code', and doesn't need name/phone
   const payload = {
+    currency: 'USD',
     line_items: [
       {
         quantity,
@@ -158,41 +160,53 @@ export async function calculateShippingCost(
       }
     ],
     shipping_address: {
-      name: shippingAddress.name,
       street1: shippingAddress.street1,
-      street2: shippingAddress.street2 || '',
       city: shippingAddress.city,
       state_code: shippingAddress.state_code,
       postcode: shippingAddress.postcode,
-      country_code: shippingAddress.country_code,
-      phone_number: shippingAddress.phone_number || ''
+      country: shippingAddress.country_code  // Note: 'country' not 'country_code'
     }
   }
   
+  console.log('Lulu shipping-options request:', JSON.stringify(payload, null, 2))
+  
   try {
-    const response = await luluRequest('/print-job-cost-calculations/', {
+    const response = await luluRequest('/shipping-options/', {
       method: 'POST',
       body: JSON.stringify(payload)
     })
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      console.error('Lulu cost calculation failed:', response.status, errorData)
+      const errorText = await response.text()
+      console.error('Lulu shipping-options failed:', response.status, errorText)
+      
+      // Try to parse error as JSON
+      let errorData: Record<string, unknown> = {}
+      try {
+        errorData = JSON.parse(errorText)
+      } catch {
+        // Not JSON, use text as error
+      }
       
       // Extract error messages
       const errors: string[] = []
       if (errorData.shipping_address) {
-        for (const [field, messages] of Object.entries(errorData.shipping_address)) {
+        for (const [field, messages] of Object.entries(errorData.shipping_address as Record<string, unknown>)) {
           if (Array.isArray(messages)) {
             errors.push(`${field}: ${messages.join(', ')}`)
+          } else if (typeof messages === 'string') {
+            errors.push(`${field}: ${messages}`)
           }
         }
       }
       if (errorData.detail) {
-        errors.push(errorData.detail)
+        errors.push(String(errorData.detail))
       }
-      if (errorData.non_field_errors) {
-        errors.push(...errorData.non_field_errors)
+      if (errorData.non_field_errors && Array.isArray(errorData.non_field_errors)) {
+        errors.push(...errorData.non_field_errors.map(String))
+      }
+      if (errors.length === 0 && errorText) {
+        errors.push(errorText.substring(0, 200))
       }
       
       return {
@@ -204,32 +218,37 @@ export async function calculateShippingCost(
       }
     }
     
+    // Response is an array of shipping options
     const data = await response.json()
+    console.log('Lulu shipping-options response:', JSON.stringify(data, null, 2))
     
-    // Parse shipping options from response
+    // Parse shipping options from response (array format)
     const shippingOptions: ShippingOption[] = []
     
-    if (data.shipping_cost && data.shipping_cost.shipping_options) {
-      for (const option of data.shipping_cost.shipping_options) {
+    if (Array.isArray(data)) {
+      for (const option of data) {
+        // cost_excl_tax is a string like "5.99"
+        const cost = option.cost_excl_tax 
+          ? parseFloat(option.cost_excl_tax) 
+          : 0
+        
         shippingOptions.push({
           level: option.level,
-          cost: parseFloat(option.total_cost_excl_tax) / 100, // Convert cents to dollars
+          cost,
           currency: option.currency || 'USD',
           description: SHIPPING_DESCRIPTIONS[option.level] || option.level
         })
       }
     }
     
-    // Get manufacturing cost
-    const manufacturingCost = data.total_cost_excl_tax
-      ? parseFloat(data.total_cost_excl_tax) / 100
-      : 0
+    // Sort by cost (cheapest first)
+    shippingOptions.sort((a, b) => a.cost - b.cost)
     
     return {
       valid: true,
       shipping_options: shippingOptions,
-      book_manufacturing_cost: manufacturingCost,
-      currency: data.currency || 'USD',
+      book_manufacturing_cost: 0, // Not returned by this endpoint
+      currency: 'USD',
       errors: undefined
     }
   } catch (error) {
