@@ -201,15 +201,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Create customer and address in Paddle for tax calculation
+    // For hardcover: pre-create customer + address for accurate tax display
+    // For digital: skip customer creation - let Paddle checkout collect country for tax
     let customerId: string | undefined
     let addressId: string | undefined
 
-    try {
-      // Create or get customer
-      customerId = await getOrCreateCustomer(email)
+    if (isHardcover && formData?.shippingCountry) {
+      try {
+        // Create or get customer
+        customerId = await getOrCreateCustomer(email)
 
-      // Create address for tax calculation (hardcover has shipping address, digital needs at least country)
-      if (isHardcover && formData?.shippingCountry) {
+        // Create address for tax calculation with full shipping details
         addressId = await createAddress(customerId, {
           countryCode: formData.shippingCountry,
           postalCode: formData.shippingPostalCode,
@@ -217,11 +219,15 @@ export async function POST(request: NextRequest) {
           city: formData.shippingCity,
           firstLine: formData.shippingAddress1
         })
+      } catch (err) {
+        console.error('Error creating customer/address:', err)
+        // Continue without customer/address - Paddle will collect at checkout
+        customerId = undefined
+        addressId = undefined
       }
-    } catch (err) {
-      console.error('Error creating customer/address:', err)
-      // Continue without customer/address - Paddle will collect at checkout
     }
+    // For digital orders, we intentionally skip customer/address creation
+    // This allows Paddle checkout to collect the customer's country and calculate tax
 
     // Build the transaction request
     const transactionRequest: PaddleTransactionRequest = {
@@ -230,11 +236,10 @@ export async function POST(request: NextRequest) {
       custom_data: customData
     }
 
-    // Add customer and address IDs if we have them
-    if (customerId) {
+    // Only add customer and address IDs for hardcover orders where we have both
+    // For digital orders, leaving these out lets Paddle collect location for tax
+    if (isHardcover && customerId && addressId) {
       transactionRequest.customer_id = customerId
-    }
-    if (addressId) {
       transactionRequest.address_id = addressId
     }
 
