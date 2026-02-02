@@ -186,7 +186,7 @@ gcloud builds submit --config=web/cloudbuild.yaml --substitutions=COMMIT_SHA=$(g
 1. User uploads photo + enters details (name, theme, email)
 2. User selects book type (Digital $14.99 / Hardcover $39.99)
 3. For hardcover: user enters shipping address
-4. Click "Create My Book" → Paddle checkout overlay opens
+4. Click "Create My Book" → Paddle checkout overlay opens (email is prefilled)
 5. User completes payment (Paddle handles tax)
 6. On success → `/api/storybook/generate` creates job in story service
 7. Redirect to order confirmation page (with transaction ID)
@@ -195,6 +195,18 @@ gcloud builds submit --config=web/cloudbuild.yaml --substitutions=COMMIT_SHA=$(g
 10. Book-ready email sent with download link or shipping info
 
 ## Troubleshooting
+
+### Paddle checkout validation error
+
+If Paddle returns `validation.no_validation_set` for `customer.address.line1`, it means prefilled
+address data is being validated without a configured validation set. The checkout flow should
+only prefill the customer email and allow Paddle to collect address details in the overlay.
+
+### Shipping charges in Paddle
+
+Shipping amounts from Lulu are metadata unless you bill for them in Paddle. To charge shipping,
+either add a shipping price item to checkout `items`, or create a transaction with a non-catalog
+line item for shipping and pass that transaction to checkout.
 
 ### Build Errors
 

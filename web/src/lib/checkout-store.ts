@@ -36,6 +36,7 @@ interface CheckoutStore extends CheckoutData {
     name: string
     age: number
     storyline: string
+    email: string
     outputType: OutputType
   }) => void
   setShippingAddress: (address: Partial<CheckoutData>) => void
@@ -77,6 +78,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
         name: data.name,
         age: data.age,
         storyline: data.storyline,
+        email: data.email,
         outputType: data.outputType
       }),
 

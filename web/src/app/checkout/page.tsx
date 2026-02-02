@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { CreditCard } from 'lucide-react'
 import { useCheckoutStore } from '@/lib/checkout-store'
-import { initializePaddle, openInlineCheckout, getPriceIdForOutputType } from '@/lib/paddle'
+import { initializePaddle, openPaddleCheckout } from '@/lib/paddle'
 import { createStorybookJob } from '@/lib/storybookApi'
 import { trackEvent } from '@/lib/analytics'
 import type { Theme, OutputType } from '@/types/storybook'
@@ -33,20 +33,22 @@ export default function CheckoutPage () {
   const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(null)
   const [shippingLoading, setShippingLoading] = useState(false)
   const [shippingError, setShippingError] = useState<string | null>(null)
-  const [checkoutReady, setCheckoutReady] = useState(false)
+  const [checkoutError, setCheckoutError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [paymentProcessing, setPaymentProcessing] = useState(false)
 
   // Track last fetched address to prevent duplicate fetches
   const lastFetchedAddressRef = useRef<string>('')
-  const checkoutInitializedRef = useRef(false)
 
   const isHardcover = store.outputType === 'LULU_BOOK'
 
   // Check if we have product data
   useEffect(() => {
+    initializePaddle()
+
     // Small delay for hydration
     const timer = setTimeout(() => {
-      if (!store.name || !store.outputType) {
+      if (!store.name || !store.outputType || !store.email) {
         router.push('/')
       } else {
         setIsLoading(false)
@@ -55,116 +57,6 @@ export default function CheckoutPage () {
 
     return () => clearTimeout(timer)
   }, [store.name, store.outputType, router])
-
-  // Initialize Paddle checkout when ready
-  useEffect(() => {
-    if (isLoading || checkoutInitializedRef.current) return
-
-    // For digital books, show checkout immediately
-    // For hardcover, wait until shipping is selected
-    const shouldInitCheckout = !isHardcover || (isHardcover && selectedShipping)
-
-    if (shouldInitCheckout && !checkoutInitializedRef.current) {
-      initializeCheckout()
-    }
-  }, [isLoading, isHardcover, selectedShipping])
-
-  const initializeCheckout = () => {
-    if (checkoutInitializedRef.current) return
-    checkoutInitializedRef.current = true
-
-    const priceId = getPriceIdForOutputType(store.outputType as OutputType)
-
-    // Build custom data
-    const customData: Record<string, string> = {
-      name: store.name,
-      age: store.age.toString(),
-      storyline: store.storyline,
-      outputType: store.outputType || ''
-    }
-
-    // Add shipping info for hardcover
-    if (isHardcover && selectedShipping) {
-      customData.shippingName = store.shippingName
-      customData.shippingAddress1 = store.shippingAddress1
-      if (store.shippingAddress2) customData.shippingAddress2 = store.shippingAddress2
-      customData.shippingCity = store.shippingCity
-      customData.shippingRegion = store.shippingRegion
-      customData.shippingPostalCode = store.shippingPostalCode
-      customData.shippingCountry = store.shippingCountry
-      customData.shippingLevel = selectedShipping.level
-      customData.shippingCost = selectedShipping.shipping_cost.toString()
-      customData.orderTotal = selectedShipping.total.toString()
-    }
-
-    // Customer address for pre-fill (hardcover only)
-    const customerAddress = isHardcover && store.shippingCountry
-      ? {
-          countryCode: store.shippingCountry,
-          postalCode: store.shippingPostalCode,
-          region: store.shippingRegion,
-          city: store.shippingCity,
-          line1: store.shippingAddress1,
-          line2: store.shippingAddress2 || undefined
-        }
-      : undefined
-
-    trackEvent('checkout_opened', {
-      output_type: store.outputType,
-      price_id: priceId
-    })
-
-    initializePaddle({
-      onSuccess: async (transactionId) => {
-        console.log('Payment successful, transaction:', transactionId)
-        setPaymentProcessing(true)
-
-        try {
-          // Build shipping address for hardcover
-          const shippingAddress = isHardcover
-            ? {
-                fullName: store.shippingName,
-                line1: store.shippingAddress1,
-                line2: store.shippingAddress2 || undefined,
-                city: store.shippingCity,
-                region: store.shippingRegion,
-                postalCode: store.shippingPostalCode,
-                countryCode: store.shippingCountry
-              }
-            : undefined
-
-          const res = await createStorybookJob({
-            imageFile: store.imageFile!,
-            theme: 'Custom' as Theme,
-            storyline: `Name: ${store.name}\nAge: ${store.age}\nStory: ${store.storyline}`,
-            email: '', // Email comes from Paddle transaction
-            outputType: store.outputType as OutputType,
-            shippingAddress
-          })
-
-          // Clear store and redirect to success
-          store.reset()
-          router.push(`/order/${res.jobId}?tx=${transactionId}`)
-        } catch (err) {
-          console.error('Failed to create job:', err)
-          setPaymentProcessing(false)
-        }
-      },
-      onClose: () => {
-        // User closed without completing - allow re-init
-        checkoutInitializedRef.current = false
-      }
-    })
-
-    openInlineCheckout({
-      frameTarget: 'paddle-checkout-container',
-      items: [{ priceId, quantity: 1 }],
-      customer: customerAddress ? { address: customerAddress } : undefined,
-      customData
-    })
-
-    setCheckoutReady(true)
-  }
 
   // Fetch shipping options when address is complete
   const fetchShippingCost = useCallback(async () => {
@@ -185,10 +77,6 @@ export default function CheckoutPage () {
     lastFetchedAddressRef.current = addressHash
     setShippingLoading(true)
     setShippingError(null)
-
-    // Reset checkout when address changes
-    checkoutInitializedRef.current = false
-    setCheckoutReady(false)
 
     try {
       const response = await fetch('/api/lulu/shipping-cost', {
@@ -279,9 +167,143 @@ export default function CheckoutPage () {
   const handleSelectShipping = (option: ShippingOption) => {
     setSelectedShipping(option)
     store.setShippingOption(option.level, option.shipping_cost)
-    // Reset checkout to reinitialize with new shipping
-    checkoutInitializedRef.current = false
-    setCheckoutReady(false)
+  }
+
+  const isAddressComplete = Boolean(
+    store.shippingName &&
+    store.shippingAddress1 &&
+    store.shippingCity &&
+    store.shippingRegion &&
+    store.shippingPostalCode &&
+    store.shippingCountry
+  )
+
+  const canPlaceOrder = isHardcover
+    ? Boolean(isAddressComplete && selectedShipping && store.email)
+    : Boolean(store.outputType && store.imageFile && store.email)
+
+  const handlePlaceOrder = async () => {
+    if (!store.outputType || !store.imageFile || isSubmitting) return
+    if (isHardcover && (!selectedShipping || !isAddressComplete)) return
+    if (!store.email) {
+      setCheckoutError('Please enter your email before checkout.')
+      return
+    }
+
+    setIsSubmitting(true)
+    setCheckoutError(null)
+
+    const formData: Record<string, unknown> = {
+      name: store.name,
+      age: store.age,
+      storyline: store.storyline,
+      outputType: store.outputType
+    }
+
+    if (isHardcover && selectedShipping) {
+      Object.assign(formData, {
+        shippingName: store.shippingName,
+        shippingPhone: store.shippingPhone,
+        shippingAddress1: store.shippingAddress1,
+        shippingAddress2: store.shippingAddress2,
+        shippingCity: store.shippingCity,
+        shippingRegion: store.shippingRegion,
+        shippingPostalCode: store.shippingPostalCode,
+        shippingCountry: store.shippingCountry,
+        shippingLevel: selectedShipping.level,
+        shippingCost: selectedShipping.shipping_cost,
+        orderTotal: selectedShipping.total
+      })
+    }
+
+    try {
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: store.email,
+          outputType: store.outputType,
+          formData
+        })
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data?.checkout?.priceId) {
+        const message = data?.error || 'Failed to initialize checkout'
+        throw new Error(message)
+      }
+
+      const { priceId, customData, email } = data.checkout
+
+      trackEvent('checkout_opened', {
+        output_type: store.outputType,
+        price_id: priceId,
+        shipping_level: selectedShipping?.level
+      })
+
+      // Paddle validation can reject prefilled addresses when no validation set exists.
+      // We only prefill email and let Paddle collect address during checkout.
+      const customerAddress = undefined
+
+      openPaddleCheckout(
+        {
+          items: [{ priceId, quantity: 1 }],
+          customer: {
+            email,
+            address: customerAddress
+          },
+          customData,
+          settings: {
+            displayMode: 'overlay',
+            theme: 'light',
+            variant: 'one-page'
+          }
+        },
+        {
+          onSuccess: async (transactionId) => {
+            setPaymentProcessing(true)
+
+            try {
+              const shippingAddress = isHardcover
+                ? {
+                    fullName: store.shippingName,
+                    line1: store.shippingAddress1,
+                    line2: store.shippingAddress2 || undefined,
+                    city: store.shippingCity,
+                    region: store.shippingRegion,
+                    postalCode: store.shippingPostalCode,
+                    countryCode: store.shippingCountry
+                  }
+                : undefined
+
+              const res = await createStorybookJob({
+                imageFile: store.imageFile!,
+                theme: 'Custom' as Theme,
+                storyline: `Name: ${store.name}\nAge: ${store.age}\nStory: ${store.storyline}`,
+                email: store.email || '',
+                outputType: store.outputType as OutputType,
+                shippingAddress
+              })
+
+              store.reset()
+              router.push(`/order/${res.jobId}?tx=${transactionId}`)
+            } catch (err) {
+              console.error('Failed to create job:', err)
+              setPaymentProcessing(false)
+              setIsSubmitting(false)
+            }
+          },
+          onClose: () => {
+            setIsSubmitting(false)
+          }
+        }
+      )
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to initialize checkout'
+      console.error(message, err)
+      setCheckoutError(message)
+      setIsSubmitting(false)
+    }
   }
 
   if (isLoading) {
@@ -303,19 +325,6 @@ export default function CheckoutPage () {
     )
   }
 
-  const isAddressComplete = Boolean(
-    store.shippingName &&
-    store.shippingAddress1 &&
-    store.shippingCity &&
-    store.shippingRegion &&
-    store.shippingPostalCode &&
-    store.shippingCountry
-  )
-
-  // For digital books, show checkout immediately
-  // For hardcover, show checkout only after shipping is selected
-  const showPaddleCheckout = !isHardcover || (isHardcover && selectedShipping)
-
   return (
     <div className="py-8">
       <div className="mx-auto max-w-6xl">
@@ -330,7 +339,7 @@ export default function CheckoutPage () {
                 <ShippingForm
                   store={store}
                   onAddressComplete={fetchShippingCost}
-                  isSubmitting={paymentProcessing}
+                  isSubmitting={isSubmitting || paymentProcessing}
                 />
 
                 {/* Delivery Options */}
@@ -345,26 +354,18 @@ export default function CheckoutPage () {
               </>
             )}
 
-            {/* Paddle Inline Checkout */}
-            {showPaddleCheckout && (
+            {!isHardcover && (
               <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-                <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 mb-6">
+                <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 mb-3">
                   <CreditCard className="h-5 w-5 text-emerald-600" />
                   Payment
                 </h2>
-                <div
-                  id="paddle-checkout-container"
-                  className="min-h-[450px]"
-                />
-                {!checkoutReady && (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500" />
-                  </div>
-                )}
+                <p className="text-sm text-zinc-600">
+                  Click Place Order to open secure Paddle checkout.
+                </p>
               </div>
             )}
 
-            {/* Message for hardcover when shipping not selected */}
             {isHardcover && !selectedShipping && !shippingLoading && isAddressComplete && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-6 text-center">
                 <CreditCard className="h-8 w-8 text-zinc-300 mx-auto mb-2" />
@@ -377,9 +378,19 @@ export default function CheckoutPage () {
 
           {/* Right Column - Order Summary */}
           <div className="lg:col-span-1">
+            {checkoutError
+              ? (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {checkoutError}
+                </div>
+              )
+              : null}
             <OrderSummary
               store={store}
               selectedShipping={selectedShipping}
+              isSubmitting={isSubmitting}
+              canPlaceOrder={canPlaceOrder}
+              onPlaceOrder={handlePlaceOrder}
             />
           </div>
         </div>

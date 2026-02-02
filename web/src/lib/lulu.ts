@@ -96,10 +96,16 @@ async function getAccessToken(): Promise<string> {
   }
   
   const data = await response.json()
+  if (typeof data.access_token !== 'string' || !data.access_token) {
+    throw new Error('Lulu authentication failed: missing access token')
+  }
   cachedToken = data.access_token
   // expires_in is in seconds, convert to milliseconds
   tokenExpiry = Date.now() + (data.expires_in * 1000)
   
+  if (!cachedToken) {
+    throw new Error('Lulu authentication failed: empty access token')
+  }
   return cachedToken
 }
 

@@ -28,12 +28,19 @@ const formSchema = z.object({
   imageFile: z.instanceof(File, { message: 'Please upload a photo' }),
   name: z.string().trim().min(1, 'Name is required').max(60, 'Keep it under 60 characters'),
   age: z.coerce.number().int().min(1, 'Enter a valid age').max(120, 'Enter a valid age'),
+  email: z.string().trim().email('Enter a valid email'),
   storyline: z.string().trim().min(1, 'Storyline is required').max(180, 'Keep it under 180 characters'),
   outputType: z.enum(outputTypes, { message: 'Please select a book type' })
 })
 
 type FormInput = z.input<typeof formSchema>
 type FormOutput = z.output<typeof formSchema>
+type CreateJobResult = {
+  jobId: string
+  outputType: OutputType
+  redirected: boolean
+  transactionId?: string
+}
 
 function stitchPrompt (values: FormOutput) {
   // This is the text input your API receives
@@ -65,23 +72,26 @@ export function GeneratorCard ({ className }: { className?: string }) {
     defaultValues: {
       name: '',
       age: undefined,
+      email: '',
       storyline: '',
       outputType: undefined
     }
   })
   const storylineValue = form.watch('storyline')
 
-  const createJobMutation = useMutation({
+  const createJobMutation = useMutation<CreateJobResult, Error, FormInput>({
     mutationFn: async (values: FormInput) => {
       const parsed = formSchema.parse(values)
 
       // Store product info and navigate to checkout page
-      // Both digital and hardcover now go through checkout page with inline Paddle
+      // Both digital and hardcover now go through checkout page with Paddle overlay
+
       setProductInfo({
         imageFile: parsed.imageFile,
         imagePreviewUrl: imagePreviewUrl || '',
         name: parsed.name,
         age: parsed.age,
+        email: parsed.email,
         storyline: parsed.storyline,
         outputType: parsed.outputType as OutputType
       })
@@ -91,7 +101,7 @@ export function GeneratorCard ({ className }: { className?: string }) {
       })
 
       router.push('/checkout')
-      return { jobId: '', outputType: parsed.outputType, redirected: true }
+      return { jobId: '', outputType: parsed.outputType as OutputType, redirected: true }
     },
     onSuccess: (result) => {
       // Don't show success if redirected to checkout page
@@ -225,6 +235,25 @@ export function GeneratorCard ({ className }: { className?: string }) {
                 )
                 : null}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              disabled={createJobMutation.isPending}
+              {...form.register('email')}
+            />
+            {form.formState.errors.email?.message
+              ? (
+                <p className="text-sm text-red-600" role="alert">
+                  {form.formState.errors.email.message}
+                </p>
+              )
+              : null}
           </div>
 
           <div className="space-y-2">

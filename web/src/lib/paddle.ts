@@ -89,7 +89,6 @@ export function initializePaddle(callbacks?: PaddleCheckoutCallbacks) {
     window.Paddle.Initialize({ 
       token: clientToken,
       eventCallback: (event: PaddleEventData) => {
-        console.log('Paddle event:', event.name, event.data)
         const eventData = event?.data && typeof event.data === 'object'
           ? (event.data as Record<string, unknown>)
           : {}
@@ -101,6 +100,7 @@ export function initializePaddle(callbacks?: PaddleCheckoutCallbacks) {
         const transactionId = typeof event.data?.transaction_id === 'string'
           ? event.data.transaction_id
           : undefined
+        console.log('Paddle event:', event.name, event.data)
 
         if (event.name === 'checkout.loaded') {
           trackEvent('checkout_opened', { source: 'paddle' })
@@ -160,57 +160,4 @@ export function openPaddleCheckout(
 
 export function getPriceIdForOutputType(outputType: 'DIGI_BOOK' | 'LULU_BOOK'): string {
   return outputType === 'DIGI_BOOK' ? PADDLE_PRICES.DIGITAL : PADDLE_PRICES.HARDCOVER
-}
-
-export interface InlineCheckoutOptions {
-  frameTarget: string
-  items: Array<{
-    priceId: string
-    quantity: number
-  }>
-  customer?: {
-    email?: string
-    address?: {
-      countryCode?: string
-      postalCode?: string
-      region?: string
-      city?: string
-      line1?: string
-      line2?: string
-    }
-  }
-  customData?: Record<string, string>
-}
-
-export function openInlineCheckout(
-  options: InlineCheckoutOptions,
-  callbacks?: PaddleCheckoutCallbacks
-) {
-  if (typeof window === 'undefined' || !window.Paddle) {
-    console.error('Paddle not loaded')
-    return
-  }
-
-  // Store callbacks for event handling
-  if (callbacks) {
-    currentCallbacks = callbacks
-  }
-
-  if (!paddleInitialized) {
-    initializePaddle(callbacks)
-  }
-
-  window.Paddle.Checkout.open({
-    items: options.items,
-    customer: options.customer,
-    customData: options.customData,
-    settings: {
-      displayMode: 'inline',
-      variant: 'one-page',
-      theme: 'light',
-      frameTarget: options.frameTarget,
-      frameInitialHeight: 450,
-      frameStyle: 'width: 100%; min-width: 312px; background-color: transparent; border: none;'
-    }
-  })
 }

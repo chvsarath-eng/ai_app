@@ -1,17 +1,24 @@
 'use client'
 
 import { ShoppingBag, Lock, Book, Sparkles } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import type { CheckoutData } from '@/lib/checkout-store'
 import type { ShippingOption } from '@/app/checkout/page'
 
 interface OrderSummaryProps {
   store: CheckoutData
   selectedShipping: ShippingOption | null
+  isSubmitting: boolean
+  canPlaceOrder: boolean
+  onPlaceOrder: () => void
 }
 
 export function OrderSummary ({
   store,
-  selectedShipping
+  selectedShipping,
+  isSubmitting,
+  canPlaceOrder,
+  onPlaceOrder
 }: OrderSummaryProps) {
   const isHardcover = store.outputType === 'LULU_BOOK'
   const bookPrice = isHardcover ? store.bookPrice : 14.99
@@ -97,6 +104,47 @@ export function OrderSummary ({
             ${subtotal.toFixed(2)}
           </span>
         </div>
+
+        <Button
+          onClick={onPlaceOrder}
+          disabled={!canPlaceOrder || isSubmitting}
+          className="w-full h-12 text-base font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg shadow-emerald-500/25 disabled:opacity-50 disabled:shadow-none"
+        >
+          {isSubmitting ? (
+            <span className="flex items-center gap-2">
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                  fill="none"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+              Processing...
+            </span>
+          ) : (
+            <span className="flex items-center gap-2">
+              <Lock className="h-4 w-4" />
+              Place Order
+            </span>
+          )}
+        </Button>
+
+        {!canPlaceOrder && !isSubmitting && (
+          <p className="text-xs text-center text-zinc-500">
+            {isHardcover
+              ? (selectedShipping ? 'Complete your address to continue' : 'Select a delivery option to continue')
+              : 'Upload a photo to continue'}
+          </p>
+        )}
 
         {/* Security note */}
         <div className="flex items-center justify-center gap-2 pt-2 text-xs text-zinc-400">
