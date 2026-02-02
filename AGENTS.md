@@ -300,15 +300,21 @@ See `.cursor/rules/coding-standards.mdc` for details.
 - Google Analytics 4 (Measurement ID: G-Q12Z62SK1Q)
 - Cookie Consent Banner (GDPR compliant, react-cookie-consent + GA Consent Mode)
 - **Paddle Payment Integration:**
-  - Checkout overlay (sandbox mode)
-  - Tax calculation (tax-exclusive display)
+  - Checkout overlay with multi-page layout (sandbox mode)
+  - Tax calculation (internal tax mode - Paddle calculates automatically)
   - Shipping address collection (hardcover orders)
   - Server-side transaction creation with non-catalog shipping line items
   - Shipping costs from Lulu displayed as separate line item in Paddle checkout
+  - Quantity controls hidden (min/max set to 1)
+  - Custom product images in checkout
   - Webhook handling (`transaction.completed`, `transaction.payment_failed`)
   - Order confirmation emails from `team@img2x.com`
   - Invoice/receipt download via Paddle API
   - Analytics events (`checkout_opened`, `checkout_completed`, etc.)
+- **Checkout Page UI:**
+  - Clean header without redundant "Back to home" link
+  - Collapsible accordion for delivery options
+  - Progress steps indicator (Details → Shipping → Payment)
 
 ### 🔄 In Progress
 - Production Paddle setup (switch from sandbox to live)
@@ -361,6 +367,12 @@ See `web/SEO_CHECKLIST.md` for detailed SEO roadmap.
 
 14. **Server-Side Transaction for Shipping:** Shipping costs from Lulu are dynamic and can't be pre-configured in Paddle's catalog. Solution: Create transactions server-side via Paddle API (`POST /transactions`) with both the catalog product price AND a non-catalog shipping line item. Pass the `transactionId` to `Paddle.Checkout.open()` instead of `items`. This displays shipping as a separate billable line in Paddle checkout.
 
+15. **Paddle Tax Mode:** Initially set to `external` which meant no tax was calculated. Changed to `internal` via Paddle API (`PATCH /prices/{id}`) so Paddle automatically calculates tax based on customer location. For digital orders, don't pre-create customer - let Paddle collect country at checkout.
+
+16. **Paddle Checkout Variant:** Use `variant: 'multi-page'` for cleaner UX - separates customer details and payment into distinct steps instead of cramming everything on one page.
+
+17. **Paddle Quantity Controls:** Set `quantity.minimum: 1` and `quantity.maximum: 1` on prices via Paddle API to hide the +/- quantity stepper in checkout.
+
 ---
 
 ## Useful Commands
@@ -394,4 +406,4 @@ gcloud run services describe img2x-web --region us-central1
 
 ---
 
-*Last updated: February 2, 2026 (Server-side transaction creation for shipping line items)*
+*Last updated: February 2, 2026 (Paddle tax mode fix, multi-page checkout, collapsible delivery options)*
