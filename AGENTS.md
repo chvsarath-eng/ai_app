@@ -303,7 +303,8 @@ See `.cursor/rules/coding-standards.mdc` for details.
   - Checkout overlay (sandbox mode)
   - Tax calculation (tax-exclusive display)
   - Shipping address collection (hardcover orders)
-  - Email prefilled for checkout; Paddle collects address in overlay
+  - Server-side transaction creation with non-catalog shipping line items
+  - Shipping costs from Lulu displayed as separate line item in Paddle checkout
   - Webhook handling (`transaction.completed`, `transaction.payment_failed`)
   - Order confirmation emails from `team@img2x.com`
   - Invoice/receipt download via Paddle API
@@ -358,6 +359,8 @@ See `web/SEO_CHECKLIST.md` for detailed SEO roadmap.
 
 13. **Paddle Address Prefill Validation:** Prefilling `customer.address` can trigger `validation.no_validation_set` errors. Prefill only the email and let Paddle collect address details in the overlay.
 
+14. **Server-Side Transaction for Shipping:** Shipping costs from Lulu are dynamic and can't be pre-configured in Paddle's catalog. Solution: Create transactions server-side via Paddle API (`POST /transactions`) with both the catalog product price AND a non-catalog shipping line item. Pass the `transactionId` to `Paddle.Checkout.open()` instead of `items`. This displays shipping as a separate billable line in Paddle checkout.
+
 ---
 
 ## Useful Commands
@@ -391,4 +394,4 @@ gcloud run services describe img2x-web --region us-central1
 
 ---
 
-*Last updated: February 1, 2026 (Paddle webhook customer email fix)*
+*Last updated: February 2, 2026 (Server-side transaction creation for shipping line items)*

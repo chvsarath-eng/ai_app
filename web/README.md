@@ -185,14 +185,17 @@ gcloud builds submit --config=web/cloudbuild.yaml --substitutions=COMMIT_SHA=$(g
 
 1. User uploads photo + enters details (name, theme, email)
 2. User selects book type (Digital $14.99 / Hardcover $39.99)
-3. For hardcover: user enters shipping address
-4. Click "Create My Book" → Paddle checkout overlay opens (email is prefilled)
-5. User completes payment (Paddle handles tax)
-6. On success → `/api/storybook/generate` creates job in story service
-7. Redirect to order confirmation page (with transaction ID)
-8. Paddle webhook (`transaction.completed`) triggers order confirmation email
-9. Story service generates book (async)
-10. Book-ready email sent with download link or shipping info
+3. For hardcover: user enters shipping address, selects shipping option (Lulu API calculates costs)
+4. Click "Create My Book" → `/api/checkout` creates Paddle transaction server-side
+   - For hardcover: transaction includes catalog product + non-catalog shipping line item
+   - For digital: transaction includes only catalog product
+5. Paddle checkout overlay opens with `transactionId` (shows product + shipping as separate lines)
+6. User completes payment (Paddle handles tax calculation)
+7. On success → `/api/storybook/generate` creates job in story service
+8. Redirect to order confirmation page (with transaction ID)
+9. Paddle webhook (`transaction.completed`) triggers order confirmation email
+10. Story service generates book (async)
+11. Book-ready email sent with download link or shipping info
 
 ## Troubleshooting
 
@@ -204,9 +207,13 @@ only prefill the customer email and allow Paddle to collect address details in t
 
 ### Shipping charges in Paddle
 
-Shipping amounts from Lulu are metadata unless you bill for them in Paddle. To charge shipping,
-either add a shipping price item to checkout `items`, or create a transaction with a non-catalog
-line item for shipping and pass that transaction to checkout.
+Shipping costs from Lulu are now billed through Paddle using server-side transactions. The 
+`/api/checkout` route creates a Paddle transaction via `POST /transactions` with:
+- Catalog item: the product price (e.g., `pri_01kgbfsgjxhsgab6kp453mqh0n` for hardcover)
+- Non-catalog item: shipping with dynamic price from Lulu
+
+The frontend receives the `transactionId` and passes it to `Paddle.Checkout.open()` instead of 
+passing `items` directly. This displays shipping as a separate billable line in Paddle checkout.
 
 ### Build Errors
 

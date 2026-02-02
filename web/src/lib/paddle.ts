@@ -27,11 +27,15 @@ declare global {
   }
 }
 
+// Checkout can be opened with either items (price IDs) or a transactionId (server-created transaction)
 export interface PaddleCheckoutOptions {
-  items: Array<{
+  // Option 1: Pass items directly (Paddle creates transaction automatically)
+  items?: Array<{
     priceId: string
     quantity: number
   }>
+  // Option 2: Pass a server-created transaction ID (for custom items like shipping)
+  transactionId?: string
   customer?: {
     email?: string
     address?: {
@@ -54,6 +58,7 @@ export interface PaddleCheckoutOptions {
     frameTarget?: string
     frameInitialHeight?: number
     frameStyle?: string
+    allowLogout?: boolean
   }
 }
 

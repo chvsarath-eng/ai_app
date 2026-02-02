@@ -228,39 +228,33 @@ export default function CheckoutPage () {
       })
 
       const data = await response.json()
-      if (!response.ok || !data?.checkout?.priceId) {
+      if (!response.ok || !data?.checkout?.transactionId) {
         const message = data?.error || 'Failed to initialize checkout'
         throw new Error(message)
       }
 
-      const { priceId, customData, email } = data.checkout
+      const { transactionId } = data.checkout
 
       trackEvent('checkout_opened', {
         output_type: store.outputType,
-        price_id: priceId,
+        transaction_id: transactionId,
         shipping_level: selectedShipping?.level
       })
 
-      // Paddle validation can reject prefilled addresses when no validation set exists.
-      // We only prefill email and let Paddle collect address during checkout.
-      const customerAddress = undefined
-
+      // Open Paddle checkout with the server-created transaction
+      // The transaction already includes: items (product + shipping), customer email, address for tax
       openPaddleCheckout(
         {
-          items: [{ priceId, quantity: 1 }],
-          customer: {
-            email,
-            address: customerAddress
-          },
-          customData,
+          transactionId,
           settings: {
             displayMode: 'overlay',
             theme: 'light',
-            variant: 'one-page'
+            variant: 'one-page',
+            allowLogout: false
           }
         },
         {
-          onSuccess: async (transactionId) => {
+          onSuccess: async (completedTransactionId) => {
             setPaymentProcessing(true)
 
             try {
@@ -286,7 +280,7 @@ export default function CheckoutPage () {
               })
 
               store.reset()
-              router.push(`/order/${res.jobId}?tx=${transactionId}`)
+              router.push(`/order/${res.jobId}?tx=${completedTransactionId}`)
             } catch (err) {
               console.error('Failed to create job:', err)
               setPaymentProcessing(false)
