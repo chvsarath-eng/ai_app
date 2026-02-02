@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { CreditCard, ChevronLeft, ShieldCheck, Truck, Clock } from 'lucide-react'
+import { CreditCard, ShieldCheck, Truck, Clock } from 'lucide-react'
 import { useCheckoutStore } from '@/lib/checkout-store'
 import { initializePaddle, openPaddleCheckout } from '@/lib/paddle'
 import { createStorybookJob } from '@/lib/storybookApi'
@@ -325,23 +324,10 @@ export default function CheckoutPage () {
 
   return (
     <div className="py-6 sm:py-8 lg:py-10">
-      {/* Back link and page header */}
+      {/* Page header - Clean and minimal */}
       <div className="mb-6 sm:mb-8">
-        <Link 
-          href="/" 
-          className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900 transition-colors mb-4"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Back to home
-        </Link>
-        
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900">Checkout</h1>
-            <p className="text-zinc-500 mt-1">
-              Complete your order for a personalized storybook
-            </p>
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900">Checkout</h1>
           
           {/* Trust badges - desktop */}
           <div className="hidden sm:flex items-center gap-4 text-xs text-zinc-500">
