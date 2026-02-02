@@ -4,12 +4,14 @@ import { Button } from '@/components/ui/button'
 
 export function GenerateButton ({
   isLoading,
-  hasPhoto
+  hasPhoto,
+  disabled = false
 }: {
   isLoading: boolean
   hasPhoto: boolean
+  disabled?: boolean
 }) {
-  const isDisabled = !hasPhoto || isLoading
+  const isDisabled = !hasPhoto || isLoading || disabled
   return (
     <Button
       type="submit"

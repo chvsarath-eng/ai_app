@@ -12,6 +12,24 @@ import { createStorybookJob } from '@/lib/storybookApi'
 import { initializePaddle, openPaddleCheckout, getPriceIdForOutputType } from '@/lib/paddle'
 import { outputTypes } from '@/types/storybook'
 import type { Theme, OutputType } from '@/types/storybook'
+
+// Shipping option from Lulu API
+interface ShippingOption {
+  level: string
+  description: string
+  shipping_cost: number
+  book_price: number
+  total: number
+  currency: string
+}
+
+interface ShippingCostResponse {
+  valid: boolean
+  book_price: number
+  shipping_options: ShippingOption[]
+  currency: string
+  errors?: string[]
+}
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -144,6 +162,12 @@ export function GeneratorCard ({ className }: { className?: string }) {
     outputType: OutputType
   } | null>(null)
 
+  // Shipping cost state for hardcover orders
+  const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([])
+  const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(null)
+  const [shippingLoading, setShippingLoading] = useState(false)
+  const [shippingError, setShippingError] = useState<string | null>(null)
+
   // Initialize Paddle on mount
   useEffect(() => {
     initializePaddle()
@@ -172,6 +196,74 @@ export function GeneratorCard ({ className }: { className?: string }) {
   const confirmEmailValue = form.watch('confirmEmail')
   const outputTypeValue = form.watch('outputType')
   const requiresShipping = outputTypeValue === 'LULU_BOOK'
+
+  // Watch shipping address fields for auto-fetch
+  const shippingName = form.watch('shippingName')
+  const shippingAddress1 = form.watch('shippingAddress1')
+  const shippingCity = form.watch('shippingCity')
+  const shippingRegion = form.watch('shippingRegion')
+  const shippingPostalCode = form.watch('shippingPostalCode')
+  const shippingCountry = form.watch('shippingCountry')
+
+  // Fetch shipping cost when address is complete
+  const fetchShippingCost = async () => {
+    if (!shippingName || !shippingAddress1 || !shippingCity || !shippingRegion || !shippingPostalCode || !shippingCountry) {
+      return
+    }
+
+    setShippingLoading(true)
+    setShippingError(null)
+    setShippingOptions([])
+    setSelectedShipping(null)
+
+    try {
+      const response = await fetch('/api/lulu/shipping-cost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shipping_address: {
+            name: shippingName,
+            street1: shippingAddress1,
+            street2: form.getValues('shippingAddress2') || '',
+            city: shippingCity,
+            state_code: shippingRegion,
+            postcode: shippingPostalCode,
+            country_code: shippingCountry
+          },
+          quantity: 1
+        })
+      })
+
+      const data: ShippingCostResponse = await response.json()
+
+      if (!data.valid) {
+        setShippingError(data.errors?.join(', ') || 'Invalid shipping address')
+        return
+      }
+
+      setShippingOptions(data.shipping_options)
+      // Auto-select first (cheapest) option
+      if (data.shipping_options.length > 0) {
+        setSelectedShipping(data.shipping_options[0])
+      }
+    } catch (err) {
+      console.error('Failed to fetch shipping cost:', err)
+      setShippingError('Failed to calculate shipping. Please try again.')
+    } finally {
+      setShippingLoading(false)
+    }
+  }
+
+  // Fetch shipping cost when all address fields are filled
+  useEffect(() => {
+    if (requiresShipping && shippingName && shippingAddress1 && shippingCity && shippingRegion && shippingPostalCode && shippingCountry) {
+      // Debounce the fetch
+      const timer = setTimeout(() => {
+        fetchShippingCost()
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [requiresShipping, shippingName, shippingAddress1, shippingCity, shippingRegion, shippingPostalCode, shippingCountry])
 
   const createJobMutation = useMutation({
     mutationFn: async (values: FormInput) => {
@@ -209,6 +301,12 @@ export function GeneratorCard ({ className }: { className?: string }) {
         customData.shippingRegion = shippingAddress.region
         customData.shippingPostalCode = shippingAddress.postalCode
         customData.shippingCountry = shippingAddress.countryCode
+        // Include selected shipping option for backend processing
+        if (selectedShipping) {
+          customData.shippingLevel = selectedShipping.level
+          customData.shippingCost = selectedShipping.shipping_cost.toString()
+          customData.orderTotal = selectedShipping.total.toString()
+        }
       }
 
       return new Promise<{ jobId: string, outputType: string, transactionId?: string }>((resolve, reject) => {
@@ -667,6 +765,81 @@ export function GeneratorCard ({ className }: { className?: string }) {
                       : null}
                   </div>
                 </div>
+
+                {/* Shipping Options */}
+                {shippingLoading && (
+                  <div className="flex items-center gap-2 text-sm text-zinc-500">
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Calculating shipping cost...
+                  </div>
+                )}
+
+                {shippingError && (
+                  <p className="text-sm text-red-600" role="alert">
+                    {shippingError}
+                  </p>
+                )}
+
+                {shippingOptions.length > 0 && (
+                  <div className="space-y-3">
+                    <Label>Select shipping method</Label>
+                    <div className="space-y-2">
+                      {shippingOptions.map((option) => (
+                        <label
+                          key={option.level}
+                          className={cn(
+                            'flex cursor-pointer items-center justify-between rounded-lg border p-3 transition-colors',
+                            selectedShipping?.level === option.level
+                              ? 'border-emerald-500 bg-emerald-50'
+                              : 'border-zinc-200 hover:border-zinc-300'
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="radio"
+                              name="shippingOption"
+                              value={option.level}
+                              checked={selectedShipping?.level === option.level}
+                              onChange={() => setSelectedShipping(option)}
+                              className="h-4 w-4 text-emerald-600"
+                            />
+                            <div>
+                              <p className="text-sm font-medium text-zinc-900">{option.description}</p>
+                            </div>
+                          </div>
+                          <p className="text-sm font-semibold text-zinc-900">
+                            +${option.shipping_cost.toFixed(2)}
+                          </p>
+                        </label>
+                      ))}
+                    </div>
+
+                    {/* Order Summary */}
+                    {selectedShipping && (
+                      <div className="mt-4 rounded-lg bg-zinc-100 p-4">
+                        <h5 className="text-sm font-semibold text-zinc-900 mb-2">Order Summary</h5>
+                        <div className="space-y-1 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-zinc-600">Hardcover Book</span>
+                            <span className="text-zinc-900">${selectedShipping.book_price.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-zinc-600">Shipping</span>
+                            <span className="text-zinc-900">${selectedShipping.shipping_cost.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between border-t border-zinc-200 pt-2 mt-2">
+                            <span className="font-semibold text-zinc-900">Total</span>
+                            <span className="font-bold text-emerald-600">${selectedShipping.total.toFixed(2)}</span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-zinc-500 mt-2">Tax calculated at checkout</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               )
             : null}
@@ -680,9 +853,15 @@ export function GeneratorCard ({ className }: { className?: string }) {
             : null}
 
           <GenerateButton
-            isLoading={createJobMutation.isPending}
+            isLoading={createJobMutation.isPending || shippingLoading}
             hasPhoto={Boolean(form.watch('imageFile'))}
+            disabled={requiresShipping && !selectedShipping}
           />
+          {requiresShipping && !selectedShipping && shippingOptions.length === 0 && !shippingLoading && shippingName && shippingAddress1 && shippingCity && (
+            <p className="text-xs text-zinc-500 text-center">
+              Complete shipping address to see delivery options
+            </p>
+          )}
         </form>
       </CardContent>
       </Card>
