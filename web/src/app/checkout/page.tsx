@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { CreditCard } from 'lucide-react'
+import Link from 'next/link'
+import Image from 'next/image'
+import { CreditCard, ChevronLeft, ShieldCheck, Truck, Clock } from 'lucide-react'
 import { useCheckoutStore } from '@/lib/checkout-store'
 import { initializePaddle, openPaddleCheckout } from '@/lib/paddle'
 import { createStorybookJob } from '@/lib/storybookApi'
@@ -302,29 +304,120 @@ export default function CheckoutPage () {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-zinc-500">Loading checkout...</div>
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-2 border-emerald-500 border-t-transparent mx-auto mb-4" />
+          <p className="text-zinc-500">Loading checkout...</p>
+        </div>
       </div>
     )
   }
 
   if (paymentProcessing) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4" />
-          <p className="text-zinc-600">Processing your order...</p>
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto px-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-2 border-emerald-500 border-t-transparent mx-auto mb-6" />
+          <h2 className="text-xl font-semibold text-zinc-900 mb-2">Processing your order...</h2>
+          <p className="text-zinc-600">Please wait while we set up your personalized storybook.</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="py-8">
-      <div className="mx-auto max-w-6xl">
-        <h1 className="mb-8 text-2xl font-bold text-zinc-900">Checkout</h1>
+    <div className="py-6 sm:py-8 lg:py-10">
+      {/* Back link and page header */}
+      <div className="mb-6 sm:mb-8">
+        <Link 
+          href="/" 
+          className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900 transition-colors mb-4"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Back to home
+        </Link>
+        
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900">Checkout</h1>
+            <p className="text-zinc-500 mt-1">
+              Complete your order for a personalized storybook
+            </p>
+          </div>
+          
+          {/* Trust badges - desktop */}
+          <div className="hidden sm:flex items-center gap-4 text-xs text-zinc-500">
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" />
+              <span>Secure Payment</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Truck className="h-4 w-4 text-emerald-600" />
+              <span>Fast Delivery</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
-        <div className="grid gap-8 lg:grid-cols-3">
+      {/* Progress steps */}
+      <div className="mb-8">
+        <div className="flex items-center justify-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-xs font-semibold text-white">
+              1
+            </div>
+            <span className="hidden sm:inline text-sm font-medium text-zinc-900">Details</span>
+          </div>
+          <div className="h-px w-8 sm:w-16 bg-emerald-500" />
+          <div className="flex items-center gap-2">
+            <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
+              isHardcover ? 'bg-emerald-500 text-white' : 'bg-zinc-200 text-zinc-500'
+            }`}>
+              2
+            </div>
+            <span className={`hidden sm:inline text-sm font-medium ${
+              isHardcover ? 'text-zinc-900' : 'text-zinc-400'
+            }`}>Shipping</span>
+          </div>
+          <div className={`h-px w-8 sm:w-16 ${canPlaceOrder ? 'bg-emerald-500' : 'bg-zinc-200'}`} />
+          <div className="flex items-center gap-2">
+            <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
+              canPlaceOrder ? 'bg-emerald-500 text-white' : 'bg-zinc-200 text-zinc-500'
+            }`}>
+              3
+            </div>
+            <span className={`hidden sm:inline text-sm font-medium ${
+              canPlaceOrder ? 'text-zinc-900' : 'text-zinc-400'
+            }`}>Payment</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Trust badges - mobile */}
+      <div className="flex sm:hidden items-center justify-center gap-4 text-xs text-zinc-500 mb-6">
+        <div className="flex items-center gap-1.5">
+          <ShieldCheck className="h-4 w-4 text-emerald-600" />
+          <span>Secure</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Truck className="h-4 w-4 text-emerald-600" />
+          <span>Fast Delivery</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Clock className="h-4 w-4 text-emerald-600" />
+          <span>24hr Support</span>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-6xl">
+        {/* Error message */}
+        {checkoutError && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {checkoutError}
+          </div>
+        )}
+
+        <div className="grid gap-6 lg:gap-8 lg:grid-cols-3">
           {/* Left Column - Forms */}
           <div className="lg:col-span-2 space-y-6">
             {/* Shipping Address - Only for hardcover */}
@@ -348,22 +441,47 @@ export default function CheckoutPage () {
               </>
             )}
 
+            {/* Digital book - simplified checkout */}
             {!isHardcover && (
               <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-                <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 mb-3">
+                <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 mb-4">
                   <CreditCard className="h-5 w-5 text-emerald-600" />
-                  Payment
+                  Ready to Order
                 </h2>
-                <p className="text-sm text-zinc-600">
-                  Click Place Order to open secure Paddle checkout.
-                </p>
+                <div className="space-y-4">
+                  <p className="text-sm text-zinc-600">
+                    Your digital storybook will be delivered instantly to your email after purchase.
+                  </p>
+                  
+                  {/* Email display */}
+                  <div className="flex items-center gap-3 rounded-lg bg-zinc-50 px-4 py-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+                      <svg className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs text-zinc-500">Delivery email</p>
+                      <p className="text-sm font-medium text-zinc-900">{store.email}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 rounded-lg border border-emerald-100 bg-emerald-50/50 px-4 py-3">
+                    <ShieldCheck className="h-5 w-5 text-emerald-600 mt-0.5 shrink-0" />
+                    <div className="text-sm text-emerald-800">
+                      <p className="font-medium">Secure Checkout</p>
+                      <p className="text-emerald-700 mt-0.5">Your payment is processed securely by Paddle. Tax is calculated automatically.</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
+            {/* Waiting for shipping selection message */}
             {isHardcover && !selectedShipping && !shippingLoading && isAddressComplete && (
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-6 text-center">
-                <CreditCard className="h-8 w-8 text-zinc-300 mx-auto mb-2" />
-                <p className="text-sm text-zinc-500">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
+                <Truck className="h-8 w-8 text-amber-500 mx-auto mb-2" />
+                <p className="text-sm font-medium text-amber-800">
                   Select a delivery option above to proceed to payment
                 </p>
               </div>
@@ -372,13 +490,6 @@ export default function CheckoutPage () {
 
           {/* Right Column - Order Summary */}
           <div className="lg:col-span-1">
-            {checkoutError
-              ? (
-                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {checkoutError}
-                </div>
-              )
-              : null}
             <OrderSummary
               store={store}
               selectedShipping={selectedShipping}
@@ -386,6 +497,28 @@ export default function CheckoutPage () {
               canPlaceOrder={canPlaceOrder}
               onPlaceOrder={handlePlaceOrder}
             />
+          </div>
+        </div>
+
+        {/* Bottom trust indicators */}
+        <div className="mt-8 pt-6 border-t border-zinc-200">
+          <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-zinc-400">
+            <div className="flex items-center gap-2">
+              <Image src="/brand/paddle-badge.svg" alt="Paddle" width={60} height={20} className="opacity-60" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+              <span>Secure payments by Paddle</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+              </svg>
+              <span>Money-back guarantee</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+              </svg>
+              <span>SSL encrypted</span>
+            </div>
           </div>
         </div>
       </div>
