@@ -33,16 +33,87 @@ interface PaddleTransactionRequest {
   items: PaddleTransactionItem[]
   currency_code: string
   custom_data?: Record<string, string>
-  customer?: {
-    email: string
+  customer_id?: string
+  address_id?: string
+}
+
+// Create or get a Paddle customer by email
+async function getOrCreateCustomer(email: string): Promise<string> {
+  // First, try to find existing customer by email
+  const searchResponse = await fetch(
+    `${PADDLE_API_BASE}/customers?email=${encodeURIComponent(email)}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${PADDLE_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    }
+  )
+
+  if (searchResponse.ok) {
+    const searchData = await searchResponse.json()
+    if (searchData.data && searchData.data.length > 0) {
+      return searchData.data[0].id
+    }
   }
-  address?: {
-    country_code: string
-    postal_code?: string
+
+  // Customer doesn't exist, create one
+  const createResponse = await fetch(`${PADDLE_API_BASE}/customers`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${PADDLE_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ email })
+  })
+
+  if (!createResponse.ok) {
+    const errorData = await createResponse.json()
+    console.error('Failed to create customer:', errorData)
+    throw new Error('Failed to create customer')
+  }
+
+  const createData = await createResponse.json()
+  return createData.data.id
+}
+
+// Create an address for a customer
+async function createAddress(
+  customerId: string,
+  address: {
+    countryCode: string
+    postalCode?: string
     region?: string
     city?: string
-    first_line?: string
+    firstLine?: string
   }
+): Promise<string> {
+  const addressPayload: Record<string, string> = {
+    country_code: address.countryCode
+  }
+
+  if (address.postalCode) addressPayload.postal_code = address.postalCode
+  if (address.region) addressPayload.region = address.region
+  if (address.city) addressPayload.city = address.city
+  if (address.firstLine) addressPayload.first_line = address.firstLine
+
+  const response = await fetch(`${PADDLE_API_BASE}/customers/${customerId}/addresses`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${PADDLE_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(addressPayload)
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json()
+    console.error('Failed to create address:', errorData)
+    throw new Error('Failed to create address')
+  }
+
+  const data = await response.json()
+  return data.data.id
 }
 
 export async function POST(request: NextRequest) {
@@ -129,25 +200,42 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Create customer and address in Paddle for tax calculation
+    let customerId: string | undefined
+    let addressId: string | undefined
+
+    try {
+      // Create or get customer
+      customerId = await getOrCreateCustomer(email)
+
+      // Create address for tax calculation (hardcover has shipping address, digital needs at least country)
+      if (isHardcover && formData?.shippingCountry) {
+        addressId = await createAddress(customerId, {
+          countryCode: formData.shippingCountry,
+          postalCode: formData.shippingPostalCode,
+          region: formData.shippingRegion,
+          city: formData.shippingCity,
+          firstLine: formData.shippingAddress1
+        })
+      }
+    } catch (err) {
+      console.error('Error creating customer/address:', err)
+      // Continue without customer/address - Paddle will collect at checkout
+    }
+
     // Build the transaction request
     const transactionRequest: PaddleTransactionRequest = {
       items,
       currency_code: 'USD',
-      custom_data: customData,
-      customer: {
-        email
-      }
+      custom_data: customData
     }
 
-    // Add address for tax calculation (hardcover orders have shipping address)
-    if (isHardcover && formData?.shippingCountry) {
-      transactionRequest.address = {
-        country_code: formData.shippingCountry,
-        postal_code: formData.shippingPostalCode || undefined,
-        region: formData.shippingRegion || undefined,
-        city: formData.shippingCity || undefined,
-        first_line: formData.shippingAddress1 || undefined
-      }
+    // Add customer and address IDs if we have them
+    if (customerId) {
+      transactionRequest.customer_id = customerId
+    }
+    if (addressId) {
+      transactionRequest.address_id = addressId
     }
 
     // Create transaction via Paddle API
