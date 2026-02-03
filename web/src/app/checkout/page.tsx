@@ -48,6 +48,11 @@ export default function CheckoutPage () {
 
     // Small delay for hydration
     const timer = setTimeout(() => {
+      // Don't redirect if payment is being processed
+      if (paymentProcessing) {
+        setIsLoading(false)
+        return
+      }
       if (!store.name || !store.outputType || !store.email) {
         router.push('/')
       } else {
@@ -56,7 +61,7 @@ export default function CheckoutPage () {
     }, 100)
 
     return () => clearTimeout(timer)
-  }, [store.name, store.outputType, router])
+  }, [store.name, store.outputType, router, paymentProcessing])
 
   // Fetch shipping options when address is complete
   const fetchShippingCost = useCallback(async () => {
