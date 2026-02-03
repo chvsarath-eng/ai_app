@@ -26,20 +26,20 @@ export function OrderSummary ({
   const subtotal = bookPrice + shippingCost
 
   return (
-    <div className="sticky top-24 rounded-2xl border border-zinc-200 bg-white shadow-lg overflow-hidden">
+    <div className="lg:sticky lg:top-24 rounded-2xl border border-zinc-200 bg-white shadow-lg overflow-hidden">
       {/* Header with gradient */}
-      <div className="bg-gradient-to-r from-zinc-50 to-zinc-100 border-b border-zinc-200 px-5 py-4 sm:px-6">
+      <div className="bg-gradient-to-r from-zinc-50 to-zinc-100 border-b border-zinc-200 px-4 py-3 sm:px-5 sm:py-4">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900">
           <ShoppingBag className="h-5 w-5 text-emerald-600" />
           Order Summary
         </h2>
       </div>
 
-      <div className="p-5 sm:p-6 space-y-5">
+      <div className="p-4 sm:p-5 lg:p-6 space-y-4 sm:space-y-5">
         {/* Product Card */}
         <div className="flex gap-4 items-start">
           {/* Book preview image */}
-          <div className="relative h-20 w-20 shrink-0 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100 flex items-center justify-center overflow-hidden shadow-sm ring-1 ring-zinc-200/50">
+          <div className="relative h-16 w-16 sm:h-20 sm:w-20 shrink-0 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100 flex items-center justify-center overflow-hidden shadow-sm ring-1 ring-zinc-200/50">
             {store.imagePreviewUrl ? (
               <img
                 src={store.imagePreviewUrl}
@@ -126,7 +126,7 @@ export function OrderSummary ({
         <div className="flex justify-between items-baseline">
           <span className="text-base font-semibold text-zinc-900">Subtotal</span>
           <div className="text-right">
-            <span className="text-2xl font-bold text-emerald-600">
+            <span className="text-xl sm:text-2xl font-bold text-emerald-600">
               ${subtotal.toFixed(2)}
             </span>
             <p className="text-xs text-zinc-400 mt-0.5">+ tax</p>
@@ -137,7 +137,7 @@ export function OrderSummary ({
         <Button
           onClick={onPlaceOrder}
           disabled={!canPlaceOrder || isSubmitting}
-          className="w-full h-12 text-base font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg shadow-emerald-500/25 disabled:opacity-50 disabled:shadow-none transition-all duration-200"
+          className="h-12 w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm transition hover:shadow-md hover:brightness-105 disabled:opacity-50 disabled:shadow-none"
         >
           {isSubmitting ? (
             <span className="flex items-center gap-2">

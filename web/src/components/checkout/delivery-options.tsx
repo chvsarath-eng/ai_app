@@ -56,9 +56,9 @@ export function DeliveryOptions ({
           isDisabled && 'cursor-not-allowed'
         )}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className={cn(
-            'flex h-8 w-8 items-center justify-center rounded-full',
+            'flex h-8 w-8 items-center justify-center rounded-full shrink-0',
             hasSelection ? 'bg-emerald-100' : 'bg-zinc-100'
           )}>
             {hasSelection ? (
@@ -67,23 +67,23 @@ export function DeliveryOptions ({
               <Truck className={cn('h-4 w-4', isDisabled ? 'text-zinc-300' : 'text-zinc-500')} />
             )}
           </div>
-          <div>
+          <div className="min-w-0">
             <h2 className={cn(
-              'font-semibold',
+              'font-semibold text-sm sm:text-base',
               isDisabled ? 'text-zinc-400' : 'text-zinc-900'
             )}>
               Delivery Options
             </h2>
             {hasSelection && selectedShipping ? (
-              <p className="text-sm text-emerald-600 mt-0.5">
+              <p className="text-xs sm:text-sm text-emerald-600 mt-0.5 truncate">
                 {selectedShipping.description} · ${selectedShipping.shipping_cost.toFixed(2)}
               </p>
             ) : isDisabled ? (
-              <p className="text-sm text-zinc-400 mt-0.5">
+              <p className="text-xs sm:text-sm text-zinc-400 mt-0.5">
                 Complete shipping address first
               </p>
             ) : shippingLoading ? (
-              <p className="text-sm text-zinc-500 mt-0.5">
+              <p className="text-xs sm:text-sm text-zinc-500 mt-0.5">
                 Calculating options...
               </p>
             ) : null}
@@ -155,26 +155,26 @@ export function DeliveryOptions ({
                       : 'border-zinc-200 hover:border-zinc-300 bg-white'
                   )}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <input
                       type="radio"
                       name="shippingOption"
                       value={option.level}
                       checked={selectedShipping?.level === option.level}
                       onChange={() => handleSelectShipping(option)}
-                      className="h-4 w-4 text-emerald-600 border-zinc-300 focus:ring-emerald-500"
+                      className="h-4 w-4 text-emerald-600 border-zinc-300 focus:ring-emerald-500 shrink-0"
                     />
-                    <div>
-                      <p className="font-medium text-zinc-900 text-sm sm:text-base">{option.description}</p>
+                    <div className="min-w-0">
+                      <p className="font-medium text-zinc-900 text-sm sm:text-base break-words">{option.description}</p>
                       {option.estimatedDelivery && (
                         <p className="flex items-center gap-1 text-xs sm:text-sm text-zinc-500 mt-0.5">
-                          <Calendar className="h-3 w-3" />
-                          {option.estimatedDelivery}
+                          <Calendar className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{option.estimatedDelivery}</span>
                         </p>
                       )}
                     </div>
                   </div>
-                  <p className="text-sm sm:text-base font-semibold text-zinc-900">
+                  <p className="text-sm sm:text-base font-semibold text-zinc-900 shrink-0 ml-2">
                     ${option.shipping_cost.toFixed(2)}
                   </p>
                 </label>

@@ -312,9 +312,11 @@ See `.cursor/rules/coding-standards.mdc` for details.
   - Invoice/receipt download via Paddle API
   - Analytics events (`checkout_opened`, `checkout_completed`, etc.)
 - **Checkout Page UI:**
-  - Clean header without redundant "Back to home" link
+  - Clean, centered header with animated gradient title (ultraGlowText)
+  - Responsive design for mobile, tablet, and desktop
   - Collapsible accordion for delivery options
-  - Progress steps indicator (Details → Shipping → Payment)
+  - Violet-fuchsia gradient theme matching homepage branding
+  - Subtle button styling with soft shadows
 
 ### 🔄 In Progress
 - Production Paddle setup (switch from sandbox to live)
@@ -373,6 +375,10 @@ See `web/SEO_CHECKLIST.md` for detailed SEO roadmap.
 
 17. **Paddle Quantity Controls:** Set `quantity.minimum: 1` and `quantity.maximum: 1` on prices via Paddle API to hide the +/- quantity stepper in checkout.
 
+18. **Checkout Page Styling:** Use consistent violet-fuchsia gradient (from-violet-500 to-fuchsia-500) for buttons and accents. The checkout title uses `ultraGlowText` class for animated gradient effect matching homepage. Removed progress step indicators for cleaner look.
+
+19. **Responsive Checkout:** Added responsive padding (`px-4 sm:px-6`), conditional sticky sidebar (`lg:sticky lg:top-24`), and stacking grids for mobile (`grid-cols-1 sm:grid-cols-3`).
+
 ---
 
 ## Useful Commands
@@ -406,4 +412,4 @@ gcloud run services describe img2x-web --region us-central1
 
 ---
 
-*Last updated: February 2, 2026 (Paddle tax mode fix, multi-page checkout, collapsible delivery options)*
+*Last updated: February 3, 2026 (Responsive checkout, centered title with gradient styling, violet-fuchsia theme)*

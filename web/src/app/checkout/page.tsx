@@ -324,55 +324,21 @@ export default function CheckoutPage () {
 
   return (
     <div className="py-6 sm:py-8 lg:py-10">
-      {/* Page header - Clean and minimal */}
-      <div className="mb-6 sm:mb-8">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900">Checkout</h1>
-          
-          {/* Trust badges - desktop */}
-          <div className="hidden sm:flex items-center gap-4 text-xs text-zinc-500">
-            <div className="flex items-center gap-1.5">
-              <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              <span>Secure Payment</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Truck className="h-4 w-4 text-emerald-600" />
-              <span>Fast Delivery</span>
-            </div>
+      {/* Page header - Centered */}
+      <div className="mb-6 sm:mb-8 text-center">
+        <h1 className="text-2xl sm:text-3xl font-bold">
+          <span className="ultraGlowText">Checkout</span>
+        </h1>
+        
+        {/* Trust badges - desktop */}
+        <div className="hidden sm:flex items-center justify-center gap-6 mt-3 text-xs text-zinc-500">
+          <div className="flex items-center gap-1.5">
+            <ShieldCheck className="h-4 w-4 text-violet-500" />
+            <span>Secure Payment</span>
           </div>
-        </div>
-      </div>
-
-      {/* Progress steps */}
-      <div className="mb-8">
-        <div className="flex items-center justify-center gap-2 sm:gap-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-xs font-semibold text-white">
-              1
-            </div>
-            <span className="hidden sm:inline text-sm font-medium text-zinc-900">Details</span>
-          </div>
-          <div className="h-px w-8 sm:w-16 bg-emerald-500" />
-          <div className="flex items-center gap-2">
-            <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
-              isHardcover ? 'bg-emerald-500 text-white' : 'bg-zinc-200 text-zinc-500'
-            }`}>
-              2
-            </div>
-            <span className={`hidden sm:inline text-sm font-medium ${
-              isHardcover ? 'text-zinc-900' : 'text-zinc-400'
-            }`}>Shipping</span>
-          </div>
-          <div className={`h-px w-8 sm:w-16 ${canPlaceOrder ? 'bg-emerald-500' : 'bg-zinc-200'}`} />
-          <div className="flex items-center gap-2">
-            <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
-              canPlaceOrder ? 'bg-emerald-500 text-white' : 'bg-zinc-200 text-zinc-500'
-            }`}>
-              3
-            </div>
-            <span className={`hidden sm:inline text-sm font-medium ${
-              canPlaceOrder ? 'text-zinc-900' : 'text-zinc-400'
-            }`}>Payment</span>
+          <div className="flex items-center gap-1.5">
+            <Truck className="h-4 w-4 text-violet-500" />
+            <span>Fast Delivery</span>
           </div>
         </div>
       </div>
@@ -380,20 +346,20 @@ export default function CheckoutPage () {
       {/* Trust badges - mobile */}
       <div className="flex sm:hidden items-center justify-center gap-4 text-xs text-zinc-500 mb-6">
         <div className="flex items-center gap-1.5">
-          <ShieldCheck className="h-4 w-4 text-emerald-600" />
+          <ShieldCheck className="h-4 w-4 text-violet-600" />
           <span>Secure</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <Truck className="h-4 w-4 text-emerald-600" />
+          <Truck className="h-4 w-4 text-violet-600" />
           <span>Fast Delivery</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <Clock className="h-4 w-4 text-emerald-600" />
+          <Clock className="h-4 w-4 text-violet-600" />
           <span>24hr Support</span>
         </div>
       </div>
 
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
         {/* Error message */}
         {checkoutError && (
           <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

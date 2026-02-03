@@ -187,7 +187,7 @@ export function ShippingForm ({ store, onAddressComplete, isSubmitting }: Shippi
           <button
             type="button"
             onClick={() => setShowAddress2(true)}
-            className="flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-700 transition-colors"
+            className="flex items-center gap-1 text-sm text-violet-600 hover:text-violet-700 transition-colors"
           >
             <Plus className="h-4 w-4" />
             Add apartment, suite, etc.
@@ -195,7 +195,7 @@ export function ShippingForm ({ store, onAddressComplete, isSubmitting }: Shippi
         )}
 
         {/* City, State, ZIP */}
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
           <div className="space-y-2">
             <Label htmlFor="shippingCity">
               City <span className="text-red-500">*</span>
