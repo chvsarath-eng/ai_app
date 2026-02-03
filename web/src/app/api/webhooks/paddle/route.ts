@@ -271,16 +271,16 @@ async function sendCustomerOrderConfirmation(payload: {
           <!-- Header -->
           <tr>
             <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid #e5e7eb;">
-              <h1 style="margin: 0; font-size: 28px; font-weight: 700; color: #7c3aed;">img2x</h1>
-              <p style="margin: 8px 0 0; font-size: 14px; color: #6b7280;">AI-Powered Personalized Storybooks</p>
+              <img src="https://img2x.com/brand/img2x-logo-transparent.png" alt="img2x" width="140" style="display: block; margin: 0 auto;" />
+              <p style="margin: 12px 0 0; font-size: 14px; color: #6b7280;">AI-Powered Personalized Storybooks</p>
             </td>
           </tr>
 
           <!-- Success Message -->
           <tr>
             <td style="padding: 40px 40px 20px; text-align: center;">
-              <div style="width: 64px; height: 64px; margin: 0 auto 20px; background-color: #ecfdf5; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                <span style="font-size: 32px;">✓</span>
+              <div style="width: 64px; height: 64px; margin: 0 auto 20px; background: linear-gradient(135deg, #10b981, #34d399); background-color: #10b981; border-radius: 50%; line-height: 64px; text-align: center;">
+                <span style="font-size: 28px; color: #ffffff;">✓</span>
               </div>
               <h2 style="margin: 0 0 8px; font-size: 24px; font-weight: 600; color: #111827;">Thank You for Your Order!</h2>
               <p style="margin: 0; font-size: 16px; color: #6b7280;">
@@ -362,7 +362,7 @@ async function sendCustomerOrderConfirmation(payload: {
           <!-- Receipt Button -->
           <tr>
             <td style="padding: 0 40px 20px; text-align: center;">
-              <a href="${receiptUrl}" style="display: inline-block; padding: 14px 32px; background-color: #7c3aed; color: #ffffff; font-size: 14px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+              <a href="${receiptUrl}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(90deg, #7c3aed, #c026d3); background-color: #7c3aed; color: #ffffff; font-size: 14px; font-weight: 600; text-decoration: none; border-radius: 8px;">
                 Download Receipt
               </a>
             </td>

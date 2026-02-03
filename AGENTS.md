@@ -381,6 +381,62 @@ See `web/SEO_CHECKLIST.md` for detailed SEO roadmap.
 
 ---
 
+## Payment & Book Generation Flow
+
+### Complete Flow
+
+1. **User fills checkout form** → name, age, storyline, email, photo (+ shipping for hardcover)
+2. **Browser calls `/api/checkout`** → Creates Paddle transaction with `custom_data`
+3. **Paddle overlay opens** → User completes payment
+4. **Payment succeeds** → Two things happen in parallel:
+   - **Webhook** (`/api/webhooks/paddle`) → Sends Order Confirmation Email
+   - **Browser** → Calls Story Service API to generate book
+5. **Browser redirects** → `/order/[jobId]` shows order confirmation
+6. **Story Service generates book** (async, 15-30 min)
+7. **Story Service sends "Book Ready" email** with download link (digital) or tracking (hardcover)
+
+### Email Flow
+
+| Email | Sent By | When | Contains |
+|-------|---------|------|----------|
+| Order Confirmation | Webhook (`/api/webhooks/paddle`) | Immediately after payment | Order ID, price, receipt link |
+| Book Ready | Story Service | After generation complete | Download link or tracking info |
+
+### Email Template Styling
+
+The order confirmation email uses branded styling consistent with the website:
+
+- **Logo**: `https://img2x.com/brand/img2x-logo-transparent.png` (140px width)
+- **Checkmark Icon**: Green gradient (`#10b981` → `#34d399`) circle with white checkmark
+- **Button Gradient**: Violet to fuchsia (`#7c3aed` → `#c026d3`) with solid fallback
+- **Accent Color**: Violet-600 (`#7c3aed`) for links and totals
+- **Template Location**: `web/src/app/api/webhooks/paddle/route.ts` (`sendCustomerOrderConfirmation` function)
+
+### Story Service API Contract
+
+**Endpoint:** `POST /generate-ebook-async`
+
+**Request (multipart/form-data):**
+- `image` (File) - User's photo
+- `story_prompt` (string) - "Name: {name}\nAge: {age}\nStory: {storyline}"
+- `email` (string) - Customer email
+- `output_type` (string) - "DIGI_BOOK" or "LULU_BOOK"
+- `keep_job_dir` (string) - "false"
+- Shipping fields (if LULU_BOOK): `shipping_name`, `shipping_address1`, `shipping_address2`, `shipping_city`, `shipping_region`, `shipping_postal_code`, `shipping_country`
+
+**Response:**
+```json
+{ "job_id": "uuid", "status": "queued" }
+```
+
+**Story Service Responsibilities:**
+1. Return `job_id` immediately
+2. Process book generation asynchronously
+3. For DIGI_BOOK: Email download link when ready
+4. For LULU_BOOK: Submit to Lulu API, email tracking when shipped
+
+---
+
 ## Useful Commands
 
 ```bash
@@ -412,4 +468,4 @@ gcloud run services describe img2x-web --region us-central1
 
 ---
 
-*Last updated: February 3, 2026 (Responsive checkout, centered title with gradient styling, violet-fuchsia theme)*
+*Last updated: February 3, 2026 (Email template redesign with logo and gradient styling)*

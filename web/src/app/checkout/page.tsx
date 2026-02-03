@@ -254,6 +254,10 @@ export default function CheckoutPage () {
         },
         {
           onSuccess: async (completedTransactionId) => {
+            // Close Paddle overlay immediately to show our processing UI
+            if (window.Paddle?.Checkout?.close) {
+              window.Paddle.Checkout.close()
+            }
             setPaymentProcessing(true)
 
             try {
@@ -312,12 +316,10 @@ export default function CheckoutPage () {
 
   if (paymentProcessing) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto px-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-2 border-emerald-500 border-t-transparent mx-auto mb-6" />
-          <h2 className="text-xl font-semibold text-zinc-900 mb-2">Processing your order...</h2>
-          <p className="text-zinc-600">Please wait while we set up your personalized storybook.</p>
-        </div>
+      <div className="min-h-[60vh] flex flex-col items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-4 border-violet-500 border-t-transparent rounded-full mb-4" />
+        <h2 className="text-xl font-semibold text-zinc-900">Processing your order...</h2>
+        <p className="text-zinc-500 mt-2">Please wait while we create your storybook.</p>
       </div>
     )
   }
