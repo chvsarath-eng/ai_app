@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { CreditCard, ShieldCheck, Truck, Clock } from 'lucide-react'
+import { CreditCard, ShieldCheck, Truck, Mail } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useCheckoutStore } from '@/lib/checkout-store'
 import { initializePaddle, openPaddleCheckout } from '@/lib/paddle'
 import { createStorybookJob } from '@/lib/storybookApi'
@@ -53,7 +55,7 @@ export default function CheckoutPage () {
         setIsLoading(false)
         return
       }
-      if (!store.name || !store.outputType || !store.email) {
+      if (!store.name || !store.outputType) {
         router.push('/')
       } else {
         setIsLoading(false)
@@ -269,6 +271,7 @@ export default function CheckoutPage () {
               const shippingAddress = isHardcover
                 ? {
                     fullName: store.shippingName,
+                    phone: store.shippingPhone || undefined,
                     line1: store.shippingAddress1,
                     line2: store.shippingAddress2 || undefined,
                     city: store.shippingCity,
@@ -330,39 +333,23 @@ export default function CheckoutPage () {
   }
 
   return (
-    <div className="py-6 sm:py-8 lg:py-10">
+    <div className="py-4 sm:py-6">
       {/* Page header - Centered */}
-      <div className="mb-6 sm:mb-8 text-center">
-        <h1 className="text-2xl sm:text-3xl font-bold">
+      <div className="mb-4 sm:mb-6 text-center">
+        <h1 className="text-xl sm:text-2xl font-bold">
           <span className="ultraGlowText">Checkout</span>
         </h1>
         
-        {/* Trust badges - desktop */}
-        <div className="hidden sm:flex items-center justify-center gap-6 mt-3 text-xs text-zinc-500">
-          <div className="flex items-center gap-1.5">
-            <ShieldCheck className="h-4 w-4 text-violet-500" />
-            <span>Secure Payment</span>
+        {/* Trust badges */}
+        <div className="flex items-center justify-center gap-4 sm:gap-6 mt-2 text-xs text-zinc-500">
+          <div className="flex items-center gap-1">
+            <ShieldCheck className="h-3.5 w-3.5 text-violet-500" />
+            <span>Secure</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Truck className="h-4 w-4 text-violet-500" />
+          <div className="flex items-center gap-1">
+            <Truck className="h-3.5 w-3.5 text-violet-500" />
             <span>Fast Delivery</span>
           </div>
-        </div>
-      </div>
-
-      {/* Trust badges - mobile */}
-      <div className="flex sm:hidden items-center justify-center gap-4 text-xs text-zinc-500 mb-6">
-        <div className="flex items-center gap-1.5">
-          <ShieldCheck className="h-4 w-4 text-violet-600" />
-          <span>Secure</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Truck className="h-4 w-4 text-violet-600" />
-          <span>Fast Delivery</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Clock className="h-4 w-4 text-violet-600" />
-          <span>24hr Support</span>
         </div>
       </div>
 
@@ -374,9 +361,38 @@ export default function CheckoutPage () {
           </div>
         )}
 
-        <div className="grid gap-6 lg:gap-8 lg:grid-cols-3">
+        <div className="grid gap-4 lg:gap-6 lg:grid-cols-3">
           {/* Left Column - Forms */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4">
+            {/* Contact Email - Required for all orders */}
+            <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+              <h2 className="flex items-center gap-2 text-base font-semibold text-zinc-900 mb-3">
+                <Mail className="h-4 w-4 text-violet-600" />
+                Contact Information
+              </h2>
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-sm">
+                  Email address <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  disabled={isSubmitting || paymentProcessing}
+                  value={store.email}
+                  onChange={(e) => store.setEmail(e.target.value)}
+                  className="h-10"
+                />
+                <p className="text-xs text-zinc-500">
+                  {isHardcover 
+                    ? 'Order updates and tracking info will be sent here.'
+                    : 'Your digital storybook will be delivered here.'
+                  }
+                </p>
+              </div>
+            </div>
+
             {/* Shipping Address - Only for hardcover */}
             {isHardcover && (
               <>
@@ -400,35 +416,16 @@ export default function CheckoutPage () {
 
             {/* Digital book - simplified checkout */}
             {!isHardcover && (
-              <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-                <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 mb-4">
-                  <CreditCard className="h-5 w-5 text-emerald-600" />
-                  Ready to Order
+              <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+                <h2 className="flex items-center gap-2 text-base font-semibold text-zinc-900 mb-3">
+                  <ShieldCheck className="h-4 w-4 text-violet-600" />
+                  Secure Checkout
                 </h2>
-                <div className="space-y-4">
-                  <p className="text-sm text-zinc-600">
-                    Your digital storybook will be delivered instantly to your email after purchase.
-                  </p>
-                  
-                  {/* Email display */}
-                  <div className="flex items-center gap-3 rounded-lg bg-zinc-50 px-4 py-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
-                      <svg className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="text-xs text-zinc-500">Delivery email</p>
-                      <p className="text-sm font-medium text-zinc-900">{store.email}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 rounded-lg border border-emerald-100 bg-emerald-50/50 px-4 py-3">
-                    <ShieldCheck className="h-5 w-5 text-emerald-600 mt-0.5 shrink-0" />
-                    <div className="text-sm text-emerald-800">
-                      <p className="font-medium">Secure Checkout</p>
-                      <p className="text-emerald-700 mt-0.5">Your payment is processed securely by Paddle. Tax is calculated automatically.</p>
-                    </div>
+                <div className="flex items-start gap-2 rounded-lg border border-violet-100 bg-violet-50/50 px-3 py-2">
+                  <CreditCard className="h-4 w-4 text-violet-600 mt-0.5 shrink-0" />
+                  <div className="text-sm text-violet-800">
+                    <p className="font-medium">Ready to order</p>
+                    <p className="text-violet-700 text-xs mt-0.5">Your payment is processed securely by Paddle. Tax is calculated automatically.</p>
                   </div>
                 </div>
               </div>
@@ -457,26 +454,6 @@ export default function CheckoutPage () {
           </div>
         </div>
 
-        {/* Bottom trust indicators */}
-        <div className="mt-8 pt-6 border-t border-zinc-200">
-          <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-zinc-400">
-            <div className="flex items-center gap-2">
-              <span>Secure payments by Paddle</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-              </svg>
-              <span>Money-back guarantee</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
-              </svg>
-              <span>SSL encrypted</span>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   )

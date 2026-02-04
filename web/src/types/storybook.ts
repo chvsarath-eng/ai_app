@@ -8,6 +8,7 @@ export type OutputType = (typeof outputTypes)[number]
 
 export type ShippingAddress = {
   fullName: string
+  phone?: string
   line1: string
   line2?: string
   city: string

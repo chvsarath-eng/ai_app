@@ -18,8 +18,8 @@ export function HeroSplit ({
         className
       )}
     >
-      <div className="grid w-full gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] lg:items-start lg:gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(380px,480px)]">
-        <div className="order-1 min-w-0 lg:order-1 lg:pt-2">
+      <div className="grid w-full gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] lg:items-center lg:gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(380px,480px)]">
+        <div className="order-1 min-w-0 lg:order-1">
           {left}
         </div>
         <div className="order-2 min-w-0 lg:order-2 lg:justify-self-center">

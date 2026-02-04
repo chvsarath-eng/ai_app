@@ -379,6 +379,14 @@ See `web/SEO_CHECKLIST.md` for detailed SEO roadmap.
 
 19. **Responsive Checkout:** Added responsive padding (`px-4 sm:px-6`), conditional sticky sidebar (`lg:sticky lg:top-24`), and stacking grids for mobile (`grid-cols-1 sm:grid-cols-3`).
 
+20. **Compact UI Design:** Generator card and checkout page optimized to fit on screen without scrolling. Key changes:
+    - Generator card: Reduced padding (`p-3`), smaller book type boxes, shortened labels ("Hardcover" vs "Premium Hardcover")
+    - Checkout page: Reduced padding (`py-4 sm:py-6`), smaller cards (`p-4`), compact order summary
+    - Removed redundant text ("Tax calculated at checkout" from generator card)
+    - Email collection moved from generator card to checkout page for cleaner flow
+
+21. **Email Collection Flow:** Email is now collected only on the checkout page (not on the generator card). This simplifies the homepage form and ensures email is captured at the point of purchase.
+
 ---
 
 ## Payment & Book Generation Flow
@@ -422,7 +430,7 @@ The order confirmation email uses branded styling consistent with the website:
 - `email` (string) - Customer email
 - `output_type` (string) - "DIGI_BOOK" or "LULU_BOOK"
 - `keep_job_dir` (string) - "false"
-- Shipping fields (if LULU_BOOK): `shipping_name`, `shipping_address1`, `shipping_address2`, `shipping_city`, `shipping_region`, `shipping_postal_code`, `shipping_country`
+- Shipping fields (if LULU_BOOK): `shipping_name`, `shipping_phone` (optional), `shipping_address1`, `shipping_address2`, `shipping_city`, `shipping_region`, `shipping_postal_code`, `shipping_country`
 
 **Response:**
 ```json
@@ -468,4 +476,4 @@ gcloud run services describe img2x-web --region us-central1
 
 ---
 
-*Last updated: February 3, 2026 (Email template redesign with logo and gradient styling)*
+*Last updated: February 4, 2026 (Compact UI design - generator card and checkout page optimized to fit on screen)*

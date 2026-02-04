@@ -28,7 +28,6 @@ const formSchema = z.object({
   imageFile: z.instanceof(File, { message: 'Please upload a photo' }),
   name: z.string().trim().min(1, 'Name is required').max(60, 'Keep it under 60 characters'),
   age: z.coerce.number().int().min(1, 'Enter a valid age').max(120, 'Enter a valid age'),
-  email: z.string().trim().email('Enter a valid email'),
   storyline: z.string().trim().min(1, 'Storyline is required').max(180, 'Keep it under 180 characters'),
   outputType: z.enum(outputTypes, { message: 'Please select a book type' })
 })
@@ -72,7 +71,6 @@ export function GeneratorCard ({ className }: { className?: string }) {
     defaultValues: {
       name: '',
       age: undefined,
-      email: '',
       storyline: '',
       outputType: undefined
     }
@@ -91,7 +89,6 @@ export function GeneratorCard ({ className }: { className?: string }) {
         imagePreviewUrl: imagePreviewUrl || '',
         name: parsed.name,
         age: parsed.age,
-        email: parsed.email,
         storyline: parsed.storyline,
         outputType: parsed.outputType as OutputType
       })
@@ -159,8 +156,8 @@ export function GeneratorCard ({ className }: { className?: string }) {
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="space-y-5">
-        <form onSubmit={onSubmit} className="space-y-5" aria-label="Storybook generator">
+      <CardContent className="space-y-4">
+        <form onSubmit={onSubmit} className="space-y-4" aria-label="Storybook generator">
           <div className="space-y-2">
             <Label className="flex items-center gap-2" htmlFor="imageFile">
               <ImageIcon className="h-4 w-4 text-zinc-500" aria-hidden="true" />
@@ -238,25 +235,6 @@ export function GeneratorCard ({ className }: { className?: string }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              placeholder="you@example.com"
-              disabled={createJobMutation.isPending}
-              {...form.register('email')}
-            />
-            {form.formState.errors.email?.message
-              ? (
-                <p className="text-sm text-red-600" role="alert">
-                  {form.formState.errors.email.message}
-                </p>
-              )
-              : null}
-          </div>
-
-          <div className="space-y-2">
             <Label className="flex items-center gap-2" htmlFor="storyline">
               <Wand2 className="h-4 w-4 text-zinc-500" aria-hidden="true" />
               Storyline
@@ -278,19 +256,19 @@ export function GeneratorCard ({ className }: { className?: string }) {
 
           {storylineValue
             ? (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <Book className="h-4 w-4 text-zinc-500" aria-hidden="true" />
-                  Choose your book type
+                  Book type
                 </Label>
                 <Controller
                   name="outputType"
                   control={form.control}
                   render={({ field }) => (
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-2 sm:grid-cols-2">
                       <label
                         className={cn(
-                          'relative flex cursor-pointer flex-col rounded-xl border-2 p-4 transition-all hover:border-violet-300',
+                          'relative flex cursor-pointer flex-col rounded-lg border-2 p-3 transition-all hover:border-violet-300',
                           field.value === 'DIGI_BOOK'
                             ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-500/20'
                             : 'border-zinc-200 bg-white'
@@ -304,15 +282,15 @@ export function GeneratorCard ({ className }: { className?: string }) {
                           onChange={() => field.onChange('DIGI_BOOK')}
                           disabled={createJobMutation.isPending}
                         />
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="h-5 w-5 text-violet-600" />
-                          <span className="font-semibold text-zinc-900">Digital Book</span>
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="h-4 w-4 text-violet-600" />
+                          <span className="text-sm font-semibold text-zinc-900">Digital Book</span>
                         </div>
-                        <p className="mt-1 text-xs text-zinc-600">Interactive HTML flipbook</p>
-                        <p className="mt-2 text-lg font-bold text-violet-600">$14.99</p>
+                        <p className="mt-0.5 text-xs text-zinc-500">HTML flipbook</p>
+                        <p className="mt-1 text-base font-bold text-violet-600">$14.99</p>
                         {field.value === 'DIGI_BOOK' && (
-                          <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-violet-500 text-white">
-                            <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                          <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-violet-500 text-white">
+                            <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                           </span>
@@ -321,7 +299,7 @@ export function GeneratorCard ({ className }: { className?: string }) {
 
                       <label
                         className={cn(
-                          'relative flex cursor-pointer flex-col rounded-xl border-2 p-4 transition-all hover:border-emerald-300',
+                          'relative flex cursor-pointer flex-col rounded-lg border-2 p-3 transition-all hover:border-emerald-300',
                           field.value === 'LULU_BOOK'
                             ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/20'
                             : 'border-zinc-200 bg-white'
@@ -335,15 +313,15 @@ export function GeneratorCard ({ className }: { className?: string }) {
                           onChange={() => field.onChange('LULU_BOOK')}
                           disabled={createJobMutation.isPending}
                         />
-                        <div className="flex items-center gap-2">
-                          <Book className="h-5 w-5 text-emerald-600" />
-                          <span className="font-semibold text-zinc-900">Premium Hardcover</span>
+                        <div className="flex items-center gap-1.5">
+                          <Book className="h-4 w-4 text-emerald-600" />
+                          <span className="text-sm font-semibold text-zinc-900">Hardcover</span>
                         </div>
-                        <p className="mt-1 text-xs text-zinc-600">8.5×8.5" printed book</p>
-                        <p className="mt-2 text-lg font-bold text-emerald-600">$39.99</p>
+                        <p className="mt-0.5 text-xs text-zinc-500">8.5×8.5" printed</p>
+                        <p className="mt-1 text-base font-bold text-emerald-600">$39.99</p>
                         {field.value === 'LULU_BOOK' && (
-                          <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white">
-                            <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                          <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white">
+                            <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                           </span>
@@ -359,7 +337,6 @@ export function GeneratorCard ({ className }: { className?: string }) {
                     </p>
                   )
                   : null}
-                <p className="text-xs text-zinc-500">Tax calculated at checkout.</p>
               </div>
               )
             : null}

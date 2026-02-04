@@ -26,20 +26,20 @@ export function OrderSummary ({
   const subtotal = bookPrice + shippingCost
 
   return (
-    <div className="lg:sticky lg:top-24 rounded-2xl border border-zinc-200 bg-white shadow-lg overflow-hidden">
+    <div className="lg:sticky lg:top-20 rounded-xl border border-zinc-200 bg-white shadow-md overflow-hidden">
       {/* Header with gradient */}
-      <div className="bg-gradient-to-r from-zinc-50 to-zinc-100 border-b border-zinc-200 px-4 py-3 sm:px-5 sm:py-4">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900">
-          <ShoppingBag className="h-5 w-5 text-emerald-600" />
+      <div className="bg-gradient-to-r from-zinc-50 to-zinc-100 border-b border-zinc-200 px-4 py-2.5">
+        <h2 className="flex items-center gap-2 text-base font-semibold text-zinc-900">
+          <ShoppingBag className="h-4 w-4 text-emerald-600" />
           Order Summary
         </h2>
       </div>
 
-      <div className="p-4 sm:p-5 lg:p-6 space-y-4 sm:space-y-5">
+      <div className="p-4 space-y-3">
         {/* Product Card */}
-        <div className="flex gap-4 items-start">
+        <div className="flex gap-3 items-start">
           {/* Book preview image */}
-          <div className="relative h-16 w-16 sm:h-20 sm:w-20 shrink-0 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100 flex items-center justify-center overflow-hidden shadow-sm ring-1 ring-zinc-200/50">
+          <div className="relative h-14 w-14 shrink-0 rounded-lg bg-gradient-to-br from-emerald-50 to-emerald-100 flex items-center justify-center overflow-hidden shadow-sm ring-1 ring-zinc-200/50">
             {store.imagePreviewUrl ? (
               <img
                 src={store.imagePreviewUrl}
@@ -47,23 +47,21 @@ export function OrderSummary ({
                 className="h-full w-full object-cover"
               />
             ) : isHardcover ? (
-              <Book className="h-8 w-8 text-emerald-500" />
+              <Book className="h-6 w-6 text-emerald-500" />
             ) : (
-              <Sparkles className="h-8 w-8 text-violet-500" />
+              <Sparkles className="h-6 w-6 text-violet-500" />
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-zinc-900 leading-tight">
+            <h3 className="font-semibold text-sm text-zinc-900 leading-tight">
               Personalized Storybook
             </h3>
-            <p className="text-sm text-zinc-500 mt-1">
-              {isHardcover
-                ? 'Premium Hardcover · 8.5×8.5"'
-                : 'Digital Book · Interactive HTML'}
+            <p className="text-xs text-zinc-500 mt-0.5">
+              {isHardcover ? 'Hardcover · 8.5×8.5"' : 'Digital · HTML'}
             </p>
-            <div className="flex items-center gap-1.5 mt-2">
+            <div className="flex items-center gap-1 mt-1">
               <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              <p className="text-sm text-zinc-600 truncate">
+              <p className="text-xs text-zinc-600 truncate">
                 Featuring: <span className="font-medium">{store.name}</span>
               </p>
             </div>
@@ -71,24 +69,24 @@ export function OrderSummary ({
         </div>
 
         {/* What's included */}
-        <div className="rounded-xl bg-zinc-50 p-4 space-y-2">
+        <div className="rounded-lg bg-zinc-50 p-3 space-y-1.5">
           <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">What's included</p>
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center gap-2 text-zinc-700">
-              <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
-              <span>{isHardcover ? '24-page premium hardcover book' : 'Interactive digital flipbook'}</span>
+          <div className="space-y-1 text-xs">
+            <div className="flex items-center gap-1.5 text-zinc-700">
+              <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+              <span>{isHardcover ? 'Premium hardcover book' : 'Interactive digital flipbook'}</span>
             </div>
-            <div className="flex items-center gap-2 text-zinc-700">
-              <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+            <div className="flex items-center gap-1.5 text-zinc-700">
+              <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
               <span>AI-generated 4K illustrations</span>
             </div>
-            <div className="flex items-center gap-2 text-zinc-700">
-              <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+            <div className="flex items-center gap-1.5 text-zinc-700">
+              <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
               <span>Personalized story with {store.name}</span>
             </div>
             {!isHardcover && (
-              <div className="flex items-center gap-2 text-zinc-700">
-                <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+              <div className="flex items-center gap-1.5 text-zinc-700">
+                <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                 <span>Instant email delivery</span>
               </div>
             )}
@@ -96,10 +94,10 @@ export function OrderSummary ({
         </div>
 
         {/* Price breakdown */}
-        <div className="space-y-3 text-sm">
+        <div className="space-y-2 text-sm">
           <div className="flex justify-between items-center">
             <span className="text-zinc-600">
-              {isHardcover ? 'Hardcover Book' : 'Digital Book'}
+              {isHardcover ? 'Hardcover' : 'Digital Book'}
             </span>
             <span className="font-semibold text-zinc-900">${bookPrice.toFixed(2)}</span>
           </div>
@@ -109,7 +107,7 @@ export function OrderSummary ({
               {selectedShipping ? (
                 <span className="font-semibold text-zinc-900">${shippingCost.toFixed(2)}</span>
               ) : (
-                <span className="text-zinc-400 italic">Select delivery</span>
+                <span className="text-zinc-400 text-xs italic">Select delivery</span>
               )}
             </div>
           )}
@@ -124,12 +122,12 @@ export function OrderSummary ({
 
         {/* Total */}
         <div className="flex justify-between items-baseline">
-          <span className="text-base font-semibold text-zinc-900">Subtotal</span>
+          <span className="text-sm font-semibold text-zinc-900">Subtotal</span>
           <div className="text-right">
-            <span className="text-xl sm:text-2xl font-bold text-emerald-600">
+            <span className="text-lg font-bold text-emerald-600">
               ${subtotal.toFixed(2)}
             </span>
-            <p className="text-xs text-zinc-400 mt-0.5">+ tax</p>
+            <span className="text-xs text-zinc-400 ml-1">+ tax</span>
           </div>
         </div>
 
@@ -137,11 +135,11 @@ export function OrderSummary ({
         <Button
           onClick={onPlaceOrder}
           disabled={!canPlaceOrder || isSubmitting}
-          className="h-12 w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm transition hover:shadow-md hover:brightness-105 disabled:opacity-50 disabled:shadow-none"
+          className="h-10 w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm transition hover:shadow-md hover:brightness-105 disabled:opacity-50 disabled:shadow-none"
         >
           {isSubmitting ? (
-            <span className="flex items-center gap-2">
-              <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24">
+            <span className="flex items-center gap-2 text-sm">
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
                 <circle
                   className="opacity-25"
                   cx="12"
@@ -160,43 +158,17 @@ export function OrderSummary ({
               Processing...
             </span>
           ) : (
-            <span className="flex items-center justify-center gap-2">
-              <Lock className="h-4 w-4" />
+            <span className="flex items-center justify-center gap-2 text-sm">
+              <Lock className="h-3.5 w-3.5" />
               Place Order
             </span>
           )}
         </Button>
 
-        {/* Helper text */}
-        {!canPlaceOrder && !isSubmitting && (
-          <p className="text-xs text-center text-zinc-500">
-            {isHardcover
-              ? (selectedShipping ? 'Complete your address to continue' : 'Select a delivery option to continue')
-              : 'Upload a photo to continue'}
-          </p>
-        )}
-
-        {/* Security badges */}
-        <div className="pt-3 border-t border-zinc-100">
-          <div className="flex items-center justify-center gap-2 text-xs text-zinc-400">
-            <Lock className="h-3.5 w-3.5" />
-            <span>Secure checkout powered by Paddle</span>
-          </div>
-          <div className="flex items-center justify-center gap-3 mt-3">
-            <svg className="h-6 w-auto text-zinc-300" viewBox="0 0 50 32" fill="currentColor">
-              <rect width="50" height="32" rx="4" fill="currentColor" opacity="0.1"/>
-              <text x="25" y="20" textAnchor="middle" fontSize="10" fill="currentColor">VISA</text>
-            </svg>
-            <svg className="h-6 w-auto text-zinc-300" viewBox="0 0 50 32" fill="currentColor">
-              <rect width="50" height="32" rx="4" fill="currentColor" opacity="0.1"/>
-              <circle cx="20" cy="16" r="8" fill="currentColor" opacity="0.3"/>
-              <circle cx="30" cy="16" r="8" fill="currentColor" opacity="0.3"/>
-            </svg>
-            <svg className="h-6 w-auto text-zinc-300" viewBox="0 0 50 32" fill="currentColor">
-              <rect width="50" height="32" rx="4" fill="currentColor" opacity="0.1"/>
-              <text x="25" y="20" textAnchor="middle" fontSize="8" fill="currentColor">PayPal</text>
-            </svg>
-          </div>
+        {/* Security badge */}
+        <div className="flex items-center justify-center gap-1.5 text-xs text-zinc-400">
+          <Lock className="h-3 w-3" />
+          <span>Secure checkout powered by Paddle</span>
         </div>
       </div>
     </div>
