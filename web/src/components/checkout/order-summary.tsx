@@ -25,6 +25,11 @@ export function OrderSummary ({
   const shippingCost = isHardcover ? (selectedShipping?.shipping_cost || 0) : 0
   const subtotal = bookPrice + shippingCost
 
+  const characterNames = store.characters.map((c) => c.name).filter(Boolean)
+  const featuredNames = characterNames.length > 0
+    ? characterNames.join(', ')
+    : 'your characters'
+
   return (
     <div className="lg:sticky lg:top-20 rounded-xl border border-zinc-200 bg-white shadow-md overflow-hidden">
       {/* Header with gradient */}
@@ -38,18 +43,32 @@ export function OrderSummary ({
       <div className="p-4 space-y-3">
         {/* Product Card */}
         <div className="flex gap-3 items-start">
-          {/* Book preview image */}
-          <div className="relative h-14 w-14 shrink-0 rounded-lg bg-gradient-to-br from-emerald-50 to-emerald-100 flex items-center justify-center overflow-hidden shadow-sm ring-1 ring-zinc-200/50">
-            {store.imagePreviewUrl ? (
-              <img
-                src={store.imagePreviewUrl}
-                alt="Your photo"
-                className="h-full w-full object-cover"
-              />
-            ) : isHardcover ? (
-              <Book className="h-6 w-6 text-emerald-500" />
+          {/* Character preview thumbnails */}
+          <div className="relative shrink-0">
+            {store.imagePreviewUrls.length > 0 ? (
+              <div className="flex -space-x-2">
+                {store.imagePreviewUrls.slice(0, 4).map((url, i) => (
+                  <div
+                    key={i}
+                    className="relative h-10 w-10 rounded-full overflow-hidden ring-2 ring-white shadow-sm"
+                    style={{ zIndex: 4 - i }}
+                  >
+                    <img
+                      src={url}
+                      alt={store.characters[i]?.name || `Character ${i + 1}`}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                ))}
+              </div>
             ) : (
-              <Sparkles className="h-6 w-6 text-violet-500" />
+              <div className="h-14 w-14 rounded-lg bg-gradient-to-br from-emerald-50 to-emerald-100 flex items-center justify-center shadow-sm ring-1 ring-zinc-200/50">
+                {isHardcover ? (
+                  <Book className="h-6 w-6 text-emerald-500" />
+                ) : (
+                  <Sparkles className="h-6 w-6 text-violet-500" />
+                )}
+              </div>
             )}
           </div>
           <div className="flex-1 min-w-0">
@@ -58,11 +77,12 @@ export function OrderSummary ({
             </h3>
             <p className="text-xs text-zinc-500 mt-0.5">
               {isHardcover ? 'Hardcover · 8.5×8.5"' : 'Digital · HTML'}
+              {store.characters.length > 1 && ` · ${store.characters.length} characters`}
             </p>
             <div className="flex items-center gap-1 mt-1">
               <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               <p className="text-xs text-zinc-600 truncate">
-                Featuring: <span className="font-medium">{store.name}</span>
+                Featuring: <span className="font-medium">{featuredNames}</span>
               </p>
             </div>
           </div>
@@ -82,7 +102,7 @@ export function OrderSummary ({
             </div>
             <div className="flex items-center gap-1.5 text-zinc-700">
               <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-              <span>Personalized story with {store.name}</span>
+              <span>Personalized story with {featuredNames}</span>
             </div>
             {!isHardcover && (
               <div className="flex items-center gap-1.5 text-zinc-700">

@@ -150,11 +150,14 @@ export async function POST(request: NextRequest) {
     const priceId = PADDLE_PRICES[outputType as keyof typeof PADDLE_PRICES]
 
     // Build custom data for webhook processing
+    const characters = formData?.characters || []
+    const characterNames = characters.map((c: { name?: string }) => c?.name || '').filter(Boolean)
     const customData: Record<string, string> = {
-      name: formData?.name || '',
-      age: formData?.age?.toString() || '',
+      characters: JSON.stringify(characters),
       storyline: formData?.storyline || '',
-      outputType
+      outputType,
+      numCharacters: (formData?.numCharacters || characters.length || 1).toString(),
+      characterNames: characterNames.join(', ')
     }
 
     if (formData?.shippingName) customData.shippingName = formData.shippingName

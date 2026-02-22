@@ -1,13 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { OutputType } from '@/types/storybook'
+import type { OutputType, CharacterInfo } from '@/types/storybook'
 
 export interface CheckoutData {
-  // Product info from generator
-  imageFile: File | null
-  imagePreviewUrl: string | null
-  name: string
-  age: number
+  // Multi-character product info
+  imageFiles: File[]
+  imagePreviewUrls: string[]
+  characters: CharacterInfo[]
   storyline: string
   email: string
   outputType: OutputType | null
@@ -29,12 +28,10 @@ export interface CheckoutData {
 }
 
 interface CheckoutStore extends CheckoutData {
-  // Actions
   setProductInfo: (data: {
-    imageFile: File
-    imagePreviewUrl: string
-    name: string
-    age: number
+    imageFiles: File[]
+    imagePreviewUrls: string[]
+    characters: CharacterInfo[]
     storyline: string
     outputType: OutputType
   }) => void
@@ -46,10 +43,9 @@ interface CheckoutStore extends CheckoutData {
 }
 
 const initialState: CheckoutData = {
-  imageFile: null,
-  imagePreviewUrl: null,
-  name: '',
-  age: 0,
+  imageFiles: [],
+  imagePreviewUrls: [],
+  characters: [],
   storyline: '',
   email: '',
   outputType: null,
@@ -72,10 +68,9 @@ export const useCheckoutStore = create<CheckoutStore>()(
       ...initialState,
 
       setProductInfo: (data) => set({
-        imageFile: data.imageFile,
-        imagePreviewUrl: data.imagePreviewUrl,
-        name: data.name,
-        age: data.age,
+        imageFiles: data.imageFiles,
+        imagePreviewUrls: data.imagePreviewUrls,
+        characters: data.characters,
         storyline: data.storyline,
         outputType: data.outputType
       }),
@@ -97,9 +92,10 @@ export const useCheckoutStore = create<CheckoutStore>()(
       isReady: () => {
         const state = get()
         return Boolean(
-          state.imageFile &&
-          state.name &&
-          state.age > 0 &&
+          state.imageFiles.length > 0 &&
+          state.characters.length > 0 &&
+          state.characters[0]?.name &&
+          state.characters[0]?.age > 0 &&
           state.storyline &&
           state.outputType
         )
@@ -107,11 +103,9 @@ export const useCheckoutStore = create<CheckoutStore>()(
     }),
     {
       name: 'checkout-storage',
-      // Only persist non-File data
       partialize: (state) => ({
-        imagePreviewUrl: state.imagePreviewUrl,
-        name: state.name,
-        age: state.age,
+        imagePreviewUrls: state.imagePreviewUrls,
+        characters: state.characters,
         storyline: state.storyline,
         email: state.email,
         outputType: state.outputType,

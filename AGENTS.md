@@ -318,6 +318,13 @@ See `.cursor/rules/coding-standards.mdc` for details.
   - Violet-fuchsia gradient theme matching homepage branding
   - Subtle button styling with soft shadows
 
+- **Multi-Character Support (v2):**
+  - 1-4 character photos per storybook (couples, families, siblings, friends)
+  - Dynamic "Add Character" UI with per-character name, age, gender, relationship
+  - Character metadata sent as JSON array alongside images
+  - Order summary shows all character thumbnails and names
+  - Email confirmations list all character names
+
 ### 🔄 In Progress
 - Production Paddle setup (switch from sandbox to live)
 
@@ -387,13 +394,15 @@ See `web/SEO_CHECKLIST.md` for detailed SEO roadmap.
 
 21. **Email Collection Flow:** Email is now collected only on the checkout page (not on the generator card). This simplifies the homepage form and ensures email is captured at the point of purchase.
 
+22. **Multi-Character API Migration (v2):** The story service field name changed from `"image"` (singular) to `"images"` (plural). Using the old name silently drops all but the last file. Character metadata (name, age, gender, relationship) is sent as a JSON array in `character_metadata` field. For single characters, gender/relationship fields are hidden to keep the form simple.
+
 ---
 
 ## Payment & Book Generation Flow
 
 ### Complete Flow
 
-1. **User fills checkout form** → name, age, storyline, email, photo (+ shipping for hardcover)
+1. **User fills checkout form** → 1-4 character photos with metadata (name, age, gender, relationship), storyline, email (+ shipping for hardcover)
 2. **Browser calls `/api/checkout`** → Creates Paddle transaction with `custom_data`
 3. **Paddle overlay opens** → User completes payment
 4. **Payment succeeds** → Two things happen in parallel:
@@ -420,13 +429,14 @@ The order confirmation email uses branded styling consistent with the website:
 - **Accent Color**: Violet-600 (`#7c3aed`) for links and totals
 - **Template Location**: `web/src/app/api/webhooks/paddle/route.ts` (`sendCustomerOrderConfirmation` function)
 
-### Story Service API Contract
+### Story Service API Contract (v2 - Multi-Character)
 
 **Endpoint:** `POST /generate-ebook-async`
 
 **Request (multipart/form-data):**
-- `image` (File) - User's photo
-- `story_prompt` (string) - "Name: {name}\nAge: {age}\nStory: {storyline}"
+- `images` (File[]) - 1-4 character face photos (use same field name for all). **MUST be `"images"` (plural), not `"image"`.**
+- `story_prompt` (string) - Story theme/description
+- `character_metadata` (string) - JSON array: `[{"name":"Ben","age":6,"gender":"male","relationship":"son"}, ...]`. Array order MUST match image upload order.
 - `email` (string) - Customer email
 - `output_type` (string) - "DIGI_BOOK" or "LULU_BOOK"
 - `keep_job_dir` (string) - "false"
@@ -434,12 +444,12 @@ The order confirmation email uses branded styling consistent with the website:
 
 **Response:**
 ```json
-{ "job_id": "uuid", "status": "queued" }
+{ "job_id": "uuid", "status": "queued", "num_characters": 4 }
 ```
 
 **Story Service Responsibilities:**
 1. Return `job_id` immediately
-2. Process book generation asynchronously
+2. Process book generation asynchronously (1 char ~2-3 min, 4 chars ~5-6 min)
 3. For DIGI_BOOK: Email download link when ready
 4. For LULU_BOOK: Submit to Lulu API, email tracking when shipped
 
@@ -476,4 +486,4 @@ gcloud run services describe img2x-web --region us-central1
 
 ---
 
-*Last updated: February 4, 2026 (Compact UI design - generator card and checkout page optimized to fit on screen)*
+*Last updated: February 22, 2026 (Multi-character support - 1-4 characters per storybook with metadata)*

@@ -9,7 +9,7 @@ import { useCheckoutStore } from '@/lib/checkout-store'
 import { initializePaddle, openPaddleCheckout } from '@/lib/paddle'
 import { createStorybookJob } from '@/lib/storybookApi'
 import { trackEvent } from '@/lib/analytics'
-import type { Theme, OutputType } from '@/types/storybook'
+import type { OutputType } from '@/types/storybook'
 
 import { ShippingForm } from '@/components/checkout/shipping-form'
 import { DeliveryOptions } from '@/components/checkout/delivery-options'
@@ -55,7 +55,7 @@ export default function CheckoutPage () {
         setIsLoading(false)
         return
       }
-      if (!store.name || !store.outputType) {
+      if (!store.characters?.[0]?.name || !store.outputType) {
         router.push('/')
       } else {
         setIsLoading(false)
@@ -63,7 +63,7 @@ export default function CheckoutPage () {
     }, 100)
 
     return () => clearTimeout(timer)
-  }, [store.name, store.outputType, router, paymentProcessing])
+  }, [store.characters, store.outputType, router, paymentProcessing])
 
   // Fetch shipping options when address is complete
   const fetchShippingCost = useCallback(async () => {
@@ -187,10 +187,10 @@ export default function CheckoutPage () {
 
   const canPlaceOrder = isHardcover
     ? Boolean(isAddressComplete && selectedShipping && store.email)
-    : Boolean(store.outputType && store.imageFile && store.email)
+    : Boolean(store.outputType && store.imageFiles.length > 0 && store.email)
 
   const handlePlaceOrder = async () => {
-    if (!store.outputType || !store.imageFile || isSubmitting) return
+    if (!store.outputType || store.imageFiles.length === 0 || isSubmitting) return
     if (isHardcover && (!selectedShipping || !isAddressComplete)) return
     if (!store.email) {
       setCheckoutError('Please enter your email before checkout.')
@@ -201,10 +201,10 @@ export default function CheckoutPage () {
     setCheckoutError(null)
 
     const formData: Record<string, unknown> = {
-      name: store.name,
-      age: store.age,
+      characters: store.characters,
       storyline: store.storyline,
-      outputType: store.outputType
+      outputType: store.outputType,
+      numCharacters: store.characters.length
     }
 
     if (isHardcover && selectedShipping) {
@@ -282,9 +282,9 @@ export default function CheckoutPage () {
                 : undefined
 
               const res = await createStorybookJob({
-                imageFile: store.imageFile!,
-                theme: 'Custom' as Theme,
-                storyline: `Name: ${store.name}\nAge: ${store.age}\nStory: ${store.storyline}`,
+                imageFiles: store.imageFiles,
+                characters: store.characters,
+                storyline: store.storyline,
                 email: store.email || '',
                 outputType: store.outputType as OutputType,
                 shippingAddress

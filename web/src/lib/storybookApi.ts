@@ -31,8 +31,9 @@ function mapBackendStatus (status?: string): JobStatusResponse['status'] {
 
 export async function createStorybookJob (req: CreateJobRequest): Promise<{ jobId: string }> {
   const form = new FormData()
-  form.append('image', req.imageFile)
+  req.imageFiles.forEach((file) => form.append('images', file))
   form.append('story_prompt', req.storyline)
+  form.append('character_metadata', JSON.stringify(req.characters))
   form.append('email', req.email)
   form.append('output_type', req.outputType)
   form.append('keep_job_dir', 'false')

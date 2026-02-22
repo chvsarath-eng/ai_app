@@ -175,10 +175,14 @@ async function sendOrderNotification (payload: {
   const to = process.env.ORDER_NOTIFY_TO ?? process.env.CONTACT_TO ?? 'team@img2x.com'
   const from = process.env.CONTACT_FROM ?? user
 
+  const charNames = payload.customData?.characterNames ? String(payload.customData.characterNames) : undefined
+  const numChars = payload.customData?.numCharacters ? String(payload.customData.numCharacters) : '1'
+
   const lines = [
     `Transaction: ${payload.transactionId}`,
     payload.customerEmail ? `Customer email: ${payload.customerEmail}` : 'Customer email: (missing)',
-    payload.outputType ? `Output type: ${payload.outputType}` : 'Output type: (unknown)'
+    payload.outputType ? `Output type: ${payload.outputType}` : 'Output type: (unknown)',
+    `Characters: ${charNames || '(unknown)'} (${numChars})`
   ]
 
   if (payload.items?.length) {
@@ -228,6 +232,8 @@ async function sendCustomerOrderConfirmation(payload: {
   items?: Array<{ name?: string, quantity: number, total?: string }>
   totals?: { subtotal?: string, tax?: string, total?: string }
   shipping?: ShippingDetails | null
+  characterNames?: string
+  numCharacters?: number
 }) {
   const host = process.env.SMTP_HOST
   const port = process.env.SMTP_PORT
@@ -243,6 +249,8 @@ async function sendCustomerOrderConfirmation(payload: {
   const isHardcover = payload.outputType === 'LULU_BOOK'
   const productName = isHardcover ? 'Personalized Hardcover Storybook' : 'Personalized Digital Storybook (PDF)'
   const currency = payload.currencyCode || 'USD'
+  const charLabel = payload.characterNames || 'your characters'
+  const numChars = payload.numCharacters || 1
 
   // Format currency amount
   const formatAmount = (amount?: string) => {
@@ -350,9 +358,10 @@ async function sendCustomerOrderConfirmation(payload: {
               <div style="background-color: #faf5ff; border-radius: 8px; padding: 24px; border-left: 4px solid #7c3aed;">
                 <h3 style="margin: 0 0 12px; font-size: 16px; font-weight: 600; color: #7c3aed;">What's Next?</h3>
                 <p style="margin: 0; font-size: 14px; color: #374151; line-height: 1.6;">
+                  Your personalized storybook featuring <strong>${charLabel}</strong>${numChars > 1 ? ` (${numChars} characters)` : ''} is now being created! Our AI is crafting unique 4K illustrations based on your photos.
                   ${isHardcover
-                    ? 'Your personalized storybook is now being created! Our AI is crafting unique 4K illustrations based on your photos. Once complete, your hardcover book will be printed and shipped to the address above. You\'ll receive another email with tracking information when it ships.'
-                    : 'Your personalized storybook is now being created! Our AI is crafting unique 4K illustrations based on your photos. You\'ll receive another email with your download link once it\'s ready (typically within 15-30 minutes).'
+                    ? ' Once complete, your hardcover book will be printed and shipped to the address above. You\'ll receive another email with tracking information when it ships.'
+                    : ' You\'ll receive another email with your download link once it\'s ready (typically within 15-30 minutes).'
                   }
                 </p>
               </div>
@@ -429,9 +438,10 @@ ${payload.shipping.country || ''}
 
 WHAT'S NEXT?
 ------------
+Your personalized storybook featuring ${charLabel}${numChars > 1 ? ` (${numChars} characters)` : ''} is now being created! Our AI is crafting unique 4K illustrations based on your photos.
 ${isHardcover
-  ? 'Your personalized storybook is now being created! Our AI is crafting unique 4K illustrations based on your photos. Once complete, your hardcover book will be printed and shipped. You\'ll receive another email with tracking information when it ships.'
-  : 'Your personalized storybook is now being created! Our AI is crafting unique 4K illustrations based on your photos. You\'ll receive another email with your download link once it\'s ready (typically within 15-30 minutes).'
+  ? 'Once complete, your hardcover book will be printed and shipped. You\'ll receive another email with tracking information when it ships.'
+  : 'You\'ll receive another email with your download link once it\'s ready (typically within 15-30 minutes).'
 }
 
 Download your receipt: ${receiptUrl}
@@ -547,7 +557,9 @@ export async function POST(request: NextRequest) {
               tax: totals.tax,
               total: totals.grand_total || totals.total
             } : undefined,
-            shipping
+            shipping,
+            characterNames: getStringValue(customData.characterNames),
+            numCharacters: customData.numCharacters ? parseInt(String(customData.numCharacters), 10) : undefined
           })
         }
 

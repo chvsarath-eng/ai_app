@@ -17,9 +17,26 @@ export type ShippingAddress = {
   countryCode: string
 }
 
+export const genders = ['male', 'female', 'other'] as const
+export type Gender = (typeof genders)[number]
+
+export const relationships = [
+  'father', 'mother', 'son', 'daughter',
+  'brother', 'sister', 'friend', 'sibling',
+  'grandfather', 'grandmother', 'uncle', 'aunt', 'cousin'
+] as const
+export type Relationship = (typeof relationships)[number]
+
+export type CharacterInfo = {
+  name: string
+  age: number
+  gender: Gender
+  relationship: Relationship | string
+}
+
 export type CreateJobRequest = {
-  imageFile: File
-  theme: Theme
+  imageFiles: File[]
+  characters: CharacterInfo[]
   storyline: string
   email: string
   outputType: OutputType
