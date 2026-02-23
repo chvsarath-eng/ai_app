@@ -6,7 +6,7 @@ import { CreditCard, ShieldCheck, Truck, Mail } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useCheckoutStore } from '@/lib/checkout-store'
-import { initializePaddle, openPaddleCheckout } from '@/lib/paddle'
+import { initializePaddle, openPaddleCheckout, PADDLE_PRICES } from '@/lib/paddle'
 import { createStorybookJob } from '@/lib/storybookApi'
 import { trackEvent } from '@/lib/analytics'
 import type { OutputType } from '@/types/storybook'
@@ -189,6 +189,45 @@ export default function CheckoutPage () {
     ? Boolean(isAddressComplete && selectedShipping && store.email)
     : Boolean(store.outputType && store.imageFiles.length > 0 && store.email)
 
+  // Shared onSuccess handler after Paddle checkout completes
+  const handleCheckoutSuccess = async (completedTransactionId: string) => {
+    if (window.Paddle?.Checkout?.close) {
+      window.Paddle.Checkout.close()
+    }
+    setPaymentProcessing(true)
+
+    try {
+      const shippingAddress = isHardcover
+        ? {
+            fullName: store.shippingName,
+            phone: store.shippingPhone || undefined,
+            line1: store.shippingAddress1,
+            line2: store.shippingAddress2 || undefined,
+            city: store.shippingCity,
+            region: store.shippingRegion,
+            postalCode: store.shippingPostalCode,
+            countryCode: store.shippingCountry
+          }
+        : undefined
+
+      const res = await createStorybookJob({
+        imageFiles: store.imageFiles,
+        characters: store.characters,
+        storyline: store.storyline,
+        email: store.email || '',
+        outputType: store.outputType as OutputType,
+        shippingAddress
+      })
+
+      store.reset()
+      router.push(`/order/${res.jobId}?tx=${completedTransactionId}`)
+    } catch (err) {
+      console.error('Failed to create job:', err)
+      setPaymentProcessing(false)
+      setIsSubmitting(false)
+    }
+  }
+
   const handlePlaceOrder = async () => {
     if (!store.outputType || store.imageFiles.length === 0 || isSubmitting) return
     if (isHardcover && (!selectedShipping || !isAddressComplete)) return
@@ -200,27 +239,58 @@ export default function CheckoutPage () {
     setIsSubmitting(true)
     setCheckoutError(null)
 
+    // --- DIGITAL: open Paddle directly with items (no server round-trip)
+    // Paddle geolocates the buyer and auto-presents local currency + correct tax
+    if (!isHardcover) {
+      const characterNames = store.characters
+        .map((c: { name?: string }) => c?.name || '')
+        .filter(Boolean)
+
+      trackEvent('checkout_opened', { output_type: store.outputType })
+
+      openPaddleCheckout(
+        {
+          items: [{ priceId: PADDLE_PRICES.DIGITAL, quantity: 1 }],
+          customer: { email: store.email },
+          customData: {
+            characters: JSON.stringify(store.characters),
+            storyline: store.storyline,
+            outputType: 'DIGI_BOOK',
+            numCharacters: String(store.characters.length),
+            characterNames: characterNames.join(', ')
+          },
+          settings: {
+            displayMode: 'overlay',
+            theme: 'light',
+            variant: 'multi-page',
+            allowLogout: false
+          }
+        },
+        {
+          onSuccess: handleCheckoutSuccess,
+          onClose: () => { setIsSubmitting(false) }
+        }
+      )
+      return
+    }
+
+    // --- HARDCOVER: server-created transaction (needed for dynamic shipping line item)
     const formData: Record<string, unknown> = {
       characters: store.characters,
       storyline: store.storyline,
       outputType: store.outputType,
-      numCharacters: store.characters.length
-    }
-
-    if (isHardcover && selectedShipping) {
-      Object.assign(formData, {
-        shippingName: store.shippingName,
-        shippingPhone: store.shippingPhone,
-        shippingAddress1: store.shippingAddress1,
-        shippingAddress2: store.shippingAddress2,
-        shippingCity: store.shippingCity,
-        shippingRegion: store.shippingRegion,
-        shippingPostalCode: store.shippingPostalCode,
-        shippingCountry: store.shippingCountry,
-        shippingLevel: selectedShipping.level,
-        shippingCost: selectedShipping.shipping_cost,
-        orderTotal: selectedShipping.total
-      })
+      numCharacters: store.characters.length,
+      shippingName: store.shippingName,
+      shippingPhone: store.shippingPhone,
+      shippingAddress1: store.shippingAddress1,
+      shippingAddress2: store.shippingAddress2,
+      shippingCity: store.shippingCity,
+      shippingRegion: store.shippingRegion,
+      shippingPostalCode: store.shippingPostalCode,
+      shippingCountry: store.shippingCountry,
+      shippingLevel: selectedShipping!.level,
+      shippingCost: selectedShipping!.shipping_cost,
+      orderTotal: selectedShipping!.total
     }
 
     try {
@@ -248,7 +318,6 @@ export default function CheckoutPage () {
         shipping_level: selectedShipping?.level
       })
 
-      // Open Paddle checkout overlay with multi-page layout
       openPaddleCheckout(
         {
           transactionId,
@@ -260,47 +329,8 @@ export default function CheckoutPage () {
           }
         },
         {
-          onSuccess: async (completedTransactionId) => {
-            // Close Paddle overlay immediately to show our processing UI
-            if (window.Paddle?.Checkout?.close) {
-              window.Paddle.Checkout.close()
-            }
-            setPaymentProcessing(true)
-
-            try {
-              const shippingAddress = isHardcover
-                ? {
-                    fullName: store.shippingName,
-                    phone: store.shippingPhone || undefined,
-                    line1: store.shippingAddress1,
-                    line2: store.shippingAddress2 || undefined,
-                    city: store.shippingCity,
-                    region: store.shippingRegion,
-                    postalCode: store.shippingPostalCode,
-                    countryCode: store.shippingCountry
-                  }
-                : undefined
-
-              const res = await createStorybookJob({
-                imageFiles: store.imageFiles,
-                characters: store.characters,
-                storyline: store.storyline,
-                email: store.email || '',
-                outputType: store.outputType as OutputType,
-                shippingAddress
-              })
-
-              store.reset()
-              router.push(`/order/${res.jobId}?tx=${completedTransactionId}`)
-            } catch (err) {
-              console.error('Failed to create job:', err)
-              setPaymentProcessing(false)
-              setIsSubmitting(false)
-            }
-          },
-          onClose: () => {
-            setIsSubmitting(false)
-          }
+          onSuccess: handleCheckoutSuccess,
+          onClose: () => { setIsSubmitting(false) }
         }
       )
     } catch (err) {

@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { Check, Sparkles, ArrowRight, Clock, Download, PlusCircle } from 'lucide-react'
+import { Check, Sparkles, ArrowRight, Clock, PlusCircle } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -22,7 +22,6 @@ export function PaymentSuccess ({
 }) {
   const isDigital = outputType === 'DIGI_BOOK'
   const productName = isDigital ? 'Digital Storybook' : 'Premium Hardcover Book'
-  const price = isDigital ? '$14.99' : '$39.99'
 
   return (
     <Card className="relative mx-auto w-full max-w-md overflow-hidden lg:max-w-4xl">
@@ -69,10 +68,19 @@ export function PaymentSuccess ({
                   <span className="text-sm text-zinc-500">Product</span>
                   <span className="text-sm font-medium text-zinc-800">{productName}</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-zinc-500">Amount</span>
-                  <span className="text-sm font-medium text-emerald-600">{price}</span>
-                </div>
+                {transactionId && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-zinc-500">Receipt</span>
+                    <a
+                      href={`/api/paddle/transactions/${transactionId}/invoice`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm font-medium text-violet-600 underline hover:text-violet-700"
+                    >
+                      View receipt
+                    </a>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-zinc-500">Order ID</span>
                   <span className="max-w-[180px] truncate font-mono text-xs text-zinc-600" title={jobId}>
@@ -110,24 +118,6 @@ export function PaymentSuccess ({
 
             {/* Action buttons */}
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:gap-3">
-              {transactionId ? (
-                <Button
-                  asChild
-                  variant="outline"
-                  size="sm"
-                  className="w-full sm:flex-1"
-                >
-                  <a
-                    href={`/api/paddle/transactions/${transactionId}/invoice`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Receipt
-                  </a>
-                </Button>
-              ) : null}
-
               <Button
                 onClick={onCreateAnother}
                 size="sm"

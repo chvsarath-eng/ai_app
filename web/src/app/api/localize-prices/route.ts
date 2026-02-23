@@ -2,52 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
 
-// Base prices in USD
-const BASE_PRICES = {
-  digital: 14.99,
-  hardcover: 39.99
-}
+const PADDLE_API_KEY = process.env.PADDLE_API_KEY
+const PADDLE_ENVIRONMENT = process.env.NEXT_PUBLIC_PADDLE_ENVIRONMENT || 'sandbox'
+const PADDLE_API_BASE = PADDLE_ENVIRONMENT === 'production'
+  ? 'https://api.paddle.com'
+  : 'https://sandbox-api.paddle.com'
 
-// Currency symbols mapping
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  USD: '$', EUR: '€', GBP: '£', INR: '₹',
-  JPY: '¥', AUD: 'A$', CAD: 'C$', BRL: 'R$',
-  CNY: '¥', KRW: '₩', MXN: '$', SGD: 'S$',
-  CHF: 'CHF', HKD: 'HK$', SEK: 'kr', NOK: 'kr',
-  DKK: 'kr', NZD: 'NZ$', ZAR: 'R', THB: '฿',
-  PLN: 'zł', CZK: 'Kč', HUF: 'Ft', TRY: '₺',
-  ILS: '₪', PHP: '₱', MYR: 'RM', IDR: 'Rp',
-  RON: 'lei', ISK: 'kr'
-}
+const DIGITAL_PRICE_ID = process.env.NEXT_PUBLIC_PADDLE_PRICE_DIGITAL || 'pri_01kgbfsfghbddqsaz0t77m50qy'
+const HARDCOVER_PRICE_ID = process.env.NEXT_PUBLIC_PADDLE_PRICE_HARDCOVER || 'pri_01kgbfsgjxhsgab6kp453mqh0n'
 
-// Currencies supported by Frankfurter API (ECB rates)
-const SUPPORTED_CURRENCIES = new Set([
-  'USD', 'EUR', 'GBP', 'INR', 'JPY', 'AUD', 'CAD', 'BRL',
-  'CNY', 'CHF', 'HKD', 'KRW', 'MXN', 'SGD', 'THB', 'TRY',
-  'ZAR', 'SEK', 'NOK', 'DKK', 'NZD', 'PLN', 'CZK', 'HUF',
-  'ILS', 'PHP', 'MYR', 'IDR', 'RON', 'ISK', 'BGN'
-])
-
-// Format price with currency symbol
-function formatPrice(amount: number, currencyCode: string, symbol: string): string {
-  // Currencies that typically don't use decimals
-  const noDecimalCurrencies = ['JPY', 'KRW', 'IDR', 'VND', 'HUF']
-  const useDecimals = !noDecimalCurrencies.includes(currencyCode)
-  
-  const formattedAmount = useDecimals 
-    ? amount.toFixed(2) 
-    : Math.round(amount).toLocaleString()
-  
-  // Symbol-after currencies
-  const symbolAfterCurrencies = ['SEK', 'NOK', 'DKK', 'ISK', 'CZK', 'PLN', 'HUF']
-  if (symbolAfterCurrencies.includes(currencyCode)) {
-    return `${formattedAmount} ${symbol}`
-  }
-  
-  return `${symbol}${formattedAmount}`
-}
-
-// Default USD response
+// Default USD fallback (pre-tax subtotals shown on pricing page)
 const DEFAULT_RESPONSE = {
   currencyCode: 'USD',
   currencySymbol: '$',
@@ -56,77 +20,98 @@ const DEFAULT_RESPONSE = {
   isLocalized: false
 }
 
-export async function GET(request: NextRequest) {
+export async function GET (request: NextRequest) {
+  if (!PADDLE_API_KEY) {
+    console.warn('PADDLE_API_KEY not set, returning default prices')
+    return NextResponse.json(DEFAULT_RESPONSE)
+  }
+
   try {
-    // Get client IP from headers (Cloud Run sets x-forwarded-for)
+    // Get client IP from Cloud Run headers
     const forwardedFor = request.headers.get('x-forwarded-for')
     const realIp = request.headers.get('x-real-ip')
     const clientIp = forwardedFor?.split(',')[0]?.trim() || realIp || null
 
-    // Skip localization for local IPs
-    if (!clientIp || clientIp === '127.0.0.1' || clientIp === '::1') {
-      return NextResponse.json(DEFAULT_RESPONSE)
+    // Build the Paddle preview prices request
+    const previewBody: Record<string, unknown> = {
+      items: [
+        { price_id: DIGITAL_PRICE_ID, quantity: 1 },
+        { price_id: HARDCOVER_PRICE_ID, quantity: 1 }
+      ]
     }
 
-    // Step 1: Detect user's country and currency from IP using ipapi.co
-    const geoResponse = await fetch(`https://ipapi.co/${clientIp}/json/`, {
-      headers: { 'User-Agent': 'img2x/1.0' }
+    // Pass IP so Paddle can geolocate and auto-convert currency
+    // For local dev (no real IP), Paddle returns USD with no conversion
+    if (clientIp && clientIp !== '127.0.0.1' && clientIp !== '::1') {
+      previewBody.customer_ip_address = clientIp
+    }
+
+    const paddleResponse = await fetch(`${PADDLE_API_BASE}/prices/preview`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PADDLE_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(previewBody)
     })
-    
-    if (!geoResponse.ok) {
-      console.error('ipapi.co failed:', geoResponse.status)
-      return NextResponse.json(DEFAULT_RESPONSE)
-    }
-    
-    const geoData = await geoResponse.json()
-    const detectedCurrency = geoData.currency || 'USD'
-    
-    console.log('Detected location:', {
-      ip: clientIp,
-      country: geoData.country,
-      currency: detectedCurrency
-    })
 
-    // If USD or unsupported currency, return default
-    if (detectedCurrency === 'USD' || !SUPPORTED_CURRENCIES.has(detectedCurrency)) {
+    if (!paddleResponse.ok) {
+      const errorText = await paddleResponse.text()
+      console.error('Paddle preview prices failed:', paddleResponse.status, errorText)
       return NextResponse.json(DEFAULT_RESPONSE)
     }
 
-    // Step 2: Get exchange rate from Frankfurter
-    const rateResponse = await fetch(
-      `https://api.frankfurter.dev/v1/latest?base=USD&symbols=${detectedCurrency}`
+    const paddleData = await paddleResponse.json()
+    const lineItems: Array<Record<string, unknown>> = paddleData?.data?.details?.line_items || []
+
+    if (lineItems.length === 0) {
+      console.error('Paddle preview prices returned no line items')
+      return NextResponse.json(DEFAULT_RESPONSE)
+    }
+
+    const currencyCode: string = (paddleData?.data?.currency_code as string) || 'USD'
+
+    // Find each item by price_id
+    const digitalItem = lineItems.find(
+      (item) => (item.price as Record<string, unknown>)?.id === DIGITAL_PRICE_ID
     )
-    
-    if (!rateResponse.ok) {
-      console.error('Frankfurter failed:', rateResponse.status)
-      return NextResponse.json(DEFAULT_RESPONSE)
-    }
-    
-    const rateData = await rateResponse.json()
-    const rate = rateData.rates?.[detectedCurrency]
-    
-    if (!rate) {
-      console.error('No rate found for', detectedCurrency)
+    const hardcoverItem = lineItems.find(
+      (item) => (item.price as Record<string, unknown>)?.id === HARDCOVER_PRICE_ID
+    )
+
+    if (!digitalItem || !hardcoverItem) {
+      console.error('Could not find price items in Paddle preview response')
       return NextResponse.json(DEFAULT_RESPONSE)
     }
 
-    // Step 3: Convert prices
-    const symbol = CURRENCY_SYMBOLS[detectedCurrency] || detectedCurrency
-    const digitalLocal = BASE_PRICES.digital * rate
-    const hardcoverLocal = BASE_PRICES.hardcover * rate
+    // Use unit_totals.total (tax-inclusive total) — the number the customer will pay
+    // formatted_unit_totals contains currency-formatted strings from Paddle
+    const digitalFormatted = digitalItem.formatted_unit_totals as Record<string, string>
+    const hardcoverFormatted = hardcoverItem.formatted_unit_totals as Record<string, string>
+    const digitalTotals = digitalItem.unit_totals as Record<string, string>
+    const hardcoverTotals = hardcoverItem.unit_totals as Record<string, string>
+
+    const isLocalized = currencyCode !== 'USD'
+
+    console.log('Paddle price preview:', {
+      ip: clientIp,
+      currencyCode,
+      digital: digitalFormatted?.total,
+      hardcover: hardcoverFormatted?.total
+    })
 
     return NextResponse.json({
-      currencyCode: detectedCurrency,
-      currencySymbol: symbol,
+      currencyCode,
+      // Paddle returns formatted strings like "$14.99" or "£11.99" or "₹1,249"
       digital: {
-        price: formatPrice(digitalLocal, detectedCurrency, symbol),
-        priceRaw: Math.round(digitalLocal * 100)
+        price: digitalFormatted?.total || DEFAULT_RESPONSE.digital.price,
+        priceRaw: parseInt(digitalTotals?.total || '1499', 10)
       },
       hardcover: {
-        price: formatPrice(hardcoverLocal, detectedCurrency, symbol),
-        priceRaw: Math.round(hardcoverLocal * 100)
+        price: hardcoverFormatted?.total || DEFAULT_RESPONSE.hardcover.price,
+        priceRaw: parseInt(hardcoverTotals?.total || '3999', 10)
       },
-      isLocalized: true
+      isLocalized
     })
   } catch (error) {
     console.error('Localization error:', error)

@@ -129,10 +129,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate output type
-    if (!['DIGI_BOOK', 'LULU_BOOK'].includes(outputType)) {
+    // This endpoint only handles hardcover (LULU_BOOK) orders.
+    // Digital (DIGI_BOOK) orders go directly through Paddle.Checkout.open(items) client-side.
+    if (outputType !== 'LULU_BOOK') {
       return NextResponse.json(
-        { error: 'Invalid outputType. Must be DIGI_BOOK or LULU_BOOK' },
+        { error: 'Invalid outputType. Only LULU_BOOK is handled server-side.' },
         { status: 400 }
       )
     }

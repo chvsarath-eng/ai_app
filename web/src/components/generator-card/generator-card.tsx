@@ -11,6 +11,8 @@ import { Wand2, Book, Sparkles, UserPlus } from 'lucide-react'
 
 import { initializePaddle } from '@/lib/paddle'
 import { useCheckoutStore } from '@/lib/checkout-store'
+import { useFormDraftStore } from '@/lib/form-draft-store'
+import type { CharacterDraft } from '@/lib/form-draft-store'
 import { outputTypes } from '@/types/storybook'
 import type { OutputType, CharacterInfo } from '@/types/storybook'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,7 +34,7 @@ const characterSchema = z.object({
 })
 
 const formSchema = z.object({
-  characters: z.array(characterSchema).min(1, 'At least one character is required').max(4, 'Maximum 4 characters'),
+  characters: z.array(characterSchema).min(1, 'At least one character is required').max(2, 'Maximum 2 characters on homepage'),
   storyline: z.string().trim().min(1, 'Storyline is required').max(180, 'Keep it under 180 characters'),
   outputType: z.enum(outputTypes, { message: 'Please select a book type' })
 }).superRefine((data, ctx) => {
@@ -75,6 +77,7 @@ const defaultCharacter = {
 export function GeneratorCard ({ className }: { className?: string }) {
   const router = useRouter()
   const setProductInfo = useCheckoutStore((state) => state.setProductInfo)
+  const { setDraft } = useFormDraftStore()
 
   const [successData, setSuccessData] = useState<{
     transactionId: string
@@ -89,6 +92,7 @@ export function GeneratorCard ({ className }: { className?: string }) {
   const form = useForm<FormInput>({
     resolver: zodResolver(formSchema),
     mode: 'onSubmit',
+    reValidateMode: 'onSubmit',
     defaultValues: {
       characters: [{ ...defaultCharacter }],
       storyline: '',
@@ -194,18 +198,23 @@ export function GeneratorCard ({ className }: { className?: string }) {
           <form onSubmit={onSubmit} className="space-y-4" aria-label="Storybook generator">
             {/* Character cards */}
             <div className="space-y-3">
-              {fields.map((field, index) => (
-                <CharacterCard
-                  key={field.id}
-                  index={index}
-                  showExtendedFields={showExtendedFields}
-                  isDisabled={createJobMutation.isPending}
-                  onRemove={index > 0 ? () => remove(index) : undefined}
-                />
-              ))}
+              <div className={cn(
+                'grid gap-3',
+                characterCount > 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'
+              )}>
+                {fields.map((field, index) => (
+                  <CharacterCard
+                    key={field.id}
+                    index={index}
+                    showExtendedFields={showExtendedFields}
+                    isDisabled={createJobMutation.isPending}
+                    onRemove={index > 0 ? () => remove(index) : undefined}
+                  />
+                ))}
+              </div>
 
               {/* Add Character button */}
-              {characterCount < 4 && (
+              {characterCount < 2 && (
                 <Button
                   type="button"
                   variant="outline"
@@ -214,13 +223,60 @@ export function GeneratorCard ({ className }: { className?: string }) {
                   disabled={createJobMutation.isPending}
                 >
                   <UserPlus className="mr-2 h-4 w-4" />
-                  Add character ({characterCount}/4)
+                  Add character ({characterCount}/2)
                 </Button>
               )}
 
-              {characterCount < 4 && (
+              {characterCount === 2 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-dashed border-violet-400 bg-gradient-to-r from-violet-50 to-fuchsia-50 text-violet-700 font-medium hover:border-violet-500 hover:from-violet-100 hover:to-fuchsia-100"
+                  onClick={() => {
+                    const currentValues = form.getValues()
+                    const charactersWithPreviews: CharacterDraft[] = currentValues.characters.map(c => ({
+                      imageFile: c.imageFile,
+                      imagePreviewUrl: c.imageFile ? URL.createObjectURL(c.imageFile) : undefined,
+                      name: c.name,
+                      age: typeof c.age === 'number' ? c.age : undefined,
+                      gender: c.gender || '',
+                      relationship: c.relationship || ''
+                    }))
+                    
+                    // Add a 3rd empty character so user sees the new slot immediately
+                    charactersWithPreviews.push({
+                      imageFile: undefined,
+                      imagePreviewUrl: undefined,
+                      name: '',
+                      age: undefined,
+                      gender: '',
+                      relationship: ''
+                    })
+                    
+                    setDraft({
+                      characters: charactersWithPreviews,
+                      storyline: currentValues.storyline,
+                      outputType: currentValues.outputType
+                    })
+                    
+                    router.push('/create')
+                  }}
+                  disabled={createJobMutation.isPending}
+                >
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Add more characters
+                </Button>
+              )}
+
+              {characterCount < 2 && (
                 <p className="text-center text-xs text-zinc-400">
                   Add a friend, sibling, or parent to the story
+                </p>
+              )}
+              
+              {characterCount === 2 && (
+                <p className="text-center text-xs text-zinc-500">
+                  Want to add 3-4 characters? Use our full creation page for more space
                 </p>
               )}
             </div>
