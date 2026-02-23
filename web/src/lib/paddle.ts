@@ -79,7 +79,7 @@ export interface PaddleCheckoutCallbacks {
 }
 
 export const PADDLE_PRICES = {
-  DIGITAL: process.env.NEXT_PUBLIC_PADDLE_PRICE_DIGITAL || 'pri_01kgbfsfghbddqsaz0t77m50qy',
+  DIGITAL: process.env.NEXT_PUBLIC_PADDLE_PRICE_DIGITAL || 'pri_01kj3z2j9gyfp7bxn261k2ghs7',
   HARDCOVER: process.env.NEXT_PUBLIC_PADDLE_PRICE_HARDCOVER || 'pri_01kgbfsgjxhsgab6kp453mqh0n'
 }
 
