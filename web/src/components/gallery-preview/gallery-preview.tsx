@@ -10,40 +10,36 @@ import cover1 from '../../../gallery/images/cover_1.jpg'
 import cover2 from '../../../gallery/images/cover_2.png'
 import cover3 from '../../../gallery/images/cover_3.png'
 import cover4 from '../../../gallery/images/cover_4.png'
+import cover5 from '../../../gallery/images/cover_5.png'
 
-const covers: StaticImageData[] = [
-  cover1,
-  cover2,
-  cover3,
-  cover4,
-  cover2,
-  cover3
+type GalleryBook = {
+  cover: StaticImageData
+  bookNumber: number
+}
+
+// Keep this list in sync with files in /public/Gallery_books/digital_book_<n>.html
+const galleryBooks: GalleryBook[] = [
+  { cover: cover1, bookNumber: 1 },
+  { cover: cover2, bookNumber: 2 },
+  { cover: cover3, bookNumber: 3 },
+  { cover: cover4, bookNumber: 4 },
+  { cover: cover5, bookNumber: 5 }
 ]
 
-const books: StaticImageData[] = Array.from({ length: 10 }, (_, index) => {
-  return covers[index % covers.length]
+const books: GalleryBook[] = Array.from({ length: 10 }, (_, index) => {
+  return galleryBooks[index % galleryBooks.length]
 })
 
-// Map book index to flipbook HTML file
-const getBookUrl = (index: number): string => {
-  // First book uses digital_book_1.html
-  if (index === 0) {
-    return '/Gallery_books/digital_book_1.html'
-  }
-  // Second book uses digital_book_2.html if available
-  if (index === 1) {
-    return '/Gallery_books/digital_book_2.html'
-  }
-  // Default to book 1 for other books
-  return '/Gallery_books/digital_book_1.html'
+const getBookUrl = (bookNumber: number): string => {
+  return `/Gallery_books/digital_book_${bookNumber}.html`
 }
 
 export function GalleryPreview () {
   const [isOpen, setIsOpen] = useState(false)
-  const [selectedBookIndex, setSelectedBookIndex] = useState<number>(0)
+  const [selectedBook, setSelectedBook] = useState<GalleryBook>(books[0])
 
-  const handleOpen = useCallback((index: number) => {
-    setSelectedBookIndex(index)
+  const handleOpen = useCallback((book: GalleryBook) => {
+    setSelectedBook(book)
     setIsOpen(true)
   }, [])
 
@@ -70,18 +66,18 @@ export function GalleryPreview () {
   return (
     <>
       <div className={styles.gallery}>
-        {books.map((cover, index) => (
+        {books.map((book, index) => (
           <button
             key={`book-${index}`}
             type="button"
             className={styles.bookContainer}
             aria-label={`Open book preview ${index + 1}`}
             style={{ '--i': index } as CSSProperties}
-            onClick={() => handleOpen(index)}
+            onClick={() => handleOpen(book)}
           >
             <div className={styles.book}>
               <div className={styles.frontFace}>
-                <div className={styles.cover} style={{ backgroundImage: `url(${cover.src})` }}>
+                <div className={styles.cover} style={{ backgroundImage: `url(${book.cover.src})` }}>
                   <div className={styles.coverOverlay} />
                 </div>
               </div>
@@ -103,8 +99,8 @@ export function GalleryPreview () {
               ×
             </button>
             <iframe
-              title={`Digital book preview ${selectedBookIndex + 1}`}
-              src={getBookUrl(selectedBookIndex)}
+              title={`Digital book preview ${selectedBook.bookNumber}`}
+              src={getBookUrl(selectedBook.bookNumber)}
               className={styles.modalFrame}
               allow="fullscreen"
             />
