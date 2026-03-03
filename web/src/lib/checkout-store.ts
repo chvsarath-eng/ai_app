@@ -10,6 +10,7 @@ export interface CheckoutData {
   storyline: string
   email: string
   outputType: OutputType | null
+  discountCode: string
 
   // Shipping address
   shippingName: string
@@ -38,6 +39,7 @@ interface CheckoutStore extends CheckoutData {
   setShippingAddress: (address: Partial<CheckoutData>) => void
   setShippingOption: (level: string, cost: number) => void
   setEmail: (email: string) => void
+  setDiscountCode: (discountCode: string) => void
   reset: () => void
   isReady: () => boolean
 }
@@ -49,6 +51,7 @@ const initialState: CheckoutData = {
   storyline: '',
   email: '',
   outputType: null,
+  discountCode: '',
   shippingName: '',
   shippingPhone: '',
   shippingAddress1: '',
@@ -86,6 +89,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
       }),
 
       setEmail: (email) => set({ email }),
+      setDiscountCode: (discountCode) => set({ discountCode }),
 
       reset: () => set(initialState),
 
@@ -109,6 +113,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
         storyline: state.storyline,
         email: state.email,
         outputType: state.outputType,
+        discountCode: state.discountCode,
         shippingName: state.shippingName,
         shippingPhone: state.shippingPhone,
         shippingAddress1: state.shippingAddress1,

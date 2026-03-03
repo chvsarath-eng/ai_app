@@ -18,7 +18,7 @@ interface LocalizedPrices {
 const DEFAULT_PRICES: LocalizedPrices = {
   currencyCode: 'USD',
   currencySymbol: '$',
-  digital: { price: '$14.99', priceRaw: 1499 },
+  digital: { price: '$9.99', priceRaw: 999 },
   hardcover: { price: '$39.99', priceRaw: 3999 },
   isLocalized: false
 }

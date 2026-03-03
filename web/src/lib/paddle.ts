@@ -58,6 +58,8 @@ export interface PaddleCheckoutOptions {
       line2?: string
     }
   }
+  discountCode?: string
+  discountId?: string
   customData?: Record<string, string>
   successUrl?: string
   settings?: {
@@ -70,6 +72,8 @@ export interface PaddleCheckoutOptions {
     frameInitialHeight?: number
     frameStyle?: string
     allowLogout?: boolean
+    showAddDiscounts?: boolean
+    allowDiscountRemoval?: boolean
   }
 }
 
@@ -79,11 +83,11 @@ export interface PaddleCheckoutCallbacks {
 }
 
 export const PADDLE_PRICES = {
-  DIGITAL: process.env.NEXT_PUBLIC_PADDLE_PRICE_DIGITAL || 'pri_01kj3z2j9gyfp7bxn261k2ghs7',
-  HARDCOVER: process.env.NEXT_PUBLIC_PADDLE_PRICE_HARDCOVER || 'pri_01kgbfsgjxhsgab6kp453mqh0n'
+  DIGITAL: process.env.NEXT_PUBLIC_PADDLE_PRICE_DIGITAL || 'pri_01kjs01khpqbnzar05jcpsmehp',
+  HARDCOVER: process.env.NEXT_PUBLIC_PADDLE_PRICE_HARDCOVER || 'pri_01kjp9fre6y1ypcntekw5vrk3a'
 }
 
-export const PADDLE_ENVIRONMENT = (process.env.NEXT_PUBLIC_PADDLE_ENVIRONMENT || 'sandbox') as 'sandbox' | 'production'
+export const PADDLE_ENVIRONMENT = (process.env.NEXT_PUBLIC_PADDLE_ENVIRONMENT || 'production') as 'sandbox' | 'production'
 
 let paddleInitialized = false
 let currentCallbacks: PaddleCheckoutCallbacks | null = null

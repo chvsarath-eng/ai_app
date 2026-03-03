@@ -3,19 +3,19 @@ import { NextRequest, NextResponse } from 'next/server'
 export const runtime = 'nodejs'
 
 const PADDLE_API_KEY = process.env.PADDLE_API_KEY
-const PADDLE_ENVIRONMENT = process.env.NEXT_PUBLIC_PADDLE_ENVIRONMENT || 'sandbox'
+const PADDLE_ENVIRONMENT = process.env.NEXT_PUBLIC_PADDLE_ENVIRONMENT || 'production'
 const PADDLE_API_BASE = PADDLE_ENVIRONMENT === 'production'
   ? 'https://api.paddle.com'
   : 'https://sandbox-api.paddle.com'
 
-const DIGITAL_PRICE_ID = process.env.NEXT_PUBLIC_PADDLE_PRICE_DIGITAL || 'pri_01kj3z2j9gyfp7bxn261k2ghs7'
-const HARDCOVER_PRICE_ID = process.env.NEXT_PUBLIC_PADDLE_PRICE_HARDCOVER || 'pri_01kgbfsgjxhsgab6kp453mqh0n'
+const DIGITAL_PRICE_ID = process.env.NEXT_PUBLIC_PADDLE_PRICE_DIGITAL || 'pri_01kjs01khpqbnzar05jcpsmehp'
+const HARDCOVER_PRICE_ID = process.env.NEXT_PUBLIC_PADDLE_PRICE_HARDCOVER || 'pri_01kjp9fre6y1ypcntekw5vrk3a'
 
 // Default USD fallback (pre-tax subtotals shown on pricing page)
 const DEFAULT_RESPONSE = {
   currencyCode: 'USD',
   currencySymbol: '$',
-  digital: { price: '$14.99', priceRaw: 1499 },
+  digital: { price: '$9.99', priceRaw: 999 },
   hardcover: { price: '$39.99', priceRaw: 3999 },
   isLocalized: false
 }
@@ -105,7 +105,7 @@ export async function GET (request: NextRequest) {
       // Paddle returns formatted strings like "$14.99" or "£11.99" or "₹1,249"
       digital: {
         price: digitalFormatted?.total || DEFAULT_RESPONSE.digital.price,
-        priceRaw: parseInt(digitalTotals?.total || '1499', 10)
+        priceRaw: parseInt(digitalTotals?.total || '999', 10)
       },
       hardcover: {
         price: hardcoverFormatted?.total || DEFAULT_RESPONSE.hardcover.price,

@@ -36,6 +36,7 @@ export default function CheckoutPage () {
   const [shippingLoading, setShippingLoading] = useState(false)
   const [shippingError, setShippingError] = useState<string | null>(null)
   const [checkoutError, setCheckoutError] = useState<string | null>(null)
+  const [urlDiscountCode, setUrlDiscountCode] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [paymentProcessing, setPaymentProcessing] = useState(false)
 
@@ -64,6 +65,19 @@ export default function CheckoutPage () {
 
     return () => clearTimeout(timer)
   }, [store.characters, store.outputType, router, paymentProcessing])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const incoming = (params.get('discount') || params.get('coupon') || '').trim().toUpperCase()
+    setUrlDiscountCode(incoming)
+  }, [])
+
+  useEffect(() => {
+    if (!urlDiscountCode) return
+    if (store.discountCode === urlDiscountCode) return
+    store.setDiscountCode(urlDiscountCode)
+  }, [store, store.discountCode, urlDiscountCode])
 
   // Fetch shipping options when address is complete
   const fetchShippingCost = useCallback(async () => {
@@ -252,6 +266,7 @@ export default function CheckoutPage () {
         {
           items: [{ priceId: PADDLE_PRICES.DIGITAL, quantity: 1 }],
           customer: { email: store.email },
+          discountCode: store.discountCode || undefined,
           customData: {
             characters: JSON.stringify(store.characters),
             storyline: store.storyline,
@@ -263,7 +278,9 @@ export default function CheckoutPage () {
             displayMode: 'overlay',
             theme: 'light',
             variant: 'multi-page',
-            allowLogout: false
+            allowLogout: false,
+            showAddDiscounts: true,
+            allowDiscountRemoval: true
           }
         },
         {
@@ -325,7 +342,9 @@ export default function CheckoutPage () {
             displayMode: 'overlay',
             theme: 'light',
             variant: 'multi-page',
-            allowLogout: false
+            allowLogout: false,
+            showAddDiscounts: true,
+            allowDiscountRemoval: true
           }
         },
         {

@@ -77,6 +77,7 @@ const defaultCharacter = {
 export function GeneratorCard ({ className }: { className?: string }) {
   const router = useRouter()
   const setProductInfo = useCheckoutStore((state) => state.setProductInfo)
+  const setDiscountCode = useCheckoutStore((state) => state.setDiscountCode)
   const { setDraft } = useFormDraftStore()
 
   const [successData, setSuccessData] = useState<{
@@ -135,6 +136,13 @@ export function GeneratorCard ({ className }: { className?: string }) {
         output_type: parsed.outputType,
         num_characters: parsed.characters.length
       })
+
+      let incomingDiscountCode = ''
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search)
+        incomingDiscountCode = (params.get('discount') || params.get('coupon') || '').trim().toUpperCase()
+      }
+      setDiscountCode(incomingDiscountCode)
 
       router.push('/checkout')
       return { jobId: '', outputType: parsed.outputType as OutputType, redirected: true }
@@ -332,7 +340,7 @@ export function GeneratorCard ({ className }: { className?: string }) {
                         <span className="text-sm font-semibold text-zinc-900">Digital Book</span>
                       </div>
                       <p className="mt-0.5 text-xs text-zinc-500">HTML flipbook</p>
-                      <p className="mt-1 text-base font-bold text-violet-600">$14.99</p>
+                      <p className="mt-1 text-base font-bold text-violet-600">$9.99</p>
                       {form.watch('outputType') === 'DIGI_BOOK' && (
                         <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-violet-500 text-white">
                           <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">

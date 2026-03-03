@@ -21,7 +21,7 @@ export function OrderSummary ({
   onPlaceOrder
 }: OrderSummaryProps) {
   const isHardcover = store.outputType === 'LULU_BOOK'
-  const bookPrice = isHardcover ? store.bookPrice : 14.99
+  const bookPrice = isHardcover ? store.bookPrice : 9.99
   const shippingCost = isHardcover ? (selectedShipping?.shipping_cost || 0) : 0
   const subtotal = bookPrice + shippingCost
 

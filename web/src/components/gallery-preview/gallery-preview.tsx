@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { StaticImageData } from 'next/image'
 
@@ -24,11 +24,26 @@ const books: StaticImageData[] = Array.from({ length: 10 }, (_, index) => {
   return covers[index % covers.length]
 })
 
+// Map book index to flipbook HTML file
+const getBookUrl = (index: number): string => {
+  // First book uses digital_book_1.html
+  if (index === 0) {
+    return '/Gallery_books/digital_book_1.html'
+  }
+  // Second book uses digital_book_2.html if available
+  if (index === 1) {
+    return '/Gallery_books/digital_book_2.html'
+  }
+  // Default to book 1 for other books
+  return '/Gallery_books/digital_book_1.html'
+}
+
 export function GalleryPreview () {
   const [isOpen, setIsOpen] = useState(false)
-  const bookUrl = useMemo(() => '/Gallery_books/digital_book_1.html', [])
+  const [selectedBookIndex, setSelectedBookIndex] = useState<number>(0)
 
-  const handleOpen = useCallback(() => {
+  const handleOpen = useCallback((index: number) => {
+    setSelectedBookIndex(index)
     setIsOpen(true)
   }, [])
 
@@ -62,7 +77,7 @@ export function GalleryPreview () {
             className={styles.bookContainer}
             aria-label={`Open book preview ${index + 1}`}
             style={{ '--i': index } as CSSProperties}
-            onClick={handleOpen}
+            onClick={() => handleOpen(index)}
           >
             <div className={styles.book}>
               <div className={styles.frontFace}>
@@ -88,9 +103,10 @@ export function GalleryPreview () {
               ×
             </button>
             <iframe
-              title="Digital book preview"
-              src={bookUrl}
+              title={`Digital book preview ${selectedBookIndex + 1}`}
+              src={getBookUrl(selectedBookIndex)}
               className={styles.modalFrame}
+              allow="fullscreen"
             />
           </div>
           <button

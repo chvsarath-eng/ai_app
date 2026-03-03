@@ -68,6 +68,29 @@ Required variables:
   - `PADDLE_API_KEY` — Server-side API key
   - `PADDLE_WEBHOOK_SECRET` — Webhook signature verification
 
+Current live catalog IDs:
+- Digital ebook retail (`$9.99`): `pri_01kjs01khpqbnzar05jcpsmehp`
+- Launch discount code: `LAUNCH699` (flat `$3.00` off, final `$6.99`)
+- Hardcover (`$39.99`): `pri_01kjp9fre6y1ypcntekw5vrk3a`
+
+### Local Testing Before Push
+
+Use a local `.env` (do not commit) and set Paddle values explicitly:
+
+```bash
+NEXT_PUBLIC_PADDLE_ENVIRONMENT=production
+NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=live_xxx
+NEXT_PUBLIC_PADDLE_PRICE_DIGITAL=pri_01kjs01khpqbnzar05jcpsmehp
+NEXT_PUBLIC_PADDLE_PRICE_HARDCOVER=pri_01kjp9fre6y1ypcntekw5vrk3a
+PADDLE_API_KEY=pdl_live_xxx
+PADDLE_WEBHOOK_SECRET=pdl_ntfset_live_xxx
+```
+
+If you want to test with sandbox locally, switch all of the above to sandbox equivalents:
+- `NEXT_PUBLIC_PADDLE_ENVIRONMENT=sandbox`
+- sandbox client token + sandbox API key + sandbox webhook secret
+- sandbox price IDs for digital/hardcover
+
 ### 3) Run dev server
 
 ```
@@ -184,7 +207,7 @@ gcloud builds submit --config=web/cloudbuild.yaml --substitutions=COMMIT_SHA=$(g
 ## API Flow (High Level)
 
 1. User uploads photo + enters details (name, theme, email)
-2. User selects book type (Digital $14.99 / Hardcover $39.99)
+2. User selects book type (Digital $9.99 retail, launch offer can discount to $6.99 / Hardcover $39.99)
 3. For hardcover: user enters shipping address, selects shipping option (Lulu API calculates costs)
 4. Click "Create My Book" → `/api/checkout` creates Paddle transaction server-side
    - For hardcover: transaction includes catalog product + non-catalog shipping line item

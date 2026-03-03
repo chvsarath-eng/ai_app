@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const PADDLE_PRICES = {
-  DIGI_BOOK: process.env.NEXT_PUBLIC_PADDLE_PRICE_DIGITAL || 'pri_01kgbfsfghbddqsaz0t77m50qy',
-  LULU_BOOK: process.env.NEXT_PUBLIC_PADDLE_PRICE_HARDCOVER || 'pri_01kgbfsgjxhsgab6kp453mqh0n'
+  DIGI_BOOK: process.env.NEXT_PUBLIC_PADDLE_PRICE_DIGITAL || 'pri_01kjs01khpqbnzar05jcpsmehp',
+  LULU_BOOK: process.env.NEXT_PUBLIC_PADDLE_PRICE_HARDCOVER || 'pri_01kjp9fre6y1ypcntekw5vrk3a'
 }
 
 const PADDLE_API_KEY = process.env.PADDLE_API_KEY
-const PADDLE_ENVIRONMENT = process.env.NEXT_PUBLIC_PADDLE_ENVIRONMENT || 'sandbox'
+const PADDLE_ENVIRONMENT = process.env.NEXT_PUBLIC_PADDLE_ENVIRONMENT || 'production'
 const PADDLE_API_BASE = PADDLE_ENVIRONMENT === 'production'
   ? 'https://api.paddle.com'
   : 'https://sandbox-api.paddle.com'
@@ -149,6 +149,14 @@ export async function POST(request: NextRequest) {
 
     const isHardcover = outputType === 'LULU_BOOK'
     const priceId = PADDLE_PRICES[outputType as keyof typeof PADDLE_PRICES]
+
+    if (!priceId) {
+      console.error('Missing Paddle price ID for output type:', outputType)
+      return NextResponse.json(
+        { error: 'Payment price not configured for selected book type' },
+        { status: 500 }
+      )
+    }
 
     // Build custom data for webhook processing
     const characters = formData?.characters || []
