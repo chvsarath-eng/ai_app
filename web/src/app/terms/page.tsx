@@ -170,6 +170,7 @@ export default function TermsPage () {
           <li>Payment is required in full before order processing begins</li>
           <li>We accept major credit cards and other payment methods as displayed</li>
           <li>Payment processing is handled by secure third-party providers</li>
+          <li>Our order process is conducted by our online reseller Paddle.com. Paddle.com is the Merchant of Record for all our orders. Paddle provides all customer service inquiries and handles returns.</li>
           <li>You authorize us to charge your payment method for all fees incurred</li>
           <li>All sales are final once production begins (see Refund Policy below)</li>
         </ul>
@@ -347,8 +348,8 @@ export default function TermsPage () {
 
         <h3 className="text-lg font-semibold text-zinc-900 mt-6">12.3 Governing Law</h3>
         <p className="text-sm text-zinc-700">
-          These Terms are governed by the laws of [Your State/Country], without regard to conflict of law principles. 
-          Any arbitration or court proceeding will take place in [Your Location].
+          These Terms are governed by the laws of India, without regard to conflict of law principles.
+          Any arbitration or court proceeding will take place in Bengaluru, Karnataka, India.
         </p>
       </section>
 
@@ -406,10 +407,9 @@ export default function TermsPage () {
 
       <section className="mt-10 p-6 bg-violet-50 rounded-lg">
         <p className="text-sm text-zinc-700">
-          <strong>Legal Notice:</strong> These Terms of Service are provided as a template and should be reviewed by a 
-          qualified attorney to ensure compliance with all applicable laws in your jurisdiction. Laws vary by location and 
-          are subject to change. You should customize sections such as governing law, dispute resolution, and specific 
-          product details to match your business needs.
+          These Terms are intended to clearly describe your rights and responsibilities when using img2x.
+          If you have any legal questions, please contact{' '}
+          <a className="text-violet-600 hover:text-violet-700 underline" href="mailto:team@img2x.com">team@img2x.com</a>.
         </p>
       </section>
     </main>
