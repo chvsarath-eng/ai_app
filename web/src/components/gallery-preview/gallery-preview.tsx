@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { StaticImageData } from 'next/image'
+import { Loader2 } from 'lucide-react'
 
 import styles from './gallery-preview.module.css'
 
@@ -36,10 +37,12 @@ const getBookUrl = (bookNumber: number): string => {
 
 export function GalleryPreview () {
   const [isOpen, setIsOpen] = useState(false)
+  const [iframeLoaded, setIframeLoaded] = useState(false)
   const [selectedBook, setSelectedBook] = useState<GalleryBook>(books[0])
 
   const handleOpen = useCallback((book: GalleryBook) => {
     setSelectedBook(book)
+    setIframeLoaded(false)
     setIsOpen(true)
   }, [])
 
@@ -98,11 +101,25 @@ export function GalleryPreview () {
             >
               ×
             </button>
+            {!iframeLoaded && (
+              <div
+                className={styles.loadingOverlay}
+                style={{ backgroundImage: `url(${selectedBook.cover.src})` }}
+                aria-live="polite"
+              >
+                <div className={styles.loadingScrim} />
+                <div className={styles.loadingContent}>
+                  <Loader2 className={styles.spinner} aria-hidden="true" />
+                  <p className={styles.loadingText}>Loading 3D experience...</p>
+                </div>
+              </div>
+            )}
             <iframe
               title={`Digital book preview ${selectedBook.bookNumber}`}
               src={getBookUrl(selectedBook.bookNumber)}
-              className={styles.modalFrame}
+              className={`${styles.modalFrame} ${iframeLoaded ? styles.modalFrameVisible : styles.modalFrameHidden}`}
               allow="fullscreen"
+              onLoad={() => setIframeLoaded(true)}
             />
           </div>
           <button
