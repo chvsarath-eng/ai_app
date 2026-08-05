@@ -50,7 +50,7 @@ steps:
       - '--set-env-vars'
       - 'DODO_PAYMENTS_ENVIRONMENT=${_DODO_PAYMENTS_ENVIRONMENT},DODO_PRODUCT_DIGITAL_ID=${_DODO_PRODUCT_DIGITAL_ID},DODO_PRODUCT_HARDCOVER_ID=${_DODO_PRODUCT_HARDCOVER_ID},DODO_PRODUCT_SHIPPING_ID=${_DODO_PRODUCT_SHIPPING_ID}'
       - '--set-secrets'
-      - 'SMTP_HOST=smtp-host:latest,SMTP_PORT=smtp-port:latest,SMTP_USER=smtp-user:latest,SMTP_PASS=smtp-pass:latest,STORY_SERVICE_URL=story-service-url:latest,STORY_INVOKER_CREDENTIALS_JSON=story-invoker-credentials:latest,DODO_PAYMENTS_API_KEY=dodo-payments-api-key:latest,DODO_PAYMENTS_WEBHOOK_KEY=dodo-payments-webhook-key:latest'
+      - 'SMTP_HOST=smtp-host:latest,SMTP_PORT=smtp-port:latest,SMTP_USER=smtp-user:latest,SMTP_PASS=smtp-pass:latest,STORY_SERVICE_URL=story-service-url:latest,STORY_INVOKER_CREDENTIALS_JSON=story-invoker-credentials:latest'
 
 # Substitution variables (can be overridden in trigger)
 substitutions:

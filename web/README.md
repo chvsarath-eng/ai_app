@@ -139,7 +139,7 @@ echo -n "YOUR_DODO_PAYMENTS_API_KEY" | gcloud secrets versions add dodo-payments
 echo -n "YOUR_DODO_PAYMENTS_WEBHOOK_KEY" | gcloud secrets versions add dodo-payments-webhook-key --data-file=- --project=imgstr
 ```
 
-**All required secrets:**
+**All required secrets for temporary partner testing:**
 | Secret Name | Description |
 |-------------|-------------|
 | `smtp-host` | SMTP server hostname |
@@ -148,6 +148,10 @@ echo -n "YOUR_DODO_PAYMENTS_WEBHOOK_KEY" | gcloud secrets versions add dodo-paym
 | `smtp-pass` | SMTP password |
 | `story-service-url` | Story service Cloud Run URL |
 | `story-invoker-credentials` | Service account JSON for story service |
+
+**Additional secrets required when hosted Dodo payments are re-enabled:**
+| Secret Name | Description |
+|-------------|-------------|
 | `dodo-payments-api-key` | Dodo Payments server-side API key |
 | `dodo-payments-webhook-key` | Dodo Payments webhook verification key |
 
