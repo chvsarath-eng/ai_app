@@ -127,7 +127,7 @@ export function OrderConfirmation ({
                 <span className="text-xs text-zinc-500">Receipt</span>
                 <a
                   className="text-xs font-medium text-violet-600 hover:text-violet-700 underline"
-                  href={`/api/paddle/transactions/${transactionId}/invoice`}
+                  href={`/api/payments/${transactionId}/invoice`}
                   target="_blank"
                   rel="noreferrer"
                 >

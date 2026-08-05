@@ -48,18 +48,18 @@ This document provides everything an AI agent needs to understand and work on th
 │                                                                 │
 │  • App Router (pages, API routes)                               │
 │  • Photo upload + validation                                    │
-│  • Order management + Paddle checkout                           │
+│  • Order management + Dodo Payments checkout                    │
 │  • 3D book preview (Three.js)                                   │
 └──────────────┬──────────────────────────────┬───────────────────┘
                │ ID Token Auth                │ Webhooks
                ▼                              ▼
 ┌──────────────────────────────┐  ┌───────────────────────────────┐
-│    Story Service (Python)    │  │        Paddle Billing         │
+│    Story Service (Python)    │  │        Dodo Payments          │
 │    Cloud Run - us-central1   │  │        (Payment Gateway)      │
 │                              │  │                               │
-│  • AI image generation       │  │  • Checkout overlay           │
+│  • AI image generation       │  │  • Hosted checkout            │
 │  • Story composition         │  │  • Tax calculation            │
-│  • PDF/flipbook generation   │  │  • transaction.completed      │
+│  • PDF/flipbook generation   │  │  • payment.succeeded         │
 │  • Book-ready email          │  │  • Invoices/receipts          │
 └──────────────────────────────┘  └───────────────────────────────┘
                │
@@ -95,9 +95,9 @@ ai_app/
     │   │   ├── api/
     │   │   │   ├── storybook/generate/    # Create storybook job
     │   │   │   ├── storybook/jobs/[id]/   # Job status
-    │   │   │   ├── checkout/              # Paddle checkout initiation
-    │   │   │   ├── webhooks/paddle/       # Paddle webhook handler
-    │   │   │   ├── paddle/transactions/   # Invoice PDF redirect
+│   │   │   ├── checkout/              # Dodo checkout session flow
+│   │   │   ├── webhooks/dodo/         # Dodo webhook handler
+│   │   │   ├── payments/[paymentId]/  # Invoice PDF redirect
     │   │   │   └── contact/               # Contact form (SMTP)
     │   │   ├── order/[orderId]/   # Order confirmation (+ receipt link)
     │   │   ├── gallery/           # Example storybooks
@@ -117,7 +117,7 @@ ai_app/
     │   ├── lib/           # Utilities
     │   │   ├── storyApiServer.ts  # Story service client
     │   │   ├── storybookApi.ts    # API helpers
-    │   │   ├── paddle.ts          # Paddle.js checkout integration
+│   │   ├── dodo-payments.ts   # Dodo Payments server helpers
     │   │   ├── analytics.ts       # GA event tracking helper
     │   │   └── utils.ts           # General utilities
     │   │
@@ -142,7 +142,7 @@ ai_app/
 | 3D | Three.js / @react-three/fiber |
 | Forms | React Hook Form + Zod |
 | State | React Query (server) + Zustand (client) |
-| Payments | Paddle Billing (checkout overlay, webhooks, tax) |
+| Payments | Dodo Payments (hosted checkout, webhooks, tax) |
 | Email | Nodemailer (SMTP via Hostinger) |
 | Hosting | Google Cloud Run |
 | CI/CD | Cloud Build + GitHub triggers |
@@ -160,18 +160,18 @@ ai_app/
 5. User enters child's name + optional storyline
 6. User enters email
 7. User selects "Digital PDF" book type
-8. Click "Create My Book" → Paddle checkout overlay opens
-9. User completes payment (Paddle handles tax calculation)
-10. On success → `/api/storybook/generate` creates job
-11. Redirect to order confirmation page (with transaction ID)
-12. Paddle webhook (`transaction.completed`) → Order confirmation email sent from `team@img2x.com`
+8. Click "Create My Book" → Dodo checkout session is created and the user is redirected to hosted checkout
+9. User completes payment (Dodo handles tax calculation)
+10. User returns to `/checkout`, payment is verified, and then `/api/storybook/generate` creates job
+11. Redirect to order confirmation page (with payment ID)
+12. Dodo webhook (`payment.succeeded`) → Order confirmation email sent from `team@img2x.com`
 13. Story service generates book (async)
 14. Book-ready email sent with download link
 
 ### 2. Order Hardcover ($39.99)
 1. User selects "Hardcover" book type
 2. User fills shipping address form (name, address, city, country, etc.)
-3. Click "Create My Book" → Paddle checkout overlay opens
+3. Click "Create My Book" → Dodo checkout session is created and the user is redirected to hosted checkout
 4. User completes payment
 5. On success → Job created with shipping details
 6. Order confirmation email sent (includes shipping address)
@@ -182,7 +182,7 @@ ai_app/
 ### Email Flow (from team@img2x.com)
 | Trigger | Email Type | Content |
 |---------|------------|---------|
-| `transaction.completed` webhook | Order Confirmation | Receipt, order details, "what's next" |
+| `payment.succeeded` webhook | Order Confirmation | Receipt, order details, "what's next" |
 | Story job finished | Book Ready | Download link (digital) or shipping info (hardcover) |
 
 ---
@@ -202,13 +202,13 @@ SMTP_PORT=587
 SMTP_USER=team@img2x.com
 SMTP_PASS=xxx
 
-# Paddle Payment (sandbox or production)
-NEXT_PUBLIC_PADDLE_ENVIRONMENT=sandbox  # or "production"
-NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=test_xxx  # Client-side token
-NEXT_PUBLIC_PADDLE_PRICE_DIGITAL=pri_xxx  # Digital book price ID
-NEXT_PUBLIC_PADDLE_PRICE_HARDCOVER=pri_xxx  # Hardcover price ID
-PADDLE_API_KEY=pdl_xxx  # Server-side API key (for invoices)
-PADDLE_WEBHOOK_SECRET=pdl_ntfset_xxx  # Webhook signature verification
+# Dodo Payments
+DODO_PAYMENTS_ENVIRONMENT=test_mode  # or "live_mode"
+DODO_PRODUCT_DIGITAL_ID=product_xxx
+DODO_PRODUCT_HARDCOVER_ID=product_xxx
+DODO_PRODUCT_SHIPPING_ID=product_xxx  # pay-what-you-want shipping product
+DODO_PAYMENTS_API_KEY=dodo_xxx
+DODO_PAYMENTS_WEBHOOK_KEY=whsec_xxx
 
 # Lulu Print-on-Demand
 LULU_CLIENT_KEY=xxx
@@ -226,14 +226,13 @@ LULU_API_BASE=https://api.sandbox.lulu.com  # or api.lulu.com for production
 | `smtp-pass` | SMTP_PASS | SMTP password |
 | `story-service-url` | STORY_SERVICE_URL | Story service Cloud Run URL |
 | `story-invoker-credentials` | STORY_INVOKER_CREDENTIALS_JSON | Service account JSON |
-| `paddle-client-token` | NEXT_PUBLIC_PADDLE_CLIENT_TOKEN | Paddle client-side token |
-| `paddle-api-key` | PADDLE_API_KEY | Paddle server-side API key |
-| `paddle-webhook-secret` | PADDLE_WEBHOOK_SECRET | Webhook signature secret |
+| `dodo-payments-api-key` | DODO_PAYMENTS_API_KEY | Dodo Payments server-side API key |
+| `dodo-payments-webhook-key` | DODO_PAYMENTS_WEBHOOK_KEY | Dodo Payments webhook key |
 
 **Create secrets (one-time):**
 ```bash
-gcloud secrets create paddle-api-key --replication-policy="automatic" --project=imgstr
-gcloud secrets create paddle-webhook-secret --replication-policy="automatic" --project=imgstr
+gcloud secrets create dodo-payments-api-key --replication-policy="automatic" --project=imgstr
+gcloud secrets create dodo-payments-webhook-key --replication-policy="automatic" --project=imgstr
 ```
 
 ---
@@ -265,13 +264,11 @@ gcloud builds submit --config=web/cloudbuild.yaml --substitutions=COMMIT_SHA=$(g
 | Build uploading 300+ MiB | Missing `.gcloudignore` | Ensure `web/.gcloudignore` exists and excludes `node_modules/` |
 | `DialogContent requires DialogTitle` | Radix UI accessibility | Add `<DialogTitle className="sr-only">` |
 | API calls fail | Invalid service URL or credentials | Check `STORY_SERVICE_URL` and service account |
-| Paddle checkout 403 Forbidden | Domain not approved in Paddle | Add domain in Paddle Dashboard → Checkout Settings |
-| Paddle checkout 400 `transaction_default_checkout_url_not_set` | Missing default checkout URL | Set in Paddle Dashboard → Checkout Settings → Default Payment Link |
-| Paddle `$PADDLE_CLIENT_TOKEN` literal in headers | Build arg not passed correctly | Ensure `cloudbuild.yaml` has `secretEnv` and proper `--build-arg` format |
-| Invoice PDF 404 | Wrong Paddle API URL | Use `sandbox-api.paddle.com` for sandbox, `api.paddle.com` for production |
-| Webhook signature invalid | Wrong secret or verification logic | Check `PADDLE_WEBHOOK_SECRET` matches Paddle notification setting's `endpointSecretKey` |
+| Dodo checkout session fails | Missing product IDs or invalid checkout config | Check `DODO_PRODUCT_DIGITAL_ID`, `DODO_PRODUCT_HARDCOVER_ID`, and `DODO_PRODUCT_SHIPPING_ID` |
+| Invoice PDF 404 | Payment has no invoice yet | Retry after payment finalization in Dodo |
+| Webhook signature invalid | Wrong secret or verification logic | Check `DODO_PAYMENTS_WEBHOOK_KEY` |
 | Webhook 401 after deploying | Secret has trailing newline | See "GCP Secret Trailing Newline" fix below |
-| Order confirmation email not sent | Webhook doesn't include customer email | Webhook handler fetches email from Paddle API using `customer_id` |
+| Order confirmation email not sent | Webhook misconfigured or SMTP issue | Check `/api/webhooks/dodo` and SMTP credentials |
 
 ---
 
@@ -299,17 +296,15 @@ See `.cursor/rules/coding-standards.mdc` for details.
 - Domain mapping (img2x.com + www.img2x.com)
 - Google Analytics 4 (Measurement ID: G-Q12Z62SK1Q)
 - Cookie Consent Banner (GDPR compliant, react-cookie-consent + GA Consent Mode)
-- **Paddle Payment Integration:**
-  - Checkout overlay with multi-page layout (sandbox mode)
-  - Tax calculation (internal tax mode - Paddle calculates automatically)
+- **Dodo Payments Integration:**
+  - Hosted checkout flow with return verification
+  - Tax calculation handled by Dodo Payments
   - Shipping address collection (hardcover orders)
-  - Server-side transaction creation with non-catalog shipping line items
-  - Shipping costs from Lulu displayed as separate line item in Paddle checkout
-  - Quantity controls hidden (min/max set to 1)
-  - Custom product images in checkout
-  - Webhook handling (`transaction.completed`, `transaction.payment_failed`)
+  - Server-side session creation for both digital and hardcover orders
+  - Shipping costs from Lulu billed via a pay-what-you-want shipping product
+  - Webhook handling (`payment.succeeded`, `payment.failed`)
   - Order confirmation emails from `team@img2x.com`
-  - Invoice/receipt download via Paddle API
+  - Invoice/receipt download via Dodo payment invoices
   - Analytics events (`checkout_opened`, `checkout_completed`, etc.)
 - **Checkout Page UI:**
   - Clean, centered header with animated gradient title (ultraGlowText)
@@ -326,7 +321,7 @@ See `.cursor/rules/coding-standards.mdc` for details.
   - Email confirmations list all character names
 
 ### 🔄 In Progress
-- Production Paddle setup (switch from sandbox to live)
+- Production Dodo setup
 
 ### 📋 Backlog
 - Blog section for SEO content
@@ -348,18 +343,18 @@ See `web/SEO_CHECKLIST.md` for detailed SEO roadmap.
 
 4. **Face-lock Technology:** The key differentiator - AI keeps the child's face consistent across all illustrations (not just pasting).
 
-5. **Paddle vs Stripe:** Chose Paddle for Merchant of Record model - handles global tax compliance, VAT, invoices automatically. No need to manage tax registrations ourselves.
+5. **Dodo Payments:** Checkout is now created server-side via Dodo, with receipts/invoices coming from the payment provider and tax calculated during hosted checkout.
 
-6. **Payment Flow:** Paddle checkout opens as overlay, job is only created AFTER successful payment (not before). This prevents abandoned orders from creating jobs.
+6. **Payment Flow:** Dodo checkout redirects away from the app, so uploaded image files are cached in IndexedDB before redirect. On return, `/checkout` verifies the Dodo session/payment and only then creates the storybook job.
 
 7. **Two-Email System:** 
    - Email 1: Order confirmation (immediately after payment via webhook)
    - Email 2: Book ready (after AI generation completes)
    - Both sent from `team@img2x.com` via SMTP.
 
-8. **Paddle Domain Approval:** Paddle requires explicit domain approval. Add `img2x.com` (not `www.` or with protocol) in Paddle dashboard under Checkout Settings.
+8. **Dodo Shipping Product:** Hardcover checkout uses a dedicated pay-what-you-want Dodo product so Lulu shipping can be billed as a dynamic line item.
 
-9. **Default Checkout URL:** Paddle requires setting "Default checkout URL" in dashboard, otherwise checkout returns `transaction_default_checkout_url_not_set` error.
+9. **Hosted Return Verification:** The `/api/checkout` route both creates Dodo sessions and verifies returned session IDs so book generation only starts after confirmed payment success.
 
 10. **GCP Secret Trailing Newline:** When creating GCP secrets via PowerShell piping (e.g., `"value" | gcloud secrets versions add`), PowerShell adds a trailing newline. This breaks signature verification. **Fix:** Write secret to a file without newline first:
     ```powershell
@@ -368,19 +363,17 @@ See `web/SEO_CHECKLIST.md` for detailed SEO roadmap.
     ```
     Or use `echo -n` on Linux/Mac.
 
-11. **Payment Success UX:** Replaced generic Paddle success modal with inline branded success state showing order details, receipt download, and "Create Another Book" button for better UX.
+11. **Payment Success UX:** The success state remains branded and inline after returning from Dodo, with receipt download and "Create Another Book" actions.
 
-12. **Paddle Webhook Customer Email:** The `transaction.completed` webhook only includes `customer_id`, NOT the customer's email. Must call Paddle API (`GET /customers/{id}`) to fetch customer details including email before sending order confirmation emails.
+12. **Webhook Email Payload:** Dodo webhook events already include the customer on successful payments, so the webhook route can send order confirmations directly from `payment.succeeded`.
 
-13. **Paddle Address Prefill Validation:** Prefilling `customer.address` can trigger `validation.no_validation_set` errors. Prefill only the email and let Paddle collect address details in the overlay.
+13. **Checkout Redirect Tradeoff:** Because Dodo checkout is hosted, the app no longer depends on a browser overlay callback. Verification happens through a return-to-app step plus webhook delivery.
 
-14. **Server-Side Transaction for Shipping:** Shipping costs from Lulu are dynamic and can't be pre-configured in Paddle's catalog. Solution: Create transactions server-side via Paddle API (`POST /transactions`) with both the catalog product price AND a non-catalog shipping line item. Pass the `transactionId` to `Paddle.Checkout.open()` instead of `items`. This displays shipping as a separate billable line in Paddle checkout.
+14. **Dynamic Shipping Billing:** Shipping costs from Lulu are dynamic and are billed via the configured Dodo shipping product using a per-session `amount`.
 
-15. **Paddle Tax Mode:** Initially set to `external` which meant no tax was calculated. Changed to `internal` via Paddle API (`PATCH /prices/{id}`) so Paddle automatically calculates tax based on customer location. For digital orders, don't pre-create customer - let Paddle collect country at checkout.
+15. **Pricing Preview:** Localized price display now uses Dodo checkout preview with a graceful USD fallback when no country signal is available.
 
-16. **Paddle Checkout Variant:** Use `variant: 'multi-page'` for cleaner UX - separates customer details and payment into distinct steps instead of cramming everything on one page.
-
-17. **Paddle Quantity Controls:** Set `quantity.minimum: 1` and `quantity.maximum: 1` on prices via Paddle API to hide the +/- quantity stepper in checkout.
+16. **Invoice Access:** Receipt links now resolve through `/api/payments/[paymentId]/invoice` instead of old provider-specific transaction URLs.
 
 18. **Checkout Page Styling:** Use consistent violet-fuchsia gradient (from-violet-500 to-fuchsia-500) for buttons and accents. The checkout title uses `ultraGlowText` class for animated gradient effect matching homepage. Removed progress step indicators for cleaner look.
 
@@ -403,11 +396,11 @@ See `web/SEO_CHECKLIST.md` for detailed SEO roadmap.
 ### Complete Flow
 
 1. **User fills checkout form** → 1-4 character photos with metadata (name, age, gender, relationship), storyline, email (+ shipping for hardcover)
-2. **Browser calls `/api/checkout`** → Creates Paddle transaction with `custom_data`
-3. **Paddle overlay opens** → User completes payment
+2. **Browser calls `/api/checkout`** → Creates a Dodo checkout session with metadata
+3. **Hosted Dodo checkout opens** → User completes payment
 4. **Payment succeeds** → Two things happen in parallel:
-   - **Webhook** (`/api/webhooks/paddle`) → Sends Order Confirmation Email
-   - **Browser** → Calls Story Service API to generate book
+   - **Webhook** (`/api/webhooks/dodo`) → Sends Order Confirmation Email
+   - **Browser return to `/checkout`** → Verifies payment and then calls Story Service API to generate book
 5. **Browser redirects** → `/order/[jobId]` shows order confirmation
 6. **Story Service generates book** (async, 15-30 min)
 7. **Story Service sends "Book Ready" email** with download link (digital) or tracking (hardcover)
@@ -416,7 +409,7 @@ See `web/SEO_CHECKLIST.md` for detailed SEO roadmap.
 
 | Email | Sent By | When | Contains |
 |-------|---------|------|----------|
-| Order Confirmation | Webhook (`/api/webhooks/paddle`) | Immediately after payment | Order ID, price, receipt link |
+| Order Confirmation | Webhook (`/api/webhooks/dodo`) | Immediately after payment | Order ID, price, receipt link |
 | Book Ready | Story Service | After generation complete | Download link or tracking info |
 
 ### Email Template Styling
@@ -427,7 +420,7 @@ The order confirmation email uses branded styling consistent with the website:
 - **Checkmark Icon**: Green gradient (`#10b981` → `#34d399`) circle with white checkmark
 - **Button Gradient**: Violet to fuchsia (`#7c3aed` → `#c026d3`) with solid fallback
 - **Accent Color**: Violet-600 (`#7c3aed`) for links and totals
-- **Template Location**: `web/src/app/api/webhooks/paddle/route.ts` (`sendCustomerOrderConfirmation` function)
+- **Template Location**: `web/src/app/api/webhooks/dodo/route.ts` (`sendCustomerOrderConfirmation` function)
 
 ### Story Service API Contract (v2 - Multi-Character)
 

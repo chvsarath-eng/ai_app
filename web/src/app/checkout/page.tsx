@@ -2,20 +2,20 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { CreditCard, ShieldCheck, Truck, Mail } from 'lucide-react'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { KeyRound, Mail, ShieldCheck, Truck } from 'lucide-react'
 import { useCheckoutStore } from '@/lib/checkout-store'
-import { initializePaddle, openPaddleCheckout, PADDLE_PRICES } from '@/lib/paddle'
+import { clearCheckoutFiles, loadCheckoutFiles } from '@/lib/checkout-files'
+import { closeDodoOverlayCheckout } from '@/lib/dodo-checkout-overlay'
 import { createStorybookJob } from '@/lib/storybookApi'
 import { trackEvent } from '@/lib/analytics'
 import type { OutputType } from '@/types/storybook'
 
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { ShippingForm } from '@/components/checkout/shipping-form'
 import { DeliveryOptions } from '@/components/checkout/delivery-options'
 import { OrderSummary } from '@/components/checkout/order-summary'
 
-// Shipping option from Lulu API
 export interface ShippingOption {
   level: string
   description: string
@@ -26,11 +26,14 @@ export interface ShippingOption {
   estimatedDelivery?: string
 }
 
+const PARTNER_TEST_ACCESS_CODE = '1345'
+
 export default function CheckoutPage () {
   const router = useRouter()
   const store = useCheckoutStore()
 
   const [isLoading, setIsLoading] = useState(true)
+  const [filesReady, setFilesReady] = useState(false)
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([])
   const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(null)
   const [shippingLoading, setShippingLoading] = useState(false)
@@ -39,32 +42,84 @@ export default function CheckoutPage () {
   const [urlDiscountCode, setUrlDiscountCode] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [paymentProcessing, setPaymentProcessing] = useState(false)
+  const [partnerCode, setPartnerCode] = useState('')
 
-  // Track last fetched address to prevent duplicate fetches
   const lastFetchedAddressRef = useRef<string>('')
+  const hasHandledReturnRef = useRef(false)
 
   const isHardcover = store.outputType === 'LULU_BOOK'
 
-  // Check if we have product data and initialize Paddle
   useEffect(() => {
-    initializePaddle()
+    return () => {
+      closeDodoOverlayCheckout()
+    }
+  }, [])
 
-    // Small delay for hydration
+  useEffect(() => {
+    let isCancelled = false
+
+    async function restoreFiles () {
+      if (store.imageFiles.length > 0) {
+        setFilesReady(true)
+        return
+      }
+
+      try {
+        const restoredFiles = await loadCheckoutFiles()
+        if (!isCancelled && restoredFiles.length > 0) {
+          store.restoreImageFiles(
+            restoredFiles,
+            restoredFiles.map((file) => URL.createObjectURL(file))
+          )
+        }
+      } catch (error) {
+        console.error('Failed to restore checkout files:', error)
+      } finally {
+        if (!isCancelled) {
+          setFilesReady(true)
+        }
+      }
+    }
+
+    void restoreFiles()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [store])
+
+  useEffect(() => {
+    if (!filesReady) return
+
     const timer = setTimeout(() => {
-      // Don't redirect if payment is being processed
       if (paymentProcessing) {
         setIsLoading(false)
         return
       }
+
       if (!store.characters?.[0]?.name || !store.outputType) {
         router.push('/')
-      } else {
-        setIsLoading(false)
+        return
       }
+
+      if (store.imageFiles.length === 0 && !store.pendingCheckoutSessionId) {
+        router.push('/')
+        return
+      }
+
+      setIsLoading(false)
     }, 100)
 
     return () => clearTimeout(timer)
-  }, [store.characters, store.outputType, router, paymentProcessing])
+  }, [
+    filesReady,
+    paymentProcessing,
+    router,
+    store.characters,
+    store.imageFiles.length,
+    store.outputType,
+    store.pendingCheckoutSessionId
+  ])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -79,7 +134,6 @@ export default function CheckoutPage () {
     store.setDiscountCode(urlDiscountCode)
   }, [store, store.discountCode, urlDiscountCode])
 
-  // Fetch shipping options when address is complete
   const fetchShippingCost = useCallback(async () => {
     const { shippingName, shippingAddress1, shippingCity, shippingRegion, shippingPostalCode, shippingCountry } = store
 
@@ -87,10 +141,7 @@ export default function CheckoutPage () {
       return
     }
 
-    // Create address hash to check if it changed
     const addressHash = `${shippingName}|${shippingAddress1}|${shippingCity}|${shippingRegion}|${shippingPostalCode}|${shippingCountry}`
-
-    // Skip if address hasn't changed
     if (addressHash === lastFetchedAddressRef.current) {
       return
     }
@@ -124,14 +175,12 @@ export default function CheckoutPage () {
         return
       }
 
-      // Add estimated delivery dates
       const optionsWithDates = data.shipping_options.map((opt: ShippingOption) => ({
         ...opt,
         estimatedDelivery: getEstimatedDelivery(opt.level)
       }))
 
       setShippingOptions(optionsWithDates)
-      // Auto-select first (cheapest) option
       if (optionsWithDates.length > 0) {
         setSelectedShipping(optionsWithDates[0])
         store.setShippingOption(optionsWithDates[0].level, optionsWithDates[0].shipping_cost)
@@ -144,7 +193,6 @@ export default function CheckoutPage () {
     }
   }, [store])
 
-  // Get estimated delivery date based on shipping level
   function getEstimatedDelivery (level: string): string {
     const today = new Date()
     let minDays = 7
@@ -180,11 +228,10 @@ export default function CheckoutPage () {
     const maxDate = new Date(today)
     maxDate.setDate(today.getDate() + maxDays)
 
-    const formatDate = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    const formatDate = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     return `${formatDate(minDate)} - ${formatDate(maxDate)}`
   }
 
-  // Handle shipping option selection
   const handleSelectShipping = (option: ShippingOption) => {
     setSelectedShipping(option)
     store.setShippingOption(option.level, option.shipping_cost)
@@ -199,19 +246,27 @@ export default function CheckoutPage () {
     store.shippingCountry
   )
 
-  const canPlaceOrder = isHardcover
-    ? Boolean(isAddressComplete && selectedShipping && store.email)
-    : Boolean(store.outputType && store.imageFiles.length > 0 && store.email)
+  const hasCustomerEmail = /\S+@\S+\.\S+/.test(store.email)
+  const hasPartnerAccess = partnerCode.trim() === PARTNER_TEST_ACCESS_CODE
+  const canPlaceOrder = Boolean(
+    store.outputType &&
+    store.imageFiles.length > 0 &&
+    hasCustomerEmail &&
+    hasPartnerAccess &&
+    (isHardcover ? isAddressComplete && selectedShipping : true)
+  )
 
-  // Shared onSuccess handler after Paddle checkout completes
-  const handleCheckoutSuccess = async (completedTransactionId: string) => {
-    if (window.Paddle?.Checkout?.close) {
-      window.Paddle.Checkout.close()
-    }
+  const handleCheckoutSuccess = useCallback(async (paymentId: string, customerEmail?: string | null) => {
     setPaymentProcessing(true)
+    setCheckoutError(null)
 
     try {
-      const shippingAddress = isHardcover
+      if (store.imageFiles.length === 0) {
+        throw new Error('Your uploaded photos could not be restored after payment. Please try again.')
+      }
+
+      const outputType = store.outputType as OutputType
+      const shippingAddress = outputType === 'LULU_BOOK'
         ? {
             fullName: store.shippingName,
             phone: store.shippingPhone || undefined,
@@ -228,133 +283,143 @@ export default function CheckoutPage () {
         imageFiles: store.imageFiles,
         characters: store.characters,
         storyline: store.storyline,
-        email: store.email || '',
-        outputType: store.outputType as OutputType,
+        email: customerEmail || store.email || '',
+        outputType,
         shippingAddress
       })
 
+      trackEvent('checkout_completed', {
+        payment_id: paymentId,
+        output_type: outputType
+      })
+
+      store.clearPendingCheckout()
+      await clearCheckoutFiles()
       store.reset()
-      router.push(`/order/${res.jobId}?tx=${completedTransactionId}`)
-    } catch (err) {
-      console.error('Failed to create job:', err)
+      router.push(`/order/${res.jobId}?type=${outputType}&payment=${paymentId}`)
+    } catch (error) {
+      console.error('Failed to create job after payment:', error)
       setPaymentProcessing(false)
       setIsSubmitting(false)
+      setCheckoutError(error instanceof Error ? error.message : 'Failed to create your storybook after payment')
     }
-  }
+  }, [router, store])
+
+  const verifyReturnedCheckout = useCallback(async (sessionId: string) => {
+    setPaymentProcessing(true)
+    setCheckoutError(null)
+
+    try {
+      const response = await fetch(`/api/checkout?sessionId=${encodeURIComponent(sessionId)}`, {
+        method: 'GET',
+        cache: 'no-store'
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to verify payment')
+      }
+
+      const status = data?.checkout?.status
+      const paymentId = data?.checkout?.paymentId
+      const customerEmail = data?.checkout?.customerEmail || null
+
+      if (status === 'succeeded' && paymentId) {
+        await handleCheckoutSuccess(paymentId, customerEmail)
+        return
+      }
+
+      store.clearPendingCheckout()
+      setPaymentProcessing(false)
+      setIsSubmitting(false)
+
+      if (status === 'processing') {
+        setCheckoutError('Your payment is still processing. Please refresh this page in a moment.')
+      } else if (status === 'failed' || status === 'cancelled') {
+        setCheckoutError('Your payment was not completed. You can review your details and try again.')
+      } else {
+        setCheckoutError('Your payment was not completed yet. Please try again.')
+      }
+
+      router.replace('/checkout')
+    } catch (error) {
+      console.error('Failed to verify returned checkout:', error)
+      setPaymentProcessing(false)
+      setIsSubmitting(false)
+      setCheckoutError(error instanceof Error ? error.message : 'Failed to verify payment')
+    }
+  }, [handleCheckoutSuccess, router, store])
+
+  useEffect(() => {
+    if (!filesReady || typeof window === 'undefined') return
+    if (hasHandledReturnRef.current) return
+
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('payment_return') !== '1') return
+
+    hasHandledReturnRef.current = true
+
+    if (!store.pendingCheckoutSessionId) {
+      setCheckoutError('We could not find your pending checkout session. Please contact support if you were charged.')
+      setIsLoading(false)
+      return
+    }
+
+    void verifyReturnedCheckout(store.pendingCheckoutSessionId)
+  }, [filesReady, store.pendingCheckoutSessionId, verifyReturnedCheckout])
 
   const handlePlaceOrder = async () => {
     if (!store.outputType || store.imageFiles.length === 0 || isSubmitting) return
     if (isHardcover && (!selectedShipping || !isAddressComplete)) return
-    if (!store.email) {
-      setCheckoutError('Please enter your email before checkout.')
+    if (!hasCustomerEmail) {
+      setCheckoutError('Enter a valid email address so we can send the finished storybook.')
+      return
+    }
+    if (!hasPartnerAccess) {
+      setCheckoutError('Enter the partner access code to create a test order.')
       return
     }
 
     setIsSubmitting(true)
     setCheckoutError(null)
 
-    // --- DIGITAL: open Paddle directly with items (no server round-trip)
-    // Paddle geolocates the buyer and auto-presents local currency + correct tax
-    if (!isHardcover) {
-      const characterNames = store.characters
-        .map((c: { name?: string }) => c?.name || '')
-        .filter(Boolean)
-
-      trackEvent('checkout_opened', { output_type: store.outputType })
-
-      openPaddleCheckout(
-        {
-          items: [{ priceId: PADDLE_PRICES.DIGITAL, quantity: 1 }],
-          customer: { email: store.email },
-          discountCode: store.discountCode || undefined,
-          customData: {
-            characters: JSON.stringify(store.characters),
-            storyline: store.storyline,
-            outputType: 'DIGI_BOOK',
-            numCharacters: String(store.characters.length),
-            characterNames: characterNames.join(', ')
-          },
-          settings: {
-            displayMode: 'overlay',
-            theme: 'light',
-            variant: 'multi-page',
-            allowLogout: false,
-            showAddDiscounts: true,
-            allowDiscountRemoval: true
-          }
-        },
-        {
-          onSuccess: handleCheckoutSuccess,
-          onClose: () => { setIsSubmitting(false) }
-        }
-      )
-      return
-    }
-
-    // --- HARDCOVER: server-created transaction (needed for dynamic shipping line item)
-    const formData: Record<string, unknown> = {
-      characters: store.characters,
-      storyline: store.storyline,
-      outputType: store.outputType,
-      numCharacters: store.characters.length,
-      shippingName: store.shippingName,
-      shippingPhone: store.shippingPhone,
-      shippingAddress1: store.shippingAddress1,
-      shippingAddress2: store.shippingAddress2,
-      shippingCity: store.shippingCity,
-      shippingRegion: store.shippingRegion,
-      shippingPostalCode: store.shippingPostalCode,
-      shippingCountry: store.shippingCountry,
-      shippingLevel: selectedShipping!.level,
-      shippingCost: selectedShipping!.shipping_cost,
-      orderTotal: selectedShipping!.total
-    }
-
     try {
-      const response = await fetch('/api/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: store.email,
-          outputType: store.outputType,
-          formData
-        })
-      })
-
-      const data = await response.json()
-      if (!response.ok || !data?.checkout?.transactionId) {
-        const message = data?.error || 'Failed to initialize checkout'
-        throw new Error(message)
-      }
-
-      const { transactionId } = data.checkout
-
-      trackEvent('checkout_opened', {
-        output_type: store.outputType,
-        transaction_id: transactionId,
-        shipping_level: selectedShipping?.level
-      })
-
-      openPaddleCheckout(
-        {
-          transactionId,
-          settings: {
-            displayMode: 'overlay',
-            theme: 'light',
-            variant: 'multi-page',
-            allowLogout: false,
-            showAddDiscounts: true,
-            allowDiscountRemoval: true
+      const outputType = store.outputType as OutputType
+      const shippingAddress = outputType === 'LULU_BOOK'
+        ? {
+            fullName: store.shippingName,
+            phone: store.shippingPhone || undefined,
+            line1: store.shippingAddress1,
+            line2: store.shippingAddress2 || undefined,
+            city: store.shippingCity,
+            region: store.shippingRegion,
+            postalCode: store.shippingPostalCode,
+            countryCode: store.shippingCountry
           }
-        },
-        {
-          onSuccess: handleCheckoutSuccess,
-          onClose: () => { setIsSubmitting(false) }
-        }
-      )
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to initialize checkout'
-      console.error(message, err)
+        : undefined
+
+      const res = await createStorybookJob({
+        imageFiles: store.imageFiles,
+        characters: store.characters,
+        storyline: store.storyline,
+        email: store.email,
+        outputType,
+        shippingAddress
+      })
+
+      trackEvent('checkout_completed', {
+        payment_id: 'partner-test',
+        output_type: outputType,
+        checkout_provider: 'partner_access'
+      })
+
+      store.clearPendingCheckout()
+      await clearCheckoutFiles()
+      store.reset()
+      router.push(`/order/${res.jobId}?type=${outputType}&payment=partner-test`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create test order'
+      console.error(message, error)
       setCheckoutError(message)
       setIsSubmitting(false)
     }
@@ -376,133 +441,169 @@ export default function CheckoutPage () {
       <div className="min-h-[60vh] flex flex-col items-center justify-center">
         <div className="animate-spin h-8 w-8 border-4 border-violet-500 border-t-transparent rounded-full mb-4" />
         <h2 className="text-xl font-semibold text-zinc-900">Processing your order...</h2>
-        <p className="text-zinc-500 mt-2">Please wait while we create your storybook.</p>
+        <p className="text-zinc-500 mt-2">Please wait while we verify your payment and create your storybook.</p>
       </div>
     )
   }
 
   return (
-    <div className="py-4 sm:py-6">
-      {/* Page header - Centered */}
-      <div className="mb-4 sm:mb-6 text-center">
-        <h1 className="text-xl sm:text-2xl font-bold">
-          <span className="ultraGlowText">Checkout</span>
-        </h1>
-        
-        {/* Trust badges */}
-        <div className="flex items-center justify-center gap-4 sm:gap-6 mt-2 text-xs text-zinc-500">
-          <div className="flex items-center gap-1">
-            <ShieldCheck className="h-3.5 w-3.5 text-violet-500" />
-            <span>Secure</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Truck className="h-3.5 w-3.5 text-violet-500" />
-            <span>Fast Delivery</span>
+    <div className="py-6 sm:py-8">
+      <div className={`mx-auto px-4 sm:px-6 ${isHardcover ? 'max-w-6xl' : 'max-w-4xl'}`}>
+        <div className="mx-auto mb-6 max-w-3xl text-center sm:mb-8">
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
+            Checkout
+          </h1>
+          <p className="mx-auto mt-3 max-w-2xl text-sm text-zinc-600 sm:text-base">
+            Review your order and use the partner access code to create a test storybook.
+          </p>
+
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 text-xs text-zinc-600 sm:gap-3">
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5">
+              <ShieldCheck className="h-3.5 w-3.5 text-violet-500" />
+              <span>Partner testing</span>
+            </div>
+            {isHardcover && (
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5">
+                <Truck className="h-3.5 w-3.5 text-violet-500" />
+                <span>Live shipping rates</span>
+              </div>
+            )}
           </div>
         </div>
-      </div>
 
-      <div className="mx-auto max-w-6xl px-4 sm:px-6">
-        {/* Error message */}
         {checkoutError && (
-          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mb-6 rounded-2xl border border-red-200/80 bg-red-50/90 px-4 py-3 text-sm text-red-700 shadow-sm">
             {checkoutError}
           </div>
         )}
 
-        <div className="grid gap-4 lg:gap-6 lg:grid-cols-3">
-          {/* Left Column - Forms */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Contact Email - Required for all orders */}
-            <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-              <h2 className="flex items-center gap-2 text-base font-semibold text-zinc-900 mb-3">
-                <Mail className="h-4 w-4 text-violet-600" />
-                Contact Information
-              </h2>
-              <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-sm">
-                  Email address <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  disabled={isSubmitting || paymentProcessing}
-                  value={store.email}
-                  onChange={(e) => store.setEmail(e.target.value)}
-                  className="h-10"
-                />
-                <p className="text-xs text-zinc-500">
-                  {isHardcover 
-                    ? 'Order updates and tracking info will be sent here.'
-                    : 'Your digital storybook will be delivered here.'
-                  }
-                </p>
-              </div>
-            </div>
+        <div className={isHardcover ? 'grid gap-4 lg:grid-cols-3 lg:gap-6' : 'mx-auto max-w-xl'}>
+          {isHardcover && (
+            <div className="space-y-4 lg:col-span-2">
+              <PartnerAccessForm
+                email={store.email}
+                partnerCode={partnerCode}
+                isSubmitting={isSubmitting || paymentProcessing}
+                onEmailChange={store.setEmail}
+                onPartnerCodeChange={setPartnerCode}
+              />
+              <ShippingForm
+                store={store}
+                onAddressComplete={fetchShippingCost}
+                isSubmitting={isSubmitting || paymentProcessing}
+              />
+              <DeliveryOptions
+                isAddressComplete={isAddressComplete}
+                shippingLoading={shippingLoading}
+                shippingError={shippingError}
+                shippingOptions={shippingOptions}
+                selectedShipping={selectedShipping}
+                onSelectShipping={handleSelectShipping}
+              />
 
-            {/* Shipping Address - Only for hardcover */}
-            {isHardcover && (
-              <>
-                <ShippingForm
-                  store={store}
-                  onAddressComplete={fetchShippingCost}
-                  isSubmitting={isSubmitting || paymentProcessing}
-                />
-
-                {/* Delivery Options */}
-                <DeliveryOptions
-                  isAddressComplete={isAddressComplete}
-                  shippingLoading={shippingLoading}
-                  shippingError={shippingError}
-                  shippingOptions={shippingOptions}
-                  selectedShipping={selectedShipping}
-                  onSelectShipping={handleSelectShipping}
-                />
-              </>
-            )}
-
-            {/* Digital book - simplified checkout */}
-            {!isHardcover && (
-              <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-                <h2 className="flex items-center gap-2 text-base font-semibold text-zinc-900 mb-3">
-                  <ShieldCheck className="h-4 w-4 text-violet-600" />
-                  Secure Checkout
-                </h2>
-                <div className="flex items-start gap-2 rounded-lg border border-violet-100 bg-violet-50/50 px-3 py-2">
-                  <CreditCard className="h-4 w-4 text-violet-600 mt-0.5 shrink-0" />
-                  <div className="text-sm text-violet-800">
-                    <p className="font-medium">Ready to order</p>
-                    <p className="text-violet-700 text-xs mt-0.5">Your payment is processed securely by Paddle. Tax is calculated automatically.</p>
-                  </div>
+              {!selectedShipping && !shippingLoading && isAddressComplete && (
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-5 text-center">
+                  <Truck className="mx-auto mb-2 h-8 w-8 text-violet-500" />
+                  <p className="text-sm font-medium text-zinc-900">
+                    Select a delivery option to continue
+                  </p>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+          )}
 
-            {/* Waiting for shipping selection message */}
-            {isHardcover && !selectedShipping && !shippingLoading && isAddressComplete && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
-                <Truck className="h-8 w-8 text-amber-500 mx-auto mb-2" />
-                <p className="text-sm font-medium text-amber-800">
-                  Select a delivery option above to proceed to payment
-                </p>
-              </div>
-            )}
+          <div className={isHardcover ? 'lg:col-span-1' : ''}>
+            <div className={isHardcover ? 'lg:sticky lg:top-24' : ''}>
+              {!isHardcover && (
+                <div className="mb-4">
+                  <PartnerAccessForm
+                    email={store.email}
+                    partnerCode={partnerCode}
+                    isSubmitting={isSubmitting || paymentProcessing}
+                    onEmailChange={store.setEmail}
+                    onPartnerCodeChange={setPartnerCode}
+                  />
+                </div>
+              )}
+              <OrderSummary
+                store={store}
+                selectedShipping={selectedShipping}
+                isSubmitting={isSubmitting}
+                isCheckoutOpen={false}
+                canPlaceOrder={canPlaceOrder}
+                ctaLabel="Create Test Order"
+                submittingLabel="Creating order..."
+                onPlaceOrder={handlePlaceOrder}
+              />
+            </div>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-          {/* Right Column - Order Summary */}
-          <div className="lg:col-span-1">
-            <OrderSummary
-              store={store}
-              selectedShipping={selectedShipping}
-              isSubmitting={isSubmitting}
-              canPlaceOrder={canPlaceOrder}
-              onPlaceOrder={handlePlaceOrder}
+function PartnerAccessForm ({
+  email,
+  partnerCode,
+  isSubmitting,
+  onEmailChange,
+  onPartnerCodeChange
+}: {
+  email: string
+  partnerCode: string
+  isSubmitting: boolean
+  onEmailChange: (email: string) => void
+  onPartnerCodeChange: (code: string) => void
+}) {
+  return (
+    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+      <div className="mb-4">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900">
+          <Mail className="h-5 w-5 text-violet-600" />
+          Contact Information
+        </h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          We&apos;ll send the finished storybook to this email.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="checkoutEmail">
+            Email address <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="checkoutEmail"
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            disabled={isSubmitting}
+            value={email}
+            onChange={(event) => onEmailChange(event.target.value)}
+            className="border-zinc-200 bg-white focus-visible:ring-violet-500 focus-visible:ring-offset-white"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="partnerAccessCode">
+            Partner access code <span className="text-red-500">*</span>
+          </Label>
+          <div className="relative">
+            <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+            <Input
+              id="partnerAccessCode"
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="Enter access code"
+              disabled={isSubmitting}
+              value={partnerCode}
+              onChange={(event) => onPartnerCodeChange(event.target.value)}
+              className="border-zinc-200 bg-white pl-9 focus-visible:ring-violet-500 focus-visible:ring-offset-white"
             />
           </div>
         </div>
-
       </div>
     </div>
   )

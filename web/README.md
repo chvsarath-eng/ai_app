@@ -9,7 +9,7 @@ Next.js (App Router) frontend for img2x — a personalized storybook generator t
 - React Hook Form + Zod
 - React Query
 - Three.js / @react-three/fiber for 3D previews
-- Paddle Billing for payments (checkout overlay, webhooks, tax)
+- Dodo Payments for payments (hosted checkout, webhooks, tax)
 - Nodemailer for transactional emails (SMTP)
 
 ## Project Structure
@@ -31,9 +31,9 @@ Key entry points:
 - `src/app/page.tsx` — Home page
 - `src/app/order/[orderId]/page.tsx` — Order confirmation (with receipt download)
 - `src/app/api/storybook/*` — Server routes that call the story service
-- `src/app/api/checkout/route.ts` — Paddle checkout initiation
-- `src/app/api/webhooks/paddle/route.ts` — Paddle webhook handler
-- `src/app/api/paddle/transactions/[transactionId]/invoice/route.ts` — Invoice PDF redirect
+- `src/app/api/checkout/route.ts` — Dodo checkout session creation + verification
+- `src/app/api/webhooks/dodo/route.ts` — Dodo webhook handler
+- `src/app/api/payments/[paymentId]/invoice/route.ts` — Invoice PDF redirect
 - `src/app/api/contact/route.ts` — Contact form email
 
 ## Local Development
@@ -60,36 +60,36 @@ Required variables:
   - OR `STORY_INVOKER_CREDENTIALS_JSON`
 - SMTP credentials for transactional emails:
   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`
-- **Paddle payment** (sandbox or production):
-  - `NEXT_PUBLIC_PADDLE_ENVIRONMENT` — `sandbox` or `production`
-  - `NEXT_PUBLIC_PADDLE_CLIENT_TOKEN` — Client-side token
-  - `NEXT_PUBLIC_PADDLE_PRICE_DIGITAL` — Digital book price ID
-  - `NEXT_PUBLIC_PADDLE_PRICE_HARDCOVER` — Hardcover price ID
-  - `PADDLE_API_KEY` — Server-side API key
-  - `PADDLE_WEBHOOK_SECRET` — Webhook signature verification
+- **Dodo Payments**:
+  - `DODO_PAYMENTS_ENVIRONMENT` — `test_mode` or `live_mode`
+  - `DODO_PRODUCT_DIGITAL_ID` — Dodo product ID for the digital book
+  - `DODO_PRODUCT_HARDCOVER_ID` — Dodo product ID for the hardcover book
+  - `DODO_PRODUCT_SHIPPING_ID` — Dodo pay-what-you-want product ID used for dynamic Lulu shipping
+  - `DODO_PAYMENTS_API_KEY` — Server-side API key
+  - `DODO_PAYMENTS_WEBHOOK_KEY` — Webhook signature verification key
 
-Current live catalog IDs:
-- Digital ebook retail (`$9.99`): `pri_01kjs01khpqbnzar05jcpsmehp`
-- Launch discount code: `LAUNCH699` (flat `$3.00` off, final `$6.99`)
-- Hardcover (`$39.99`): `pri_01kjp9fre6y1ypcntekw5vrk3a`
+Current pricing:
+- Digital ebook retail: `$9.99`
+- Hardcover: `$39.99`
+- Shipping is quoted from Lulu and billed as a dynamic Dodo checkout line item via the configured shipping product
 
 ### Local Testing Before Push
 
-Use a local `.env` (do not commit) and set Paddle values explicitly:
+Use a local `.env` (do not commit) and set Dodo values explicitly:
 
 ```bash
-NEXT_PUBLIC_PADDLE_ENVIRONMENT=production
-NEXT_PUBLIC_PADDLE_CLIENT_TOKEN=live_xxx
-NEXT_PUBLIC_PADDLE_PRICE_DIGITAL=pri_01kjs01khpqbnzar05jcpsmehp
-NEXT_PUBLIC_PADDLE_PRICE_HARDCOVER=pri_01kjp9fre6y1ypcntekw5vrk3a
-PADDLE_API_KEY=pdl_live_xxx
-PADDLE_WEBHOOK_SECRET=pdl_ntfset_live_xxx
+DODO_PAYMENTS_ENVIRONMENT=live_mode
+DODO_PRODUCT_DIGITAL_ID=product_xxx
+DODO_PRODUCT_HARDCOVER_ID=product_xxx
+DODO_PRODUCT_SHIPPING_ID=product_xxx
+DODO_PAYMENTS_API_KEY=dodo_live_xxx
+DODO_PAYMENTS_WEBHOOK_KEY=whsec_xxx
 ```
 
-If you want to test with sandbox locally, switch all of the above to sandbox equivalents:
-- `NEXT_PUBLIC_PADDLE_ENVIRONMENT=sandbox`
-- sandbox client token + sandbox API key + sandbox webhook secret
-- sandbox price IDs for digital/hardcover
+If you want to test with Dodo sandbox locally, switch the above to:
+- `DODO_PAYMENTS_ENVIRONMENT=test_mode`
+- test-mode API key + webhook key
+- sandbox/test-mode product IDs for digital, hardcover, and shipping
 
 ### 3) Run dev server
 
@@ -130,13 +130,13 @@ Terraform creates:
 Before deploying, ensure these secrets exist in Secret Manager:
 
 ```bash
-# Create Paddle secrets (one-time setup)
-gcloud secrets create paddle-api-key --replication-policy="automatic" --project=imgstr
-gcloud secrets create paddle-webhook-secret --replication-policy="automatic" --project=imgstr
+# Create Dodo secrets (one-time setup)
+gcloud secrets create dodo-payments-api-key --replication-policy="automatic" --project=imgstr
+gcloud secrets create dodo-payments-webhook-key --replication-policy="automatic" --project=imgstr
 
 # Add secret values
-echo -n "YOUR_PADDLE_API_KEY" | gcloud secrets versions add paddle-api-key --data-file=- --project=imgstr
-echo -n "YOUR_PADDLE_WEBHOOK_SECRET" | gcloud secrets versions add paddle-webhook-secret --data-file=- --project=imgstr
+echo -n "YOUR_DODO_PAYMENTS_API_KEY" | gcloud secrets versions add dodo-payments-api-key --data-file=- --project=imgstr
+echo -n "YOUR_DODO_PAYMENTS_WEBHOOK_KEY" | gcloud secrets versions add dodo-payments-webhook-key --data-file=- --project=imgstr
 ```
 
 **All required secrets:**
@@ -148,9 +148,8 @@ echo -n "YOUR_PADDLE_WEBHOOK_SECRET" | gcloud secrets versions add paddle-webhoo
 | `smtp-pass` | SMTP password |
 | `story-service-url` | Story service Cloud Run URL |
 | `story-invoker-credentials` | Service account JSON for story service |
-| `paddle-client-token` | Paddle client-side token |
-| `paddle-api-key` | Paddle server-side API key |
-| `paddle-webhook-secret` | Paddle webhook signature verification |
+| `dodo-payments-api-key` | Dodo Payments server-side API key |
+| `dodo-payments-webhook-key` | Dodo Payments webhook verification key |
 
 ### CI/CD Pipeline
 
@@ -206,37 +205,38 @@ gcloud builds submit --config=web/cloudbuild.yaml --substitutions=COMMIT_SHA=$(g
 
 ## API Flow (High Level)
 
+> Temporary partner testing mode is enabled while payment approval is blocked. `/checkout`
+> currently asks for an email and partner access code, then creates the storybook job
+> directly instead of opening hosted payment checkout.
+
 1. User uploads photo + enters details (name, theme, email)
 2. User selects book type (Digital $9.99 retail, launch offer can discount to $6.99 / Hardcover $39.99)
 3. For hardcover: user enters shipping address, selects shipping option (Lulu API calculates costs)
-4. Click "Create My Book" → `/api/checkout` creates Paddle transaction server-side
-   - For hardcover: transaction includes catalog product + non-catalog shipping line item
-   - For digital: transaction includes only catalog product
-5. Paddle checkout overlay opens with `transactionId` (shows product + shipping as separate lines)
-6. User completes payment (Paddle handles tax calculation)
-7. On success → `/api/storybook/generate` creates job in story service
-8. Redirect to order confirmation page (with transaction ID)
-9. Paddle webhook (`transaction.completed`) triggers order confirmation email
+4. Click "Create My Book" → `/api/checkout` creates a Dodo checkout session server-side
+   - For digital: session includes the digital product
+   - For hardcover: session includes the hardcover product plus a pay-what-you-want shipping product amount from Lulu
+5. User is redirected to Dodo checkout
+6. User completes payment (Dodo handles tax calculation)
+7. User returns to `/checkout`, which verifies the Dodo session/payment and only then creates the storybook job
+8. Redirect to order confirmation page (with Dodo payment ID for receipt access)
+9. Dodo webhook (`payment.succeeded`) triggers order confirmation email
 10. Story service generates book (async)
 11. Book-ready email sent with download link or shipping info
 
 ## Troubleshooting
 
-### Paddle checkout validation error
+### Dodo checkout return flow
 
-If Paddle returns `validation.no_validation_set` for `customer.address.line1`, it means prefilled
-address data is being validated without a configured validation set. The checkout flow should
-only prefill the customer email and allow Paddle to collect address details in the overlay.
+Dodo checkout is hosted, so the app stores uploaded photos in IndexedDB before redirecting away
+from `/checkout`. When the customer returns, `/checkout` restores the files, verifies the Dodo
+session via `/api/checkout`, and only then starts story generation.
 
-### Shipping charges in Paddle
+### Shipping charges in Dodo
 
-Shipping costs from Lulu are now billed through Paddle using server-side transactions. The 
-`/api/checkout` route creates a Paddle transaction via `POST /transactions` with:
-- Catalog item: the product price (e.g., `pri_01kgbfsgjxhsgab6kp453mqh0n` for hardcover)
-- Non-catalog item: shipping with dynamic price from Lulu
-
-The frontend receives the `transactionId` and passes it to `Paddle.Checkout.open()` instead of 
-passing `items` directly. This displays shipping as a separate billable line in Paddle checkout.
+Shipping costs from Lulu are billed through Dodo using a dedicated pay-what-you-want shipping
+product. The `/api/checkout` route creates a checkout session with:
+- Base product: the digital or hardcover Dodo product
+- Shipping product: `DODO_PRODUCT_SHIPPING_ID` with the per-session amount set from Lulu
 
 ### Build Errors
 
@@ -254,17 +254,14 @@ passing `items` directly. This displays shipping as a separate billable line in 
 | Contact form fails | SMTP misconfiguration | Check `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` |
 | 500 errors | Check Cloud Run logs | `gcloud run services logs read img2x-web --region us-central1` |
 
-### Paddle Errors
+### Dodo Payments Errors
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| Checkout 403 Forbidden | Domain not approved | Add domain in Paddle Dashboard → Checkout Settings |
-| Checkout 400 `transaction_default_checkout_url_not_set` | Missing default URL | Set in Paddle Dashboard → Checkout Settings → Default Payment Link |
-| `$PADDLE_CLIENT_TOKEN` literal in headers | Build arg not passed | Check `cloudbuild.yaml` secretEnv and build-arg format |
-| Webhook signature invalid | Wrong secret | Verify `PADDLE_WEBHOOK_SECRET` matches Paddle notification setting |
-| Webhook 401 after secret update | Trailing newline in secret | See "GCP Secrets Best Practices" below |
-| Order email not sent | Webhook lacks customer email | Handler fetches email via Paddle API using `customer_id` |
-| Invoice PDF 404 | Wrong API URL | Use `sandbox-api.paddle.com` for sandbox, `api.paddle.com` for production |
+| Checkout session fails | Missing/invalid Dodo product IDs | Verify `DODO_PRODUCT_DIGITAL_ID`, `DODO_PRODUCT_HARDCOVER_ID`, and `DODO_PRODUCT_SHIPPING_ID` |
+| Payment verification fails after return | Missing pending checkout session or webhook key mismatch | Verify `DODO_PAYMENTS_WEBHOOK_KEY` and do not clear checkout storage before return |
+| Order email not sent | SMTP misconfiguration or webhook not configured | Check SMTP settings and Dodo webhook endpoint |
+| Invoice PDF 404 | Payment has no invoice yet | Retry after payment finalization or confirm Dodo invoice settings |
 
 ### Slow Builds
 

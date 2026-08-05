@@ -64,12 +64,12 @@
 - Default: analytics_storage denied until user accepts
 - Banner shows at bottom of page for first-time visitors
 
-### 4. Paddle Payment Integration ✅ DONE (Feb 1, 2026)
+### 4. Dodo Payments Integration ✅ DONE (Mar 9, 2026)
 - Pricing: Digital $14.99 / Hardcover $39.99
-- Checkout overlay integration
-- Automatic tax calculation (Merchant of Record)
+- Hosted checkout integration
+- Automatic tax calculation
 - Shipping address collection for hardcover
-- Webhook: `transaction.completed` → order confirmation email
+- Webhook: `payment.succeeded` → order confirmation email
 - Invoice/receipt download
 - Analytics events: checkout_opened, checkout_completed, etc.
 

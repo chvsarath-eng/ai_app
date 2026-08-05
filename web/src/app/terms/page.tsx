@@ -170,7 +170,7 @@ export default function TermsPage () {
           <li>Payment is required in full before order processing begins</li>
           <li>We accept major credit cards and other payment methods as displayed</li>
           <li>Payment processing is handled by secure third-party providers</li>
-          <li>Our order process is conducted by our online reseller Paddle.com. Paddle.com is the Merchant of Record for all our orders. Paddle provides all customer service inquiries and handles returns.</li>
+          <li>Our checkout and invoice flow is powered by secure third-party payment providers, and payment processing terms may also be subject to those providers&apos; policies.</li>
           <li>You authorize us to charge your payment method for all fees incurred</li>
           <li>All sales are final once production begins (see Refund Policy below)</li>
         </ul>

@@ -261,8 +261,9 @@ export default function PrivacyPage () {
 
       <section className="mt-10 p-6 bg-violet-50 rounded-lg">
         <p className="text-sm text-zinc-700">
-          <strong>Note:</strong> This Privacy Policy is provided as a template and should be reviewed by a qualified attorney 
-          to ensure compliance with all applicable laws in your jurisdiction. Privacy laws vary by location and are subject to change.
+          We review and update this Privacy Policy as our service and legal obligations evolve.
+          For privacy-related requests, contact{' '}
+          <a className="text-violet-600 hover:text-violet-700 underline" href="mailto:team@img2x.com">team@img2x.com</a>.
         </p>
       </section>
     </main>

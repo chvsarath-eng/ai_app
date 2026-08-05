@@ -26,6 +26,7 @@ export interface CheckoutData {
   selectedShippingLevel: string | null
   shippingCost: number
   bookPrice: number
+  pendingCheckoutSessionId: string | null
 }
 
 interface CheckoutStore extends CheckoutData {
@@ -36,10 +37,13 @@ interface CheckoutStore extends CheckoutData {
     storyline: string
     outputType: OutputType
   }) => void
+  restoreImageFiles: (imageFiles: File[], imagePreviewUrls: string[]) => void
   setShippingAddress: (address: Partial<CheckoutData>) => void
   setShippingOption: (level: string, cost: number) => void
   setEmail: (email: string) => void
   setDiscountCode: (discountCode: string) => void
+  setPendingCheckout: (sessionId: string) => void
+  clearPendingCheckout: () => void
   reset: () => void
   isReady: () => boolean
 }
@@ -62,7 +66,8 @@ const initialState: CheckoutData = {
   shippingCountry: '',
   selectedShippingLevel: null,
   shippingCost: 0,
-  bookPrice: 39.99
+  bookPrice: 39.99,
+  pendingCheckoutSessionId: null
 }
 
 export const useCheckoutStore = create<CheckoutStore>()(
@@ -78,6 +83,11 @@ export const useCheckoutStore = create<CheckoutStore>()(
         outputType: data.outputType
       }),
 
+      restoreImageFiles: (imageFiles, imagePreviewUrls) => set({
+        imageFiles,
+        imagePreviewUrls
+      }),
+
       setShippingAddress: (address) => set((state) => ({
         ...state,
         ...address
@@ -90,6 +100,8 @@ export const useCheckoutStore = create<CheckoutStore>()(
 
       setEmail: (email) => set({ email }),
       setDiscountCode: (discountCode) => set({ discountCode }),
+      setPendingCheckout: (sessionId) => set({ pendingCheckoutSessionId: sessionId }),
+      clearPendingCheckout: () => set({ pendingCheckoutSessionId: null }),
 
       reset: () => set(initialState),
 
@@ -124,7 +136,8 @@ export const useCheckoutStore = create<CheckoutStore>()(
         shippingCountry: state.shippingCountry,
         selectedShippingLevel: state.selectedShippingLevel,
         shippingCost: state.shippingCost,
-        bookPrice: state.bookPrice
+        bookPrice: state.bookPrice,
+        pendingCheckoutSessionId: state.pendingCheckoutSessionId
       })
     }
   )

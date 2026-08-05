@@ -169,11 +169,6 @@ export default function RootLayout({
           <CookieConsentBanner />
         </Providers>
       </body>
-      {/* Paddle.js for payments */}
-      <Script
-        src="https://cdn.paddle.com/paddle/v2/paddle.js"
-        strategy="afterInteractive"
-      />
       {/* Google Analytics with Consent Mode */}
       <Script
         src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}

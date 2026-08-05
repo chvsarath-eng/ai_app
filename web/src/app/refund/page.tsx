@@ -33,7 +33,7 @@ export default function RefundPage () {
       </section>
 
       <section className="mt-10 space-y-4">
-        <h2 className="text-2xl font-bold text-zinc-900">Digital Books ($14.99)</h2>
+        <h2 className="text-2xl font-bold text-zinc-900">Digital Books ($9.99 retail)</h2>
         <p className="text-sm text-zinc-700">
           Due to the personalized and instantly-delivered digital nature of our products, <strong>digital book purchases 
           are generally non-refundable</strong> once the book has been generated and delivered.

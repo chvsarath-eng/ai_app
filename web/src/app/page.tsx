@@ -236,7 +236,7 @@ export default function Home () {
       <div className="pb-16">
       <HeroSplit
         left={<HeroLeft />}
-        right={<GeneratorCard className="mx-auto w-full max-w-[92vw] sm:max-w-[460px] md:max-w-[520px] lg:max-w-[440px] xl:max-w-[480px]" />}
+        right={<GeneratorCard className="mx-auto w-full max-w-[92vw] sm:max-w-[460px] md:max-w-[520px] lg:max-w-none xl:max-w-none" />}
       />
 
       {/* Gallery section — flows from hero */}

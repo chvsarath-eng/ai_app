@@ -9,7 +9,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm, useFieldArray, FormProvider } from 'react-hook-form'
 import { Wand2, Book, Sparkles, UserPlus } from 'lucide-react'
 
-import { initializePaddle } from '@/lib/paddle'
+import { saveCheckoutFiles } from '@/lib/checkout-files'
 import { useCheckoutStore } from '@/lib/checkout-store'
 import { useFormDraftStore } from '@/lib/form-draft-store'
 import type { CharacterDraft } from '@/lib/form-draft-store'
@@ -86,10 +86,6 @@ export function GeneratorCard ({ className }: { className?: string }) {
     outputType: OutputType
   } | null>(null)
 
-  useEffect(() => {
-    initializePaddle()
-  }, [])
-
   const form = useForm<FormInput>({
     resolver: zodResolver(formSchema),
     mode: 'onSubmit',
@@ -116,6 +112,8 @@ export function GeneratorCard ({ className }: { className?: string }) {
 
       const imageFiles = parsed.characters.map((c) => c.imageFile)
       const imagePreviewUrls = imageFiles.map((f) => URL.createObjectURL(f))
+
+      await saveCheckoutFiles(imageFiles)
 
       const characters: CharacterInfo[] = parsed.characters.map((c) => ({
         name: c.name,

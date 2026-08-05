@@ -72,7 +72,7 @@ export function PaymentSuccess ({
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-zinc-500">Receipt</span>
                     <a
-                      href={`/api/paddle/transactions/${transactionId}/invoice`}
+                      href={`/api/payments/${transactionId}/invoice`}
                       target="_blank"
                       rel="noreferrer"
                       className="text-sm font-medium text-violet-600 underline hover:text-violet-700"
@@ -89,7 +89,7 @@ export function PaymentSuccess ({
                 </div>
                 {transactionId ? (
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-zinc-500">Transaction</span>
+                    <span className="text-sm text-zinc-500">Payment</span>
                     <span className="max-w-[180px] truncate font-mono text-xs text-zinc-600" title={transactionId}>
                       {transactionId}
                     </span>
@@ -133,7 +133,7 @@ export function PaymentSuccess ({
                 size="sm"
                 className="w-full text-zinc-500 hover:text-zinc-700 sm:flex-1"
               >
-                <Link href={`/order/${jobId}?type=${outputType}&txn=${transactionId}`}>
+                <Link href={`/order/${jobId}?type=${outputType}&payment=${transactionId}`}>
                   Order Details
                   <ArrowRight className="ml-1 h-4 w-4" />
                 </Link>

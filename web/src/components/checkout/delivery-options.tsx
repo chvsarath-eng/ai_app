@@ -42,7 +42,7 @@ export function DeliveryOptions ({
 
   return (
     <div className={cn(
-      'rounded-xl border bg-white shadow-sm overflow-hidden transition-all',
+      'overflow-hidden rounded-2xl border bg-white shadow-sm transition-all',
       isDisabled ? 'border-zinc-100 opacity-60' : 'border-zinc-200'
     )}>
       {/* Accordion Header */}
@@ -51,7 +51,7 @@ export function DeliveryOptions ({
         onClick={() => !isDisabled && setIsExpanded(!isExpanded)}
         disabled={isDisabled}
         className={cn(
-          'w-full flex items-center justify-between p-4 sm:p-5 text-left transition-colors',
+          'flex w-full items-center justify-between p-4 text-left transition-colors sm:p-5',
           !isDisabled && 'hover:bg-zinc-50',
           isDisabled && 'cursor-not-allowed'
         )}
@@ -59,12 +59,12 @@ export function DeliveryOptions ({
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className={cn(
             'flex h-8 w-8 items-center justify-center rounded-full shrink-0',
-            hasSelection ? 'bg-emerald-100' : 'bg-zinc-100'
+            hasSelection ? 'bg-zinc-100' : 'bg-zinc-100'
           )}>
             {hasSelection ? (
-              <Check className="h-4 w-4 text-emerald-600" />
+              <Check className="h-4 w-4 text-violet-600" />
             ) : (
-              <Truck className={cn('h-4 w-4', isDisabled ? 'text-zinc-300' : 'text-zinc-500')} />
+              <Truck className={cn('h-4 w-4', isDisabled ? 'text-zinc-300' : 'text-violet-500')} />
             )}
           </div>
           <div className="min-w-0">
@@ -75,7 +75,7 @@ export function DeliveryOptions ({
               Delivery Options
             </h2>
             {hasSelection && selectedShipping ? (
-              <p className="text-xs sm:text-sm text-emerald-600 mt-0.5 truncate">
+              <p className="mt-0.5 truncate text-xs text-zinc-600 sm:text-sm">
                 {selectedShipping.description} · ${selectedShipping.shipping_cost.toFixed(2)}
               </p>
             ) : isDisabled ? (
@@ -106,9 +106,9 @@ export function DeliveryOptions ({
         <div className="px-4 sm:px-5 pb-4 sm:pb-5 pt-0">
           {/* Loading state */}
           {shippingLoading && (
-            <div className="rounded-lg bg-zinc-50 border border-zinc-200 p-4">
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
               <div className="flex items-center justify-center gap-3">
-                <svg className="h-5 w-5 animate-spin text-emerald-600" viewBox="0 0 24 24">
+                <svg className="h-5 w-5 animate-spin text-violet-600" viewBox="0 0 24 24">
                   <circle
                     className="opacity-25"
                     cx="12"
@@ -124,7 +124,7 @@ export function DeliveryOptions ({
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   />
                 </svg>
-                <span className="text-sm text-zinc-600">Calculating shipping options...</span>
+                <span className="text-sm text-zinc-700">Calculating shipping options...</span>
               </div>
             </div>
           )}
@@ -149,10 +149,10 @@ export function DeliveryOptions ({
                 <label
                   key={option.level}
                   className={cn(
-                    'flex cursor-pointer items-center justify-between rounded-lg border p-3 sm:p-4 transition-all',
+                    'flex cursor-pointer items-center justify-between rounded-2xl border p-3 sm:p-4 transition-all',
                     selectedShipping?.level === option.level
-                      ? 'border-emerald-500 bg-emerald-50'
-                      : 'border-zinc-200 hover:border-zinc-300 bg-white'
+                      ? 'border-violet-300 bg-violet-50'
+                      : 'border-zinc-200 bg-white hover:border-zinc-300'
                   )}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -162,7 +162,7 @@ export function DeliveryOptions ({
                       value={option.level}
                       checked={selectedShipping?.level === option.level}
                       onChange={() => handleSelectShipping(option)}
-                      className="h-4 w-4 text-emerald-600 border-zinc-300 focus:ring-emerald-500 shrink-0"
+                      className="h-4 w-4 shrink-0 border-zinc-300 text-violet-600 focus:ring-violet-500"
                     />
                     <div className="min-w-0">
                       <p className="font-medium text-zinc-900 text-sm sm:text-base break-words">{option.description}</p>

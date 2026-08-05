@@ -23,7 +23,8 @@ export type Gender = (typeof genders)[number]
 export const relationships = [
   'father', 'mother', 'son', 'daughter',
   'brother', 'sister', 'friend', 'sibling',
-  'grandfather', 'grandmother', 'uncle', 'aunt', 'cousin'
+  'grandfather', 'grandmother', 'uncle', 'aunt', 'cousin',
+  'boyfriend', 'girlfriend'
 ] as const
 export type Relationship = (typeof relationships)[number]
 

@@ -1,299 +1,279 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type DodoPayments from 'dodopayments'
+import type { OutputType } from '@/types/storybook'
+import { DODO_PRODUCTS, formatMinorUnits, getDodoClient, getDodoProductId } from '@/lib/dodo-payments'
 
-const PADDLE_PRICES = {
-  DIGI_BOOK: process.env.NEXT_PUBLIC_PADDLE_PRICE_DIGITAL || 'pri_01kjs01khpqbnzar05jcpsmehp',
-  LULU_BOOK: process.env.NEXT_PUBLIC_PADDLE_PRICE_HARDCOVER || 'pri_01kjp9fre6y1ypcntekw5vrk3a'
+type CharacterFormValue = {
+  name?: string
 }
 
-const PADDLE_API_KEY = process.env.PADDLE_API_KEY
-const PADDLE_ENVIRONMENT = process.env.NEXT_PUBLIC_PADDLE_ENVIRONMENT || 'production'
-const PADDLE_API_BASE = PADDLE_ENVIRONMENT === 'production'
-  ? 'https://api.paddle.com'
-  : 'https://sandbox-api.paddle.com'
+type CheckoutFormData = {
+  characters?: CharacterFormValue[]
+  storyline?: string
+  numCharacters?: number
+  shippingName?: string
+  shippingPhone?: string
+  shippingAddress1?: string
+  shippingAddress2?: string
+  shippingCity?: string
+  shippingRegion?: string
+  shippingPostalCode?: string
+  shippingCountry?: string
+  shippingLevel?: string
+  shippingCost?: number
+  orderTotal?: number
+}
 
-interface PaddleTransactionItem {
-  price_id?: string
-  quantity: number
-  price?: {
-    description: string
-    name: string
-    unit_price: {
-      amount: string
-      currency_code: string
-    }
-    product: {
-      name: string
-      tax_category: string
-      description: string
-    }
+type CreateCheckoutBody = {
+  email?: string
+  outputType?: OutputType
+  discountCode?: string
+  formData?: CheckoutFormData
+}
+
+function getOrigin (request: NextRequest) {
+  const forwardedProto = request.headers.get('x-forwarded-proto')
+  const forwardedHost = request.headers.get('x-forwarded-host')
+
+  if (forwardedProto && forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`
+  }
+
+  return request.nextUrl.origin
+}
+
+function buildMetadata (outputType: OutputType, formData: CheckoutFormData = {}) {
+  const characters = Array.isArray(formData.characters) ? formData.characters : []
+  const characterNames = characters
+    .map((character) => character?.name || '')
+    .filter(Boolean)
+
+  const metadata: Record<string, string> = {
+    outputType,
+    storyline: formData.storyline || '',
+    characters: JSON.stringify(characters),
+    characterNames: characterNames.join(', '),
+    numCharacters: String(formData.numCharacters || characters.length || 1)
+  }
+
+  const optionalFields: Record<string, string | number | undefined> = {
+    shippingName: formData.shippingName,
+    shippingPhone: formData.shippingPhone,
+    shippingAddress1: formData.shippingAddress1,
+    shippingAddress2: formData.shippingAddress2,
+    shippingCity: formData.shippingCity,
+    shippingRegion: formData.shippingRegion,
+    shippingPostalCode: formData.shippingPostalCode,
+    shippingCountry: formData.shippingCountry,
+    shippingLevel: formData.shippingLevel,
+    shippingCost: formData.shippingCost,
+    orderTotal: formData.orderTotal
+  }
+
+  Object.entries(optionalFields).forEach(([key, value]) => {
+    if (typeof value === 'undefined' || value === '') return
+    metadata[key] = String(value)
+  })
+
+  return metadata
+}
+
+function buildBillingAddress (outputType: OutputType, formData: CheckoutFormData): DodoPayments.CheckoutSessionBillingAddress | undefined {
+  if (outputType !== 'LULU_BOOK' || !formData.shippingCountry) {
+    return undefined
+  }
+
+  return {
+    country: formData.shippingCountry as DodoPayments.CountryCode,
+    city: formData.shippingCity || undefined,
+    state: formData.shippingRegion || undefined,
+    street: formData.shippingAddress1 || undefined,
+    zipcode: formData.shippingPostalCode || undefined
   }
 }
 
-interface PaddleTransactionRequest {
-  items: PaddleTransactionItem[]
-  currency_code: string
-  custom_data?: Record<string, string>
-  customer_id?: string
-  address_id?: string
-}
-
-// Create or get a Paddle customer by email
-async function getOrCreateCustomer(email: string): Promise<string> {
-  // First, try to find existing customer by email
-  const searchResponse = await fetch(
-    `${PADDLE_API_BASE}/customers?email=${encodeURIComponent(email)}`,
+function buildProductCart (outputType: OutputType, formData: CheckoutFormData): DodoPayments.CheckoutSessionCreateParams['product_cart'] {
+  const productCart: DodoPayments.CheckoutSessionCreateParams['product_cart'] = [
     {
-      headers: {
-        'Authorization': `Bearer ${PADDLE_API_KEY}`,
-        'Content-Type': 'application/json'
+      product_id: getDodoProductId(outputType),
+      quantity: 1
+    }
+  ]
+
+  if (outputType === 'LULU_BOOK') {
+    const shippingCost = Number(formData.shippingCost || 0)
+    if (shippingCost > 0) {
+      if (!DODO_PRODUCTS.SHIPPING) {
+        throw new Error('DODO_PRODUCT_SHIPPING_ID is not configured')
       }
-    }
-  )
 
-  if (searchResponse.ok) {
-    const searchData = await searchResponse.json()
-    if (searchData.data && searchData.data.length > 0) {
-      return searchData.data[0].id
-    }
-  }
-
-  // Customer doesn't exist, create one
-  const createResponse = await fetch(`${PADDLE_API_BASE}/customers`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${PADDLE_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ email })
-  })
-
-  if (!createResponse.ok) {
-    const errorData = await createResponse.json()
-    console.error('Failed to create customer:', errorData)
-    throw new Error('Failed to create customer')
-  }
-
-  const createData = await createResponse.json()
-  return createData.data.id
-}
-
-// Create an address for a customer
-async function createAddress(
-  customerId: string,
-  address: {
-    countryCode: string
-    postalCode?: string
-    region?: string
-    city?: string
-    firstLine?: string
-  }
-): Promise<string> {
-  const addressPayload: Record<string, string> = {
-    country_code: address.countryCode
-  }
-
-  if (address.postalCode) addressPayload.postal_code = address.postalCode
-  if (address.region) addressPayload.region = address.region
-  if (address.city) addressPayload.city = address.city
-  if (address.firstLine) addressPayload.first_line = address.firstLine
-
-  const response = await fetch(`${PADDLE_API_BASE}/customers/${customerId}/addresses`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${PADDLE_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(addressPayload)
-  })
-
-  if (!response.ok) {
-    const errorData = await response.json()
-    console.error('Failed to create address:', errorData)
-    throw new Error('Failed to create address')
-  }
-
-  const data = await response.json()
-  return data.data.id
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { email, outputType, formData } = body
-
-    // Validate required fields
-    if (typeof email !== 'string' || !email || !outputType) {
-      return NextResponse.json(
-        { error: 'Missing required fields: email and outputType' },
-        { status: 400 }
-      )
-    }
-
-    // This endpoint only handles hardcover (LULU_BOOK) orders.
-    // Digital (DIGI_BOOK) orders go directly through Paddle.Checkout.open(items) client-side.
-    if (outputType !== 'LULU_BOOK') {
-      return NextResponse.json(
-        { error: 'Invalid outputType. Only LULU_BOOK is handled server-side.' },
-        { status: 400 }
-      )
-    }
-
-    // Validate Paddle API key
-    if (!PADDLE_API_KEY) {
-      console.error('PADDLE_API_KEY not configured')
-      return NextResponse.json(
-        { error: 'Payment configuration error' },
-        { status: 500 }
-      )
-    }
-
-    const isHardcover = outputType === 'LULU_BOOK'
-    const priceId = PADDLE_PRICES[outputType as keyof typeof PADDLE_PRICES]
-
-    if (!priceId) {
-      console.error('Missing Paddle price ID for output type:', outputType)
-      return NextResponse.json(
-        { error: 'Payment price not configured for selected book type' },
-        { status: 500 }
-      )
-    }
-
-    // Build custom data for webhook processing
-    const characters = formData?.characters || []
-    const characterNames = characters.map((c: { name?: string }) => c?.name || '').filter(Boolean)
-    const customData: Record<string, string> = {
-      characters: JSON.stringify(characters),
-      storyline: formData?.storyline || '',
-      outputType,
-      numCharacters: (formData?.numCharacters || characters.length || 1).toString(),
-      characterNames: characterNames.join(', ')
-    }
-
-    if (formData?.shippingName) customData.shippingName = formData.shippingName
-    if (formData?.shippingAddress1) customData.shippingAddress1 = formData.shippingAddress1
-    if (formData?.shippingAddress2) customData.shippingAddress2 = formData.shippingAddress2
-    if (formData?.shippingCity) customData.shippingCity = formData.shippingCity
-    if (formData?.shippingRegion) customData.shippingRegion = formData.shippingRegion
-    if (formData?.shippingPostalCode) customData.shippingPostalCode = formData.shippingPostalCode
-    if (formData?.shippingCountry) customData.shippingCountry = formData.shippingCountry
-    if (formData?.shippingPhone) customData.shippingPhone = formData.shippingPhone
-    if (formData?.shippingLevel) customData.shippingLevel = formData.shippingLevel
-    if (typeof formData?.shippingCost !== 'undefined') customData.shippingCost = formData.shippingCost.toString()
-    if (typeof formData?.orderTotal !== 'undefined') customData.orderTotal = formData.orderTotal.toString()
-
-    // Build transaction items
-    const items: PaddleTransactionItem[] = [
-      {
-        price_id: priceId,
-        quantity: 1
-      }
-    ]
-
-    // Add shipping as a non-catalog item for hardcover orders
-    if (isHardcover && formData?.shippingCost && formData.shippingCost > 0) {
-      const shippingAmountCents = Math.round(formData.shippingCost * 100).toString()
-      const shippingLevelName = getShippingLevelName(formData.shippingLevel)
-
-      items.push({
+      productCart.push({
+        product_id: DODO_PRODUCTS.SHIPPING,
         quantity: 1,
-        price: {
-          description: shippingLevelName,
-          name: 'Shipping & Handling',
-          unit_price: {
-            amount: shippingAmountCents,
-            currency_code: 'USD'
-          },
-          product: {
-            name: 'Shipping',
-            tax_category: 'standard',
-            description: 'Shipping to your address'
-          }
-        }
+        amount: formatMinorUnits(shippingCost)
       })
     }
+  }
 
-    // Create customer and address in Paddle for tax calculation
-    // For hardcover: pre-create customer + address for accurate tax display
-    // For digital: skip customer creation - let Paddle checkout collect country for tax
-    let customerId: string | undefined
-    let addressId: string | undefined
+  return productCart
+}
 
-    if (isHardcover && formData?.shippingCountry) {
-      try {
-        // Create or get customer
-        customerId = await getOrCreateCustomer(email)
+async function createCheckoutSession (request: NextRequest, body: CreateCheckoutBody) {
+  const email = typeof body.email === 'string' ? body.email.trim() : ''
+  const outputType = body.outputType
+  const formData = body.formData || {}
 
-        // Create address for tax calculation with full shipping details
-        addressId = await createAddress(customerId, {
-          countryCode: formData.shippingCountry,
-          postalCode: formData.shippingPostalCode,
-          region: formData.shippingRegion,
-          city: formData.shippingCity,
-          firstLine: formData.shippingAddress1
-        })
-      } catch (err) {
-        console.error('Error creating customer/address:', err)
-        // Continue without customer/address - Paddle will collect at checkout
-        customerId = undefined
-        addressId = undefined
+  if (!outputType) {
+    return NextResponse.json(
+      { error: 'Missing required field: outputType' },
+      { status: 400 }
+    )
+  }
+
+  if (!getDodoProductId(outputType)) {
+    return NextResponse.json(
+      { error: 'Payment product not configured for selected book type' },
+      { status: 500 }
+    )
+  }
+
+  if (outputType === 'LULU_BOOK') {
+    const requiredFields = [
+      formData.shippingName,
+      formData.shippingAddress1,
+      formData.shippingCity,
+      formData.shippingRegion,
+      formData.shippingPostalCode,
+      formData.shippingCountry
+    ]
+
+    if (requiredFields.some((value) => !value)) {
+      return NextResponse.json(
+        { error: 'Missing shipping details for hardcover checkout' },
+        { status: 400 }
+      )
+    }
+  }
+
+  const client = getDodoClient()
+  const metadata = buildMetadata(outputType, formData)
+  const billingAddress = buildBillingAddress(outputType, formData)
+  const origin = getOrigin(request)
+  const customer = email
+    ? {
+        email,
+        phone_number: formData.shippingPhone || undefined
+      }
+    : undefined
+  const customization = {
+    theme: 'light',
+    show_order_details: false,
+    show_on_demand_tag: false,
+    force_language: 'en',
+    theme_config: {
+      font_primary_url: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
+      font_size: 'md',
+      font_weight: 'medium',
+      radius: '12px',
+      pay_button_text: 'Continue to Payment',
+      light: {
+        bg_primary: '#ffffff',
+        bg_secondary: '#ffffff',
+        text_primary: '#18181b',
+        text_secondary: '#71717a',
+        button_primary: '#7c3aed',
+        button_primary_hover: '#7c3aed',
+        button_text_primary: '#ffffff',
+        border_primary: '#e4e4e7'
+      },
+      dark: {
+        bg_primary: '#18181b',
+        bg_secondary: '#18181b',
+        text_primary: '#fafafa',
+        text_secondary: '#d4d4d8',
+        button_primary: '#7c3aed',
+        button_primary_hover: '#6d28d9',
+        button_text_primary: '#ffffff',
+        border_primary: '#3f3f46'
       }
     }
-    // For digital orders, we intentionally skip customer/address creation
-    // This allows Paddle checkout to collect the customer's country and calculate tax
+  } as unknown as DodoPayments.CheckoutSessionCreateParams['customization']
 
-    // Build the transaction request
-    const transactionRequest: PaddleTransactionRequest = {
-      items,
-      currency_code: 'USD',
-      custom_data: customData
+  const checkoutSession = await client.checkoutSessions.create({
+    product_cart: buildProductCart(outputType, formData),
+    customer,
+    billing_address: billingAddress,
+    discount_code: body.discountCode || undefined,
+    metadata,
+    return_url: `${origin}/checkout?payment_return=1`,
+    feature_flags: {
+      allow_customer_editing_email: true,
+      allow_discount_code: true,
+      allow_currency_selection: false,
+      allow_phone_number_collection: outputType === 'LULU_BOOK',
+      redirect_immediately: true
+    },
+    customization
+  })
+
+  if (!checkoutSession.checkout_url) {
+    return NextResponse.json(
+      { error: 'Payment provider did not return a checkout URL' },
+      { status: 500 }
+    )
+  }
+
+  return NextResponse.json({
+    success: true,
+    checkout: {
+      sessionId: checkoutSession.session_id,
+      checkoutUrl: checkoutSession.checkout_url,
+      email: email || null
     }
+  })
+}
 
-    // Only add customer and address IDs for hardcover orders where we have both
-    // For digital orders, leaving these out lets Paddle collect location for tax
-    if (isHardcover && customerId && addressId) {
-      transactionRequest.customer_id = customerId
-      transactionRequest.address_id = addressId
-    }
+async function verifyCheckoutSession (request: NextRequest) {
+  const sessionId = request.nextUrl.searchParams.get('sessionId')
 
-    // Create transaction via Paddle API
-    const paddleResponse = await fetch(`${PADDLE_API_BASE}/transactions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PADDLE_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(transactionRequest)
-    })
+  if (!sessionId) {
+    return NextResponse.json({ error: 'Missing sessionId' }, { status: 400 })
+  }
 
-    const paddleData = await paddleResponse.json()
+  const client = getDodoClient()
+  const session = await client.checkoutSessions.retrieve(sessionId)
 
-    if (!paddleResponse.ok) {
-      console.error('Paddle API error:', paddleData)
-      return NextResponse.json(
-        { error: 'Failed to create checkout session', details: paddleData },
-        { status: 500 }
-      )
-    }
-
-    const transactionId = paddleData.data?.id
-    if (!transactionId) {
-      console.error('No transaction ID in Paddle response:', paddleData)
-      return NextResponse.json(
-        { error: 'Invalid response from payment provider' },
-        { status: 500 }
-      )
-    }
-
-    // Return the transaction ID for the frontend to use
+  if (!session.payment_id) {
     return NextResponse.json({
       success: true,
       checkout: {
-        transactionId,
-        email
+        sessionId,
+        status: session.payment_status || 'requires_payment_method'
       }
     })
+  }
+
+  const payment = await client.payments.retrieve(session.payment_id)
+
+  return NextResponse.json({
+    success: true,
+    checkout: {
+      sessionId,
+      paymentId: payment.payment_id,
+      status: payment.status || session.payment_status || 'processing',
+      customerEmail: payment.customer.email,
+      invoiceUrl: payment.invoice_url || null,
+      metadata: payment.metadata
+    }
+  })
+}
+
+export async function POST (request: NextRequest) {
+  try {
+    const body = await request.json() as CreateCheckoutBody
+    return await createCheckoutSession(request, body)
   } catch (error) {
-    console.error('Checkout error:', error)
+    console.error('Dodo checkout creation failed:', error)
     return NextResponse.json(
       { error: 'Failed to initialize checkout' },
       { status: 500 }
@@ -301,21 +281,14 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function getShippingLevelName(level?: string): string {
-  switch (level) {
-    case 'MAIL':
-      return 'Standard Mail Shipping'
-    case 'GROUND_HD':
-    case 'GROUND_BUS':
-    case 'GROUND':
-      return 'Ground Shipping'
-    case 'PRIORITY_MAIL':
-      return 'Priority Mail Shipping'
-    case 'EXPEDITED':
-      return 'Expedited Shipping'
-    case 'EXPRESS':
-      return 'Express Shipping'
-    default:
-      return 'Shipping'
+export async function GET (request: NextRequest) {
+  try {
+    return await verifyCheckoutSession(request)
+  } catch (error) {
+    console.error('Dodo checkout verification failed:', error)
+    return NextResponse.json(
+      { error: 'Failed to verify checkout session' },
+      { status: 500 }
+    )
   }
 }

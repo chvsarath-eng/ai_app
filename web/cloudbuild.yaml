@@ -9,21 +9,12 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
-      - '--build-arg'
-      - 'NEXT_PUBLIC_PADDLE_ENVIRONMENT=production'
-      - '--build-arg'
-      - 'NEXT_PUBLIC_PADDLE_CLIENT_TOKEN'
-      - '--build-arg'
-      - 'NEXT_PUBLIC_PADDLE_PRICE_DIGITAL=pri_01kjs01khpqbnzar05jcpsmehp'
-      - '--build-arg'
-      - 'NEXT_PUBLIC_PADDLE_PRICE_HARDCOVER=pri_01kjp9fre6y1ypcntekw5vrk3a'
       - '-t'
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}'
       - '-t'
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:latest'
       - '.'
     dir: 'web'
-    secretEnv: ['NEXT_PUBLIC_PADDLE_CLIENT_TOKEN']
 
   # Step 2: Push the Docker image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
@@ -56,21 +47,22 @@ steps:
       - '0'
       - '--max-instances'
       - '10'
+      - '--set-env-vars'
+      - 'DODO_PAYMENTS_ENVIRONMENT=${_DODO_PAYMENTS_ENVIRONMENT},DODO_PRODUCT_DIGITAL_ID=${_DODO_PRODUCT_DIGITAL_ID},DODO_PRODUCT_HARDCOVER_ID=${_DODO_PRODUCT_HARDCOVER_ID},DODO_PRODUCT_SHIPPING_ID=${_DODO_PRODUCT_SHIPPING_ID}'
       - '--set-secrets'
-      - 'SMTP_HOST=smtp-host:latest,SMTP_PORT=smtp-port:latest,SMTP_USER=smtp-user:latest,SMTP_PASS=smtp-pass:latest,STORY_SERVICE_URL=story-service-url:latest,STORY_INVOKER_CREDENTIALS_JSON=story-invoker-credentials:latest,PADDLE_API_KEY=paddle-api-key:latest,PADDLE_WEBHOOK_SECRET=paddle-webhook-secret:latest'
+      - 'SMTP_HOST=smtp-host:latest,SMTP_PORT=smtp-port:latest,SMTP_USER=smtp-user:latest,SMTP_PASS=smtp-pass:latest,STORY_SERVICE_URL=story-service-url:latest,STORY_INVOKER_CREDENTIALS_JSON=story-invoker-credentials:latest,DODO_PAYMENTS_API_KEY=dodo-payments-api-key:latest,DODO_PAYMENTS_WEBHOOK_KEY=dodo-payments-webhook-key:latest'
 
 # Substitution variables (can be overridden in trigger)
 substitutions:
   _REGION: 'us-central1'
   _REPO: 'img2x-repo'
   _SERVICE_NAME: 'img2x-web'
+  _DODO_PAYMENTS_ENVIRONMENT: 'live_mode'
+  _DODO_PRODUCT_DIGITAL_ID: 'product_digital'
+  _DODO_PRODUCT_HARDCOVER_ID: 'product_hardcover'
+  _DODO_PRODUCT_SHIPPING_ID: 'product_shipping'
 
 # Secrets from Secret Manager
-availableSecrets:
-  secretManager:
-    - versionName: projects/imgstr/secrets/paddle-client-token/versions/latest
-      env: 'NEXT_PUBLIC_PADDLE_CLIENT_TOKEN'
-
 # Build options
 options:
   logging: CLOUD_LOGGING_ONLY

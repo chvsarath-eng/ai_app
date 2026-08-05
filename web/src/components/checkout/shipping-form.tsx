@@ -105,11 +105,18 @@ export function ShippingForm ({ store, onAddressComplete, isSubmitting }: Shippi
   }
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-      <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 mb-6">
-        <MapPin className="h-5 w-5 text-emerald-600" />
-        Shipping Address
-      </h2>
+    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900">
+            <MapPin className="h-5 w-5 text-violet-600" />
+            Shipping Address
+          </h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Enter the delivery address first so we can show accurate live shipping rates.
+          </p>
+        </div>
+      </div>
 
       <div className="space-y-4">
         {/* Full Name */}
@@ -125,7 +132,7 @@ export function ShippingForm ({ store, onAddressComplete, isSubmitting }: Shippi
             value={store.shippingName}
             onChange={(e) => handleChange('shippingName', e.target.value)}
             onBlur={(e) => validateField('shippingName', e.target.value, 'Full name')}
-            className={errors.shippingName ? 'border-red-500' : ''}
+            className={errors.shippingName ? 'border-red-500 focus-visible:ring-red-500' : 'border-zinc-200 bg-white focus-visible:ring-violet-500 focus-visible:ring-offset-white'}
           />
           {errors.shippingName && (
             <p className="text-sm text-red-600">{errors.shippingName}</p>
@@ -145,6 +152,7 @@ export function ShippingForm ({ store, onAddressComplete, isSubmitting }: Shippi
             disabled={isSubmitting}
             value={store.shippingPhone}
             onChange={(e) => handleChange('shippingPhone', e.target.value)}
+            className="border-zinc-200 bg-white focus-visible:ring-violet-500 focus-visible:ring-offset-white"
           />
         </div>
 
@@ -161,7 +169,7 @@ export function ShippingForm ({ store, onAddressComplete, isSubmitting }: Shippi
             value={store.shippingAddress1}
             onChange={(e) => handleChange('shippingAddress1', e.target.value)}
             onBlur={(e) => validateField('shippingAddress1', e.target.value, 'Street address')}
-            className={errors.shippingAddress1 ? 'border-red-500' : ''}
+            className={errors.shippingAddress1 ? 'border-red-500 focus-visible:ring-red-500' : 'border-zinc-200 bg-white focus-visible:ring-violet-500 focus-visible:ring-offset-white'}
           />
           {errors.shippingAddress1 && (
             <p className="text-sm text-red-600">{errors.shippingAddress1}</p>
@@ -181,13 +189,14 @@ export function ShippingForm ({ store, onAddressComplete, isSubmitting }: Shippi
               disabled={isSubmitting}
               value={store.shippingAddress2}
               onChange={(e) => handleChange('shippingAddress2', e.target.value)}
+              className="border-zinc-200 bg-white focus-visible:ring-violet-500 focus-visible:ring-offset-white"
             />
           </div>
         ) : (
           <button
             type="button"
             onClick={() => setShowAddress2(true)}
-            className="flex items-center gap-1 text-sm text-violet-600 hover:text-violet-700 transition-colors"
+            className="inline-flex items-center gap-1 text-sm text-violet-700 transition-colors hover:text-violet-800"
           >
             <Plus className="h-4 w-4" />
             Add apartment, suite, etc.
@@ -208,7 +217,7 @@ export function ShippingForm ({ store, onAddressComplete, isSubmitting }: Shippi
               value={store.shippingCity}
               onChange={(e) => handleChange('shippingCity', e.target.value)}
               onBlur={(e) => validateField('shippingCity', e.target.value, 'City')}
-              className={errors.shippingCity ? 'border-red-500' : ''}
+              className={errors.shippingCity ? 'border-red-500 focus-visible:ring-red-500' : 'border-zinc-200 bg-white focus-visible:ring-violet-500 focus-visible:ring-offset-white'}
             />
             {errors.shippingCity && (
               <p className="text-sm text-red-600">{errors.shippingCity}</p>
@@ -227,7 +236,7 @@ export function ShippingForm ({ store, onAddressComplete, isSubmitting }: Shippi
               value={store.shippingRegion}
               onChange={(e) => handleChange('shippingRegion', e.target.value)}
               onBlur={(e) => validateField('shippingRegion', e.target.value, 'State/Region')}
-              className={errors.shippingRegion ? 'border-red-500' : ''}
+              className={errors.shippingRegion ? 'border-red-500 focus-visible:ring-red-500' : 'border-zinc-200 bg-white focus-visible:ring-violet-500 focus-visible:ring-offset-white'}
             />
             {errors.shippingRegion && (
               <p className="text-sm text-red-600">{errors.shippingRegion}</p>
@@ -246,7 +255,7 @@ export function ShippingForm ({ store, onAddressComplete, isSubmitting }: Shippi
               value={store.shippingPostalCode}
               onChange={(e) => handleChange('shippingPostalCode', e.target.value)}
               onBlur={(e) => validateField('shippingPostalCode', e.target.value, 'ZIP/Postal code')}
-              className={errors.shippingPostalCode ? 'border-red-500' : ''}
+              className={errors.shippingPostalCode ? 'border-red-500 focus-visible:ring-red-500' : 'border-zinc-200 bg-white focus-visible:ring-violet-500 focus-visible:ring-offset-white'}
             />
             {errors.shippingPostalCode && (
               <p className="text-sm text-red-600">{errors.shippingPostalCode}</p>
@@ -266,8 +275,10 @@ export function ShippingForm ({ store, onAddressComplete, isSubmitting }: Shippi
             value={store.shippingCountry}
             onChange={(e) => handleChange('shippingCountry', e.target.value)}
             onBlur={(e) => validateField('shippingCountry', e.target.value, 'Country')}
-            className={`flex h-11 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
-              errors.shippingCountry ? 'border-red-500' : 'border-zinc-200'
+            className={`flex h-11 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+              errors.shippingCountry
+                ? 'border-red-500 focus-visible:ring-red-500'
+                : 'border-zinc-200 focus-visible:ring-violet-500 focus-visible:ring-offset-white'
             }`}
           >
             <option value="">Select a country</option>
