@@ -1,0 +1,42 @@
+# Keep Cloud Build source uploads small when submitting from the repo root.
+
+.git/
+.gitignore
+
+# Local environment files
+.env
+.env.*
+!web/.env.example
+
+# Dependencies and build outputs
+node_modules/
+web/node_modules/
+web/.next/
+web/out/
+web/dist/
+
+# Local test and screenshot artifacts
+.playwright-mcp/
+*.png
+!web/public/**/*.png
+!web/gallery/**/*.png
+*.jpg
+*.jpeg
+!web/public/**/*.jpg
+!web/public/**/*.jpeg
+!web/gallery/**/*.jpg
+!web/gallery/**/*.jpeg
+
+# IDE/cache files
+.cursor/
+.vscode/
+.idea/
+*.log
+npm-debug.log*
+Thumbs.db
+.DS_Store
+
+# Terraform state should not be uploaded
+web/infra/*.tfstate
+web/infra/*.tfstate.backup
+web/infra/.terraform/
