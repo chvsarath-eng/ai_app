@@ -92,7 +92,7 @@ export default function CheckoutPage () {
     if (!filesReady) return
 
     const timer = setTimeout(() => {
-      if (paymentProcessing) {
+      if (paymentProcessing || isSubmitting) {
         setIsLoading(false)
         return
       }
@@ -113,6 +113,7 @@ export default function CheckoutPage () {
     return () => clearTimeout(timer)
   }, [
     filesReady,
+    isSubmitting,
     paymentProcessing,
     router,
     store.characters,
@@ -381,6 +382,7 @@ export default function CheckoutPage () {
     }
 
     setIsSubmitting(true)
+    setPaymentProcessing(true)
     setCheckoutError(null)
 
     try {
@@ -420,6 +422,7 @@ export default function CheckoutPage () {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create test order'
       console.error(message, error)
+      setPaymentProcessing(false)
       setCheckoutError(message)
       setIsSubmitting(false)
     }

@@ -54,6 +54,10 @@ export async function GET (request: NextRequest) {
     return NextResponse.json(DEFAULT_RESPONSE)
   }
 
+  if (!process.env.DODO_PAYMENTS_API_KEY) {
+    return NextResponse.json(DEFAULT_RESPONSE)
+  }
+
   try {
     const client = getDodoClient()
     const countryCode = getCountryCode(request)
