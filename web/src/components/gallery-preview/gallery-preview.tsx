@@ -2,29 +2,21 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
-import type { StaticImageData } from 'next/image'
 import { Loader2 } from 'lucide-react'
 
 import styles from './gallery-preview.module.css'
 
-import cover1 from '../../../gallery/images/cover_1.jpg'
-import cover2 from '../../../gallery/images/cover_2.png'
-import cover3 from '../../../gallery/images/cover_3.png'
-import cover4 from '../../../gallery/images/cover_4.png'
-import cover5 from '../../../gallery/images/cover_5.png'
-
 type GalleryBook = {
-  cover: StaticImageData
+  coverSrc: string
   bookNumber: number
 }
 
-// Keep this list in sync with files in /public/Gallery_books/digital_book_<n>.html
 const galleryBooks: GalleryBook[] = [
-  { cover: cover1, bookNumber: 1 },
-  { cover: cover2, bookNumber: 2 },
-  { cover: cover3, bookNumber: 3 },
-  { cover: cover4, bookNumber: 4 },
-  { cover: cover5, bookNumber: 5 }
+  { coverSrc: '/gallery/cover_1.jpg', bookNumber: 1 },
+  { coverSrc: '/gallery/cover_2.jpg', bookNumber: 2 },
+  { coverSrc: '/gallery/cover_3.jpg', bookNumber: 3 },
+  { coverSrc: '/gallery/cover_4.jpg', bookNumber: 4 },
+  { coverSrc: '/gallery/cover_5.jpg', bookNumber: 5 }
 ]
 
 const books: GalleryBook[] = Array.from({ length: 10 }, (_, index) => {
@@ -80,7 +72,7 @@ export function GalleryPreview () {
           >
             <div className={styles.book}>
               <div className={styles.frontFace}>
-                <div className={styles.cover} style={{ backgroundImage: `url(${book.cover.src})` }}>
+                <div className={styles.cover} style={{ backgroundImage: `url(${book.coverSrc})` }}>
                   <div className={styles.coverOverlay} />
                 </div>
               </div>
@@ -104,7 +96,7 @@ export function GalleryPreview () {
             {!iframeLoaded && (
               <div
                 className={styles.loadingOverlay}
-                style={{ backgroundImage: `url(${selectedBook.cover.src})` }}
+                style={{ backgroundImage: `url(${selectedBook.coverSrc})` }}
                 aria-live="polite"
               >
                 <div className={styles.loadingScrim} />

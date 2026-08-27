@@ -1,19 +1,12 @@
-import type { StaticImageData } from 'next/image'
-
 import styles from './gallery.module.css'
 
-import cover1 from '../../../gallery/images/cover_1.jpg'
-import cover2 from '../../../gallery/images/cover_2.png'
-import cover3 from '../../../gallery/images/cover_3.png'
-import cover4 from '../../../gallery/images/cover_4.png'
-
-const books: StaticImageData[] = [
-  cover1,
-  cover2,
-  cover3,
-  cover4,
-  cover2,
-  cover3
+const books = [
+  '/gallery/cover_1.jpg',
+  '/gallery/cover_2.jpg',
+  '/gallery/cover_3.jpg',
+  '/gallery/cover_4.jpg',
+  '/gallery/cover_2.jpg',
+  '/gallery/cover_3.jpg'
 ]
 
 export default function GalleryPage () {
@@ -31,7 +24,7 @@ export default function GalleryPage () {
   )
 }
 
-function renderBook (cover: StaticImageData, index: number) {
+function renderBook (coverSrc: string, index: number) {
   return (
     <div
       key={`book-${index}`}
@@ -41,7 +34,7 @@ function renderBook (cover: StaticImageData, index: number) {
     >
       <div className={styles.book}>
         <div className={styles.frontFace}>
-          <div className={styles.cover} style={{ backgroundImage: `url(${cover.src})` }}>
+          <div className={styles.cover} style={{ backgroundImage: `url(${coverSrc})` }}>
             <div className={styles.coverOverlay} />
           </div>
         </div>
