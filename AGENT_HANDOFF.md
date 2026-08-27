@@ -3,7 +3,7 @@
 > **Purpose:** Next agent / developer can continue without re-discovering context.  
 > **Product:** [img2x.com](https://img2x.com) — AI personalized storybooks (digital flipbook + Lulu hardcover).  
 > **Canonical GitHub (private):** https://github.com/chvsarath-eng/ai_app — clone this on any laptop.  
-> **Status:** Stripe payment code complete. **GitHub Actions CI/CD** configured — bootstrap GCP OIDC + Secret Manager before first deploy. Monorepo = `web/` + `api/`.
+> **Status:** GitHub Actions CI/CD live (Aug 27, 2026). GCP OIDC bootstrapped. **Web deployed** via Actions. Replace Stripe Secret Manager placeholders before go-live.
 
 ---
 
@@ -82,11 +82,11 @@ Secrets live in **local `.env`** and **GCP Secret Manager**, not in git.
 ## 3. Next agent TODO
 
 ### P0 — CI/CD bootstrap (one-time, repo owner)
-1. Apply `infra/github-actions` Terraform → set GitHub Variables (`GCP_*`).
-2. Create `production` GitHub Environment (optional approval gate).
-3. Ensure Secret Manager secrets exist (see `docs/SECRETS.md`).
-4. Disable legacy Cloud Build auto-triggers on `main`.
-5. Merge a PR to `main` and verify Deploy Web / Deploy API workflows.
+1. ~~Apply `infra/github-actions` Terraform → set GitHub Variables (`GCP_*`).~~ **Done**
+2. ~~Create `production` GitHub Environment.~~ **Done**
+3. ~~Disable legacy Cloud Build trigger `ai-api-main`.~~ **Done**
+4. **Replace** `stripe-secret-key` / `stripe-webhook-secret` in Secret Manager (`CONFIGURE_ME` placeholders were created).
+5. Re-run or push to `main` after Stripe secrets are set to validate full checkout flow.
 
 ### P1 — Stripe go-live
 1. Stripe account + international cards + Stripe Tax (or `STRIPE_AUTOMATIC_TAX=false` while testing).
