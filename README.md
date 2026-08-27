@@ -7,6 +7,15 @@ Single GitHub repository for the img2x product.
 | `web/` | Storefront, checkout, Stripe | Next.js 16 | Cloud Run `img2x-web` |
 | `api/` | Story / ebook generation | FastAPI / Python | Cloud Run `story-api` |
 
+## Clone on any laptop
+
+```bash
+git clone https://github.com/chvsarath-eng/ai_app.git
+cd ai_app
+```
+
+Private repo — use a machine logged into GitHub (HTTPS or SSH). Put secrets only in local `.env` files (see `web/.env.example` and `AGENT_HANDOFF.md`).
+
 ## Quick start
 
 ```bash

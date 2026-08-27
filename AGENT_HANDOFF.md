@@ -1,160 +1,135 @@
-# Agent Handoff — img2x (Aug 26, 2026)
+# Agent Handoff — img2x (Aug 27, 2026)
 
 > **Purpose:** Next agent / developer can continue without re-discovering context.  
 > **Product:** [img2x.com](https://img2x.com) — AI personalized storybooks (digital flipbook + Lulu hardcover).  
-> **Status:** Payments migrated from Dodo → **Stripe** (code done, secrets/deploy still needed). Monorepo consolidation in progress under `ai_app`.
+> **Canonical GitHub (private):** https://github.com/chvsarath-eng/ai_app — clone this on any laptop.  
+> **Status:** Stripe payment code complete (secrets/deploy still needed). Monorepo = `web/` + `api/`.
 
 ---
 
-## 1. Repos & layout
-
-| Before | Remote | Role |
-|--------|--------|------|
-| `F:/Users/sarat/Documents/ai_app` | https://github.com/chvsarath-eng/ai_app | Next.js storefront (`web/`) |
-| `F:/Users/sarat/Documents/ai_api` | https://github.com/chvsarath-eng/ai_api | FastAPI Story Service |
-
-**Target monorepo (preferred):** keep GitHub `chvsarath-eng/ai_app` as the single repo:
+## 1. Monorepo layout (clone this)
 
 ```text
-ai_app/   (optionally rename repo to img2x later)
-  web/          # Next.js 16 App Router — checkout, Stripe, UI
-  api/          # FastAPI Story Service (from former ai_api)
-  AGENTS.md
-  AGENT_HANDOFF.md   # this file
-  README.md
+ai_app/                         # https://github.com/chvsarath-eng/ai_app
+  web/                          # Next.js storefront + Stripe checkout
+  api/                          # FastAPI Story Service (from former ai_api)
+  AGENTS.md                     # Product / architecture guide
+  AGENT_HANDOFF.md              # THIS FILE — start here
+  README.md                     # Monorepo overview
 ```
 
-GCP project: **`imgstr`**  
-Cloud Run:
-- Web: `img2x-web` → https://img2x.com  
-- Story API: `story-api` → `https://story-api-502566942325.us-central1.run.app`
+| Path | Role | Cloud Run |
+|------|------|-----------|
+| `web/` | Storefront, checkout, Stripe | `img2x-web` → https://img2x.com |
+| `api/` | Story / ebook generation | `story-api` → `https://story-api-502566942325.us-central1.run.app` |
+
+**Legacy:** https://github.com/chvsarath-eng/ai_api — marked archived; do not develop there. Prefer monorepo `api/`.
+
+**GCP project:** `imgstr`
+
+### Clone on a new laptop
+
+```bash
+git clone https://github.com/chvsarath-eng/ai_app.git
+cd ai_app
+
+# Web
+cd web && cp .env.example .env   # fill secrets locally — never commit .env
+npm install && npm run dev
+
+# API (separate terminal)
+cd api && python -m venv .venv
+# Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+# copy local .env with API keys (not in git)
+uvicorn story_fastapi:app --reload --port 8000
+```
+
+Secrets live in **local `.env`** and **GCP Secret Manager**, not in git.
 
 ---
 
-## 2. What was done this session
+## 2. What was done
 
-### 2.1 Payment-gateway compliance research
-- MoRs (**Dodo / Paddle / Lemon Squeezy**) **ban physical goods** → hardcover blocked.
-- **Paddle** restricts AI human-face / face-swap content generation.
-- **Stripe** chosen for worldwide digital + hardcover.
-- Audit canvas (local Cursor): `payment-gateway-compliance.canvas.tsx` under the ai_api Cursor project canvases folder.
+### 2.1 Payment compliance
+- MoRs (Dodo / Paddle / Lemon) ban **physical goods** → hardcover blocked there.
+- Paddle restricts AI human-face / face-swap generation.
+- Chose **Stripe** for worldwide digital + hardcover.
 
-### 2.2 Stripe migration (in `web/`) — CODE COMPLETE
-| Area | Path | Notes |
-|------|------|--------|
-| Stripe client | `web/src/lib/stripe.ts` | Price IDs or `price_data` fallbacks; Tax toggle |
-| Order emails | `web/src/lib/order-emails.ts` | Shared SMTP templates |
-| Checkout API | `web/src/app/api/checkout/route.ts` | Create + verify Checkout Session |
-| Webhook | `web/src/app/api/webhooks/stripe/route.ts` | `checkout.session.completed` → emails |
-| Invoice/receipt | `web/src/app/api/payments/[paymentId]/invoice/route.ts` | Stripe charge receipt redirect |
-| Prices | `web/src/app/api/localize-prices/route.ts` | USD display + tax note |
-| Checkout UI | `web/src/app/checkout/page.tsx` | Stripe redirect; consent checkboxes |
-| Env template | `web/.env.example` | Stripe vars |
-| Deploy | `web/cloudbuild.yaml` | Mounts `stripe-secret-key`, `stripe-webhook-secret` |
+### 2.2 Stripe migration (`web/`) — CODE COMPLETE
+| Area | Path |
+|------|------|
+| Stripe helper | `web/src/lib/stripe.ts` |
+| Order emails | `web/src/lib/order-emails.ts` |
+| Checkout API | `web/src/app/api/checkout/route.ts` |
+| Webhook | `web/src/app/api/webhooks/stripe/route.ts` |
+| Receipt | `web/src/app/api/payments/[paymentId]/invoice/route.ts` |
+| Prices | `web/src/app/api/localize-prices/route.ts` |
+| Checkout UI | `web/src/app/checkout/page.tsx` (consent gates; no partner bypass) |
+| Env | `web/.env.example` |
+| Deploy | `web/cloudbuild.yaml` |
 
-**Removed:** Dodo SDK, overlay, `/api/webhooks/dodo`, partner access code `1345`, unpaid “partner-test” orders.
+**Removed:** Dodo SDK, partner code `1345`, unpaid test checkout.
 
-**Flow (unchanged architecture):**
-1. Client caches photos in IndexedDB → `POST /api/checkout` → redirect to Stripe.
-2. Return `?payment_return=1&session_id=...` → verify paid → `createStorybookJob` → Story Service.
-3. Webhook sends confirmation email (does **not** create jobs).
+**Flow:** IndexedDB photos → Stripe Checkout → return verify → `createStorybookJob` → Story Service. Webhook = emails only.
 
-### 2.3 Compliance UX added at checkout
-Required checkboxes before Pay:
-- 18+
-- Likeness / parental permission for minors in photos
-- Agree to Terms + Refund Policy
+### 2.3 Monorepo
+- `api/` added as a **clean snapshot** of Story Service (no secret-laden git history).
+- Do **not** `git subtree` from old `ai_api` — GitHub push protection blocked service-account / LangSmith secrets in that history.
 
 ---
 
-## 3. NOT done yet (next agent TODO)
+## 3. Next agent TODO
 
-### P0 — Make Stripe live
-1. Create/activate Stripe account for the business country; enable **international** cards.
-2. Enable **Stripe Tax** in Dashboard (or set `STRIPE_AUTOMATIC_TAX=false` until Tax is ready).
-3. Create GCP secrets and versions (no trailing newline — breaks webhooks):
-   ```bash
-   gcloud secrets create stripe-secret-key --replication-policy=automatic --project=imgstr
-   gcloud secrets create stripe-webhook-secret --replication-policy=automatic --project=imgstr
-   # Add sk_live_... and whsec_... as secret versions
-   ```
-4. Stripe Dashboard → Webhooks → endpoint:
-   - URL: `https://img2x.com/api/webhooks/stripe`
-   - Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `payment_intent.payment_failed`
-5. Deploy `web` via Cloud Build; smoke-test test-mode then live.
-6. Optional: create Products/Prices in Stripe; set `STRIPE_PRICE_DIGITAL_ID` / `STRIPE_PRICE_HARDCOVER_ID`.
+### P0 — Stripe go-live
+1. Stripe account + international cards + Stripe Tax (or `STRIPE_AUTOMATIC_TAX=false` while testing).
+2. GCP secrets: `stripe-secret-key`, `stripe-webhook-secret` (no trailing newline).
+3. Webhook URL: `https://img2x.com/api/webhooks/stripe`  
+   Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `payment_intent.payment_failed`
+4. Deploy `web`; test with `sk_test_` then `sk_live_`.
 
-### P1 — Monorepo hygiene
-- After `api/` is in the same repo: update Cloud Build triggers so Story API builds from `api/` (or keep separate trigger on `api/cloudbuild.yaml`).
+### P1 — Multi-laptop / ops
+- Keep developing only in **ai_app** monorepo.
 - Optionally rename GitHub repo `ai_app` → `img2x`.
-- Archive or mark read-only `chvsarath-eng/ai_api` with README pointing to monorepo `api/`.
-- Point Cursor workspace root at the monorepo.
+- Archive legacy `ai_api` on GitHub UI.
+- Point Cloud Build Story API trigger at `api/` path in monorepo (or keep building from legacy until cutover).
 
-### P2 — Further compliance (improves Stripe risk review)
-- Public **Safety / Content Policy** page (moderation, prohibited prompts, retention).
-- Align marketing price ($9.99 vs leftover $14.99 SEO copy).
-- Story API: stronger prompt blocklist for sexualized minors; avoid “face-swap” marketing language.
-- Do not re-enable unpaid partner checkout in production.
-
-### P3 — Story Service (api) notes for context
-- Endpoint: `POST /generate-ebook-async` in `story_fastapi.py`
-- Images: production Cloud Run uses **LaoZhang** (`IMAGE_PROVIDER=laozhang`, `API_KEY_LAOZHANG`)
-- Jobs: in-process background thread + GCS `JOBS_BUCKET=lulubook`
-- Scaling (approx): max 4, concurrency 1, 2 CPU, 1Gi, timeout 300s, CPU always allocated
+### P2 — Compliance polish
+- Public Safety page; align $9.99 vs $14.99 SEO; prompt blocklists; no “face-swap” marketing language.
 
 ---
 
-## 4. Env vars (web)
+## 4. Env (web)
 
 | Variable | Purpose |
 |----------|---------|
 | `STRIPE_SECRET_KEY` | `sk_test_` / `sk_live_` |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_` |
-| `STRIPE_AMOUNT_DIGITAL_CENTS` | Default `999` ($9.99) |
-| `STRIPE_AMOUNT_HARDCOVER_CENTS` | Default `3999` ($39.99) |
-| `STRIPE_PRICE_DIGITAL_ID` | Optional Dashboard price |
-| `STRIPE_PRICE_HARDCOVER_ID` | Optional Dashboard price |
+| `STRIPE_AMOUNT_DIGITAL_CENTS` | Default `999` |
+| `STRIPE_AMOUNT_HARDCOVER_CENTS` | Default `3999` |
+| `STRIPE_PRICE_*_ID` | Optional Dashboard prices |
 | `STRIPE_AUTOMATIC_TAX` | `true` / `false` |
-| `STORY_SERVICE_URL` | Cloud Run Story API |
-| `STORY_INVOKER_CREDENTIALS_JSON` | IAM invoker SA JSON |
-| `SMTP_*` | Order/contact email |
+| `STORY_SERVICE_URL` | Story API Cloud Run URL |
+| `STORY_INVOKER_CREDENTIALS_JSON` | Invoker SA JSON |
+| `SMTP_*` | Email |
 
-Local webhook forward:
-```bash
-stripe listen --forward-to localhost:3000/api/webhooks/stripe
-```
+Local: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
 
 ---
 
-## 5. Stripe onboarding blurb (honest)
+## 5. Story Service (`api/`) quick facts
 
-> img2x sells personalized AI-illustrated storybooks to adult customers (18+). Buyers upload photos they own or have permission to use (including parental permission for minors). Products: digital flipbook (email delivery) and optional print-on-demand hardcover via Lulu. We prohibit sexual / exploitative content. Checkout requires age, likeness, and Terms consent. We are the merchant of record via Stripe; tax via Stripe Tax.
-
----
-
-## 6. Key contacts / brands
-
-- Support: `team@img2x.com`
-- GCP project: `imgstr`
-- Governing law in ToS: India
+- `POST /generate-ebook-async` in `story_fastapi.py`
+- Prod images: LaoZhang (`IMAGE_PROVIDER=laozhang`)
+- Jobs: background thread + GCS `JOBS_BUCKET`
+- Never commit `invoker.json` / `.env`
 
 ---
 
-## 7. Conversation / research trail
+## 6. Stripe onboarding blurb
 
-- Compliance audit discussion + Stripe decision: this chat thread.
-- Prior Story Service detail: `/generate-ebook-async` lives in former `ai_api` (`story_fastapi.py`); image API LaoZhang in prod.
-- Do **not** use Paddle for this product (face AI + physical goods).
-- Do **not** put hardcover on Dodo/Lemon MoR accounts.
+> img2x sells personalized AI-illustrated storybooks to adult customers (18+). Buyers upload photos they own or have permission to use (including parental permission for minors). Products: digital flipbook and optional Lulu hardcover. No sexual/exploitative content. Checkout requires age, likeness, and Terms consent. Merchant of record via Stripe; tax via Stripe Tax.
 
 ---
 
-## 8. How next agent should start
-
-1. Open monorepo workspace (`ai_app` with `web/` + `api/`).
-2. Read this file + `AGENTS.md` + `web/README.md`.
-3. Confirm Stripe secrets exist and webhook is registered.
-4. Run `web` locally with `sk_test_` + Stripe CLI.
-5. Only then deploy live and flip `sk_live_`.
-
-**Do not** reintroduce Dodo or partner free checkout without an explicit product decision.
+**Do not** reintroduce Dodo or partner free checkout without an explicit decision.

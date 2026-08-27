@@ -1,0 +1,16 @@
+# Start with local development exclusions.
+#!include:.gitignore
+
+# Development-only files that are not needed by the Cloud Run container.
+.git/
+.cursor/
+*.ipynb
+input_images/
+book_outputs/
+output/
+tmp/
+*.log
+
+# Keep credentials and local environment files out of build uploads.
+.env
+.env.*

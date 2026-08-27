@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Personalized Storybook is Ready ✨</title>
+    <!--[if mso]>
+    <noscript>
+        <xml>
+            <o:OfficeDocumentSettings>
+                <o:AllowPNG/>
+                <o:PixelsPerInch>96</o:PixelsPerInch>
+            </o:OfficeDocumentSettings>
+        </xml>
+    </noscript>
+    <![endif]-->
+    <style>
+        /* Reset and optimization styles */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        /* Email client specific optimizations */
+        body, table, td, p, a, li, blockquote {
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+        }
+        
+        table, td {
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+        }
+        
+        img {
+            -ms-interpolation-mode: bicubic;
+            border: 0;
+            outline: none;
+            text-decoration: none;
+            display: block;
+            height: auto;
+            max-width: 100%;
+        }
+        
+        /* Main aesthetic styling */
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        
+        .email-wrapper {
+            max-width: 680px;
+            margin: 40px auto;
+            border-radius: 32px;
+            overflow: hidden;
+            box-shadow: 0 40px 100px rgba(0, 0, 0, 0.2);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transform: perspective(1000px) rotateX(1deg);
+        }
+        
+        .header-section {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 48px 56px;
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 70% 30%, rgba(255,255,255,0.1) 0%, transparent 50%);
+            pointer-events: none;
+        }
+        
+        .logo-container {
+            position: relative;
+            z-index: 2;
+        }
+        
+        .logo-circle {
+            width: 120px;
+            height: 120px;
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border-radius: 50%;
+            margin: 0 auto 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .logo-circle::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, #fbbf24, #f59e0b, #d97706, #fbbf24);
+            border-radius: 50%;
+            z-index: -1;
+            animation: rotate 8s linear infinite;
+        }
+        
+        .logo-image {
+            max-width: 80px;
+            max-height: 60px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .brand-text-wrapper {
+            text-align: center;
+        }
+        
+        .brand-main {
+            font-size: 36px;
+            font-weight: 900;
+            color: #ffffff;
+            margin-bottom: 8px;
+            letter-spacing: -1px;
+            text-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            background: linear-gradient(45deg, #ffffff, #fbbf24);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .brand-tagline {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.85);
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin: 0;
+        }
+        
+        .content-section {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            padding: 56px;
+            border-radius: 24px 24px 0 0;
+            position: relative;
+        }
+        
+        .content-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 24px;
+            background: linear-gradient(to right, #667eea, #764ba2);
+            opacity: 0.1;
+        }
+        
+        .main-title {
+            font-size: 42px;
+            font-weight: 900;
+            color: #1e293b;
+            margin-bottom: 24px;
+            text-align: center;
+            line-height: 1.1;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #1e293b 0%, #64748b 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle-text {
+            font-size: 18px;
+            color: #64748b;
+            text-align: center;
+            margin-bottom: 48px;
+            font-weight: 400;
+            line-height: 1.7;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .celebration-banner {
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            border-radius: 20px;
+            padding: 32px;
+            margin: 40px 0;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 16px 40px rgba(251, 191, 36, 0.25);
+            transform: perspective(1000px) rotateY(-1deg);
+        }
+        
+        .celebration-banner::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 20%, rgba(255,255,255,0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255,255,255,0.1) 0%, transparent 50%);
+            animation: shimmer 6s ease-in-out infinite;
+        }
+        
+        .celebration-content {
+            position: relative;
+            z-index: 2;
+            text-align: center;
+            color: #92400e;
+        }
+        
+        .celebration-emoji {
+            font-size: 64px;
+            margin-bottom: 16px;
+            display: block;
+            animation: 
+                float 6s ease-in-out infinite,
+                pulse 2s ease-in-out infinite;
+        }
+        
+        .celebration-title {
+            font-size: 24px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            color: inherit;
+        }
+        
+        .celebration-subtitle {
+            font-size: 16px;
+            opacity: 0.9;
+            font-weight: 500;
+        }
+        
+        .download-grid {
+            display: table;
+            width: 100%;
+            margin: 32px 0;
+        }
+        
+        .download-option {
+            border-radius: 24px;
+            padding: 40px 32px;
+            margin: 16px 0;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.08);
+            transform: translateY(0);
+            will-change: transform;
+        }
+        
+        .pdf-option {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: #ffffff;
+        }
+        
+        .pdf-option:hover {
+            transform: translateY(-6px) scale(1.02);
+            box-shadow: 0 20px 60px rgba(16, 185, 129, 0.3);
+        }
+        
+        .interactive-option {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: #ffffff;
+        }
+        
+        .interactive-option:hover {
+            transform: translateY(-6px) scale(1.02);
+            box-shadow: 0 20px 60px rgba(139, 92, 246, 0.3);
+        }
+        
+        .option-icon {
+            font-size: 56px;
+            margin-bottom: 20px;
+            display: block;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+        }
+        
+        .option-title {
+            font-size: 26px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            color: inherit;
+            font-family: inherit;
+        }
+        
+        .option-description {
+            font-size: 15px;
+            margin-bottom: 32px;
+            opacity: 0.9;
+            line-height: 1.6;
+            color: inherit;
+            font-family: inherit;
+        }
+        
+        .action-button {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.95);
+            color: #1e293b;
+            text-decoration: none;
+            padding: 18px 36px;
+            border-radius: 18px;
+            font-weight: 700;
+            font-size: 18px;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+            position: relative;
+            overflow: hidden;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            will-change: transform;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 18px 48px rgba(0, 0, 0, 0.2);
+            background: #ffffff;
+        }
+        
+        .action-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.6), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s ease;
+        }
+        
+        .action-button:hover::before {
+            transform: translateX(100%);
+        }
+        
+        .support-section {
+            background: #f8fafc;
+            border-radius: 20px;
+            padding: 32px;
+            margin: 40px 0;
+            border: 1px solid #e2e8f0;
+            position: relative;
+        }
+        
+        .support-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 20px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .tips-grid {
+            display: table;
+            width: 100%;
+        }
+        
+        .tip-card {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 24px;
+            margin: 12px 0;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e2e8f0;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .tip-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+        
+        .tip-emoji {
+            font-size: 36px;
+            margin-bottom: 16px;
+            display: block;
+        }
+        
+        .tip-label {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 8px;
+        }
+        
+        .tip-description {
+            font-size: 14px;
+            color: #64748b;
+            line-height: 1.5;
+        }
+        
+        .apple-section {
+            background: #ffffff;
+            border-radius: 20px;
+            padding: 32px;
+            margin: 24px 0;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.05);
+        }
+        
+        .apple-instructions {
+            width: 100%;
+            max-width: 520px;
+            border-radius: 14px;
+            margin: 0 auto;
+            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.1);
+            display: block;
+        }
+        
+        .fallback-container {
+            text-align: center;
+            margin: 32px 0;
+            padding: 28px;
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border-radius: 16px;
+            border: 1px solid #fcd34d;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .fallback-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at center, rgba(255,255,255,0.2) 0%, transparent 70%);
+        }
+        
+        .fallback-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #92400e;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        
+        .fallback-links {
+            position: relative;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 12px;
+        }
+        
+        .fallback-link {
+            color: #1e40af;
+            text-decoration: none;
+            font-weight: 500;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            border: 1px solid #dbeafe;
+            transition: all 0.3s ease;
+            font-family: inherit;
+            font-size: 14px;
+        }
+        
+        .fallback-link:hover {
+            background: #dbeafe;
+            color: #1e3a8a;
+            transform: translateY(-1px);
+        }
+        
+        .footer-section {
+            text-align: center;
+            padding: 48px 32px;
+            background: rgba(255, 255, 255, 0.05);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        .footer-text {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 12px;
+            font-weight: 500;
+        }
+        
+        .footer-support {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            font-style: italic;
+        }
+        
+        .support-link {
+            color: #fbbf24;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .support-link:hover {
+            color: #f59e0b;
+            text-decoration: underline;
+        }
+        
+        /* Responsive design optimizations */
+        @media screen and (max-width: 640px) {
+            .email-wrapper {
+                border-radius: 0;
+                margin: 0;
+                transform: none;
+            }
+            
+            .header-section,
+            .content-section {
+                padding: 32px 24px;
+            }
+            
+            .main-title {
+                font-size: 32px;
+            }
+            
+            .download-option {
+                padding: 24px 16px;
+            }
+            
+            .action-button {
+                padding: 16px 28px;
+                font-size: 16px;
+            }
+            
+            .brand-main {
+                font-size: 28px;
+            }
+            
+            .logo-circle {
+                width: 100px;
+                height: 100px;
+            }
+            
+            .fallback-links {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+        
+        /* Print styles */
+        @media print {
+            .email-wrapper {
+                box-shadow: none;
+                background: #ffffff;
+                color: #000000;
+            }
+        }
+        
+        /* Outlook specific styles */
+        /*[if (gte mso 9)|(IE)]>
+        <style type="text/css">
+            .email-wrapper {
+                width: 680px !important;
+            }
+            table {
+                border-collapse: collapse !important;
+            }
+            .header-section,
+            .content-section {
+                border-collapse: separate !important;
+            }
+            .brand-main,
+            .main-title {
+                mso-text-raise: 0.25pt;
+            }
+        </style>
+        <![endif]-->
+        
+        /* Animations */
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.9; }
+        }
+        
+        @keyframes shimmer {
+            0%, 100% { opacity: 0.7; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.05); }
+        }
+        
+        @keyframes rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body leftmargin="0" topmargin="0" marginwidth="0" marginheight="0">
+    <!-- Main wrapper -->
+    <table role="presentation" cellpadding="0" cellspacing="0" class="email-wrapper">
+        <tr>
+            <td>
+                <!-- Header Section -->
+                <table role="presentation" cellpadding="0" cellspacing="0" class="header-section">
+                    <tr>
+                        <td>
+                            <div class="logo-container">
+                                <div class="logo-circle">
+                                    <img src="cid:img2x-logo" alt="IMG2X Logo" class="logo-image" width="80" height="60" border="0">
+                                </div>
+                                <div class="brand-text-wrapper">
+                                    <h1 class="brand-main">IMG2X</h1>
+                                    <p class="brand-tagline">STORYBOOK CREATOR</p>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+                
+                <!-- Content Section -->
+                <table role="presentation" cellpadding="0" cellspacing="0" class="content-section">
+                    <tr>
+                        <td>
+                            <!-- Main heading -->
+                            <h2 class="main-title">Your Personalized Storybook is Here! 🎊</h2>
+                            <p class="subtitle-text">Congratulations! Your unique storybook has been crafted with care and is ready for download. Your download links will expire in {expires_days} days, so grab your magical copy soon!</p>
+                            
+                            <!-- Celebration banner -->
+                            <div class="celebration-banner">
+                                <div class="celebration-content">
+                                    <span class="celebration-emoji">📚✨🎉</span>
+                                    <h3 class="celebration-title">A Brand New Story Awaits!</h3>
+                                    <p class="celebration-subtitle">Your personalized digital storybook is ready to explore</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Download options -->
+                            <table role="presentation" cellpadding="0" cellspacing="0" class="download-grid">
+                                <tr>
+                                    <td>
+                                        <!-- PDF Option -->
+                                        <div class="download-option pdf-option">
+                                            <span class="option-icon">📖</span>
+                                            <h4 class="option-title">Download PDF Version</h4>
+                                            <p class="option-description">Perfect for offline reading, sharing with friends & family, and high-quality printing. Universal compatibility across all devices and PDF readers.</p>
+                                            <a href="{pdf_url}" class="action-button">Download PDF</a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <!-- Interactive Option -->
+                                        <div class="download-option interactive-option">
+                                            <span class="option-icon">🌐</span>
+                                            <h4 class="option-title">Download Interactive Version</h4>
+                                            <p class="option-description">Web-based flipbook with rich animations, interactive elements, and modern reading experience. Download & open in any browser for maximum engagement.</p>
+                                            <a href="{html_url}" class="action-button">Download Interactive</a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- Support & Tips Section -->
+                            <div class="support-section">
+                                <h4 class="support-title">📋 Quick Tips for Best Experience</h4>
+                                <table role="presentation" cellpadding="0" cellspacing="0" class="tips-grid">
+                                    <tr>
+                                        <td>
+                                            <div class="tip-card">
+                                                <div class="tip-emoji">📄</div>
+                                                <div class="tip-label">PDF - Universal</div>
+                                                <div class="tip-description">Works everywhere, perfect for sharing and printing</div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>
+                                            <div class="tip-card">
+                                                <div class="tip-emoji">🌐</div>
+                                                <div class="tip-label">Interactive - Immersive</div>
+                                                <div class="tip-description">Modern flipbook experience with animations</div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>
+                                            <div class="tip-card">
+                                                <div class="tip-emoji">💾</div>
+                                                <div class="tip-label">Download First</div>
+                                                <div class="tip-description">Save files locally before opening for best performance</div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>
+                                            <div class="tip-card">
+                                                <div class="tip-emoji">⏰</div>
+                                                <div class="tip-label">Valid for {expires_days} Days</div>
+                                                <div class="tip-description">Download your books before expiration</div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+                            
+                            <!-- Apple Instructions Section -->
+                            <div class="apple-section">
+                                <img src="cid:apple-instructions" alt="Apple device instructions" class="apple-instructions" width="520">
+                            </div>
+                            
+                            <!-- Fallback Links -->
+                            <div class="fallback-container">
+                                <p class="fallback-title">🤔 Having issues with download buttons?</p>
+                                <div class="fallback-links">
+                                    <a href="{pdf_url}" class="fallback-link">Direct PDF Download</a>
+                                    <a href="{html_url}" class="fallback-link">Direct Interactive Download</a>
+                                </div>
+                            </div>
+                            
+                            <!-- Support text -->
+                            <p style="text-align: center; font-size: 16px; color: #64748b; margin: 32px 0; font-weight: 400;">
+                                📧 Need assistance? Simply reply to this email and our creative support team will help you!
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+                
+                <!-- Footer Section -->
+                <table role="presentation" cellpadding="0" cellspacing="0" class="footer-section">
+                    <tr>
+                        <td>
+                            <p class="footer-text">✨ Thank you for bringing your imagination to life with IMG2X Storybook Creator!</p>
+                            <p class="footer-support">If you have any questions, just <a href="mailto:{support_email}" class="support-link">email us</a> and we'll help you out.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
