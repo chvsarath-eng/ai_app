@@ -176,6 +176,41 @@ resource "google_cloud_run_v2_service" "web" {
         }
       }
 
+      env {
+        name = "STRIPE_SECRET_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.stripe_secret_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name = "STRIPE_WEBHOOK_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.stripe_webhook_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name  = "STRIPE_AMOUNT_DIGITAL_CENTS"
+        value = "999"
+      }
+
+      env {
+        name  = "STRIPE_AMOUNT_HARDCOVER_CENTS"
+        value = "3999"
+      }
+
+      env {
+        name  = "STRIPE_AUTOMATIC_TAX"
+        value = "true"
+      }
+
       # Non-secret environment variables
       env {
         name  = "NODE_ENV"
@@ -214,8 +249,10 @@ resource "google_cloud_run_v2_service_iam_member" "public_access" {
 }
 
 # ============================================
-# Cloud Build Trigger (GitHub)
+# Cloud Build Trigger (GitHub) — DEPRECATED
 # ============================================
+# GitHub Actions is the authoritative deploy path (.github/workflows/deploy-*.yml).
+# Keep this resource disabled unless you intentionally need a fallback trigger.
 
 resource "google_cloudbuild_trigger" "deploy" {
   count       = var.enable_cloudbuild_trigger ? 1 : 0

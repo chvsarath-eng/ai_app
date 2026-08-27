@@ -1,0 +1,85 @@
+name: Deploy Web
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  changes:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            web:
+              - 'web/**'
+              - 'deploy/config/web.json'
+              - 'scripts/deploy-cloud-run.sh'
+              - '.github/workflows/deploy-web.yml'
+
+  deploy:
+    name: Deploy img2x-web
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          REPO: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
+          SERVICE: img2x-web
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}"
+          docker build -t "${IMAGE}:${SHA}" -t "${IMAGE}:latest" web
+          docker push "${IMAGE}:${SHA}"
+          docker push "${IMAGE}:latest"
+
+      - name: Deploy to Cloud Run
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          REPO: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          chmod +x scripts/deploy-cloud-run.sh
+          ./scripts/deploy-cloud-run.sh web "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/img2x-web:${SHA}"
+
+      - name: Smoke check
+        env:
+          REGION: ${{ vars.GCP_REGION }}
+        run: |
+          URL=$(gcloud run services describe img2x-web --region "${REGION}" --format='value(status.url)')
+          echo "Checking ${URL}"
+          curl -fsS --retry 5 --retry-delay 5 "${URL}/" -o /dev/null
+          echo "Web smoke check passed"

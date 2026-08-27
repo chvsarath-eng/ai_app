@@ -1,0 +1,24 @@
+title = "img2x gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow known safe example placeholders"
+paths = [
+  '''\.env\.example$''',
+  '''terraform\.tfvars\.example$''',
+  '''docs/SECRETS\.md$''',
+  '''docs/DEPLOYMENT_SETUP\.md$''',
+  '''\.github/workflows/.*\.yml$''',
+]
+
+[[rules]]
+id = "stripe-test-key-placeholder"
+description = "CI placeholder Stripe test key"
+regex = '''sk_test_ci_placeholder'''
+
+[[rules]]
+id = "stripe-webhook-placeholder"
+description = "CI placeholder webhook secret"
+regex = '''whsec_ci_placeholder'''

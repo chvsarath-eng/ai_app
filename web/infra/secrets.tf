@@ -139,3 +139,39 @@ resource "google_secret_manager_secret_iam_member" "story_invoker_credentials_ac
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.cloud_run_sa.email}"
 }
+
+# ============================================
+# Stripe Secrets
+# ============================================
+
+resource "google_secret_manager_secret" "stripe_secret_key" {
+  secret_id = "stripe-secret-key"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret" "stripe_webhook_secret" {
+  secret_id = "stripe-webhook-secret"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_iam_member" "stripe_secret_key_access" {
+  secret_id = google_secret_manager_secret.stripe_secret_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cloud_run_sa.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "stripe_webhook_secret_access" {
+  secret_id = google_secret_manager_secret.stripe_webhook_secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cloud_run_sa.email}"
+}

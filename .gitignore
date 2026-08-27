@@ -31,6 +31,7 @@ credentials.json
 .terraform.lock.hcl
 terraform.tfvars
 *.auto.tfvars
+!infra/**/.terraform.lock.hcl
 
 # Node.js
 node_modules/
@@ -56,3 +57,17 @@ logs/
 # Misc
 .vercel
 .turbo
+
+# Local screenshots / Playwright artifacts (never commit)
+.playwright-mcp/
+**/test-results/
+**/playwright-report/
+**/*-screenshot*.png
+**/screenshots/
+gallery-*.png
+homepage.png
+pricing-page.png
+
+# Generated story artifacts
+**/generated_images/
+**/input_images/

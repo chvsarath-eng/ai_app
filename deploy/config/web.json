@@ -1,0 +1,28 @@
+{
+  "serviceName": "img2x-web",
+  "region": "us-central1",
+  "port": 3000,
+  "cpu": "1",
+  "memory": "512Mi",
+  "minInstances": 0,
+  "maxInstances": 10,
+  "concurrency": 80,
+  "timeout": "300s",
+  "allowUnauthenticated": true,
+  "env": {
+    "NODE_ENV": "production",
+    "STRIPE_AMOUNT_DIGITAL_CENTS": "999",
+    "STRIPE_AMOUNT_HARDCOVER_CENTS": "3999",
+    "STRIPE_AUTOMATIC_TAX": "true"
+  },
+  "secrets": {
+    "SMTP_HOST": "smtp-host:latest",
+    "SMTP_PORT": "smtp-port:latest",
+    "SMTP_USER": "smtp-user:latest",
+    "SMTP_PASS": "smtp-pass:latest",
+    "STORY_SERVICE_URL": "story-service-url:latest",
+    "STORY_INVOKER_CREDENTIALS_JSON": "story-invoker-credentials:latest",
+    "STRIPE_SECRET_KEY": "stripe-secret-key:latest",
+    "STRIPE_WEBHOOK_SECRET": "stripe-webhook-secret:latest"
+  }
+}

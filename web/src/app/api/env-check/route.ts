@@ -20,6 +20,10 @@ function pickCredentialsSource () {
 }
 
 export async function GET () {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
   const invokerPath = path.join(process.cwd(), 'invoker.json')
   const picked = pickCredentialsSource()
   return NextResponse.json({

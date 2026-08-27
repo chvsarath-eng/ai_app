@@ -1,0 +1,26 @@
+{
+  "serviceName": "story-api",
+  "region": "us-central1",
+  "port": 8080,
+  "cpu": "2",
+  "memory": "2Gi",
+  "minInstances": 0,
+  "maxInstances": 5,
+  "concurrency": 1,
+  "timeout": "900s",
+  "allowUnauthenticated": false,
+  "cpuAlwaysAllocated": true,
+  "env": {
+    "IMAGE_PROVIDER": "laozhang",
+    "JOBS_BUCKET": "imgstr-story-jobs-us-central1",
+    "IMAGE_CONCURRENCY": "5"
+  },
+  "secrets": {
+    "GOOGLE_API_KEY": "gemini-api-key:latest",
+    "API_KEY_LAOZHANG": "API_KEY_LAOZHANG:latest",
+    "SMTP_HOST": "smtp-host:latest",
+    "SMTP_PORT": "smtp-port:latest",
+    "SMTP_USER": "smtp-user:latest",
+    "SMTP_PASSWORD": "smtp-pass:latest"
+  }
+}

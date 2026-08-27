@@ -4,8 +4,8 @@ Single GitHub repository for the img2x product.
 
 | Path | App | Stack | Deploy |
 |------|-----|-------|--------|
-| `web/` | Storefront, checkout, Stripe | Next.js 16 | Cloud Run `img2x-web` |
-| `api/` | Story / ebook generation | FastAPI / Python | Cloud Run `story-api` |
+| `web/` | Storefront, checkout, Stripe | Next.js 16 | Cloud Run `img2x-web` via GitHub Actions |
+| `api/` | Story / ebook generation | FastAPI / Python | Cloud Run `story-api` via GitHub Actions |
 
 ## Clone on any laptop
 
@@ -31,9 +31,13 @@ uvicorn story_fastapi:app --reload --port 8000
 ## Docs
 
 - **`AGENT_HANDOFF.md`** — current status, Stripe go-live checklist, compliance notes (start here)
+- **`CONTRIBUTING.md`** — PR workflow, local validation, CI/CD overview
+- **`docs/DEPLOYMENT_SETUP.md`** — one-time GCP OIDC bootstrap + production rollout
+- **`docs/PRODUCTION_ROLLOUT_CHECKLIST.md`** — go-live verification checklist
+- **`docs/SECRETS.md`** — Secret Manager mapping and rotation
 - **`AGENTS.md`** — product architecture for coding agents
-- **`web/README.md`** — web deploy / env details
-- **`api/README.md`** — Story Service API (after `api/` is merged)
+- **`web/README.md`** — web env details
+- **`api/README.md`** — Story Service API
 
 ## GitHub
 

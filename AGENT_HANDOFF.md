@@ -3,7 +3,7 @@
 > **Purpose:** Next agent / developer can continue without re-discovering context.  
 > **Product:** [img2x.com](https://img2x.com) — AI personalized storybooks (digital flipbook + Lulu hardcover).  
 > **Canonical GitHub (private):** https://github.com/chvsarath-eng/ai_app — clone this on any laptop.  
-> **Status:** Stripe payment code complete (secrets/deploy still needed). Monorepo = `web/` + `api/`.
+> **Status:** Stripe payment code complete. **GitHub Actions CI/CD** configured — bootstrap GCP OIDC + Secret Manager before first deploy. Monorepo = `web/` + `api/`.
 
 ---
 
@@ -67,7 +67,7 @@ Secrets live in **local `.env`** and **GCP Secret Manager**, not in git.
 | Prices | `web/src/app/api/localize-prices/route.ts` |
 | Checkout UI | `web/src/app/checkout/page.tsx` (consent gates; no partner bypass) |
 | Env | `web/.env.example` |
-| Deploy | `web/cloudbuild.yaml` |
+| Deploy | GitHub Actions → Cloud Run (see `docs/DEPLOYMENT_SETUP.md`) |
 
 **Removed:** Dodo SDK, partner code `1345`, unpaid test checkout.
 
@@ -81,20 +81,28 @@ Secrets live in **local `.env`** and **GCP Secret Manager**, not in git.
 
 ## 3. Next agent TODO
 
-### P0 — Stripe go-live
+### P0 — CI/CD bootstrap (one-time, repo owner)
+1. Apply `infra/github-actions` Terraform → set GitHub Variables (`GCP_*`).
+2. Create `production` GitHub Environment (optional approval gate).
+3. Ensure Secret Manager secrets exist (see `docs/SECRETS.md`).
+4. Disable legacy Cloud Build auto-triggers on `main`.
+5. Merge a PR to `main` and verify Deploy Web / Deploy API workflows.
+
+### P1 — Stripe go-live
 1. Stripe account + international cards + Stripe Tax (or `STRIPE_AUTOMATIC_TAX=false` while testing).
 2. GCP secrets: `stripe-secret-key`, `stripe-webhook-secret` (no trailing newline).
 3. Webhook URL: `https://img2x.com/api/webhooks/stripe`  
    Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `payment_intent.payment_failed`
 4. Deploy `web`; test with `sk_test_` then `sk_live_`.
 
-### P1 — Multi-laptop / ops
+### P2 — Multi-laptop / ops
 - Keep developing only in **ai_app** monorepo.
+- Use PR workflow (`CONTRIBUTING.md`) — no direct pushes to `main`.
 - Optionally rename GitHub repo `ai_app` → `img2x`.
 - Archive legacy `ai_api` on GitHub UI.
 - Point Cloud Build Story API trigger at `api/` path in monorepo (or keep building from legacy until cutover).
 
-### P2 — Compliance polish
+### P3 — Compliance polish
 - Public Safety page; align $9.99 vs $14.99 SEO; prompt blocklists; no “face-swap” marketing language.
 
 ---
@@ -129,6 +137,21 @@ Local: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
 ## 6. Stripe onboarding blurb
 
 > img2x sells personalized AI-illustrated storybooks to adult customers (18+). Buyers upload photos they own or have permission to use (including parental permission for minors). Products: digital flipbook and optional Lulu hardcover. No sexual/exploitative content. Checkout requires age, likeness, and Terms consent. Merchant of record via Stripe; tax via Stripe Tax.
+
+---
+
+## 7. CI/CD reference
+
+| Workflow | File | Trigger |
+|----------|------|---------|
+| CI | `.github/workflows/ci.yml` | PR + push to `main` |
+| Deploy Web | `.github/workflows/deploy-web.yml` | After CI on `main` (web paths) |
+| Deploy API | `.github/workflows/deploy-api.yml` | After CI on `main` (api paths) |
+
+Config: `deploy/config/web.json`, `deploy/config/api.json`, `scripts/deploy-cloud-run.sh`  
+Docs: `docs/DEPLOYMENT_SETUP.md`, `docs/SECRETS.md`, `CONTRIBUTING.md`
+
+Rollback: `gcloud run services update-traffic <service> --to-revisions <revision>=100`
 
 ---
 

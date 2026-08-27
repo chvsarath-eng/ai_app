@@ -1,16 +1,19 @@
+# ============================================
+# DEPRECATED — use GitHub Actions instead
+# ============================================
+# Authoritative deploy: .github/workflows/deploy-api.yml
+# Retained for manual emergency image builds only.
+
 steps:
   - name: gcr.io/cloud-builders/docker
     args:
       - build
       - -t
-      - gcr.io/$PROJECT_ID/story-api:$COMMIT_SHA
+      - us-central1-docker.pkg.dev/$PROJECT_ID/img2x-repo/story-api:$COMMIT_SHA
       - .
 
 images:
-  - gcr.io/$PROJECT_ID/story-api:$COMMIT_SHA
+  - us-central1-docker.pkg.dev/$PROJECT_ID/img2x-repo/story-api:$COMMIT_SHA
 
-# Required in some org policies when a build service account is specified.
 options:
   logging: CLOUD_LOGGING_ONLY
-
-

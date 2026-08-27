@@ -21,6 +21,7 @@ genstrenv/
 .env
 *.env
 *.env.*
+!.env.example
 *.json
 !requirements*.json
 !*.schema.json

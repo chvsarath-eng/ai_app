@@ -148,7 +148,7 @@ ai_app/
 | Payments | Stripe (hosted checkout, webhooks, tax) |
 | Email | Nodemailer (SMTP via Hostinger) |
 | Hosting | Google Cloud Run |
-| CI/CD | Cloud Build + GitHub triggers |
+| CI/CD | GitHub Actions (OIDC) → Artifact Registry → Cloud Run |
 | Infra | Terraform |
 
 ---
@@ -244,18 +244,22 @@ gcloud secrets create stripe-webhook-secret --replication-policy="automatic" --p
 
 ## Deployment
 
-### Automatic (Recommended)
-Push to `main` → GitHub trigger → Cloud Build → Cloud Run
+### Automatic (required)
+Open a PR → **CI** passes → merge to `main` → **Deploy Web** / **Deploy API** (path-aware, after CI).
 
-### Manual
+Workflows: `.github/workflows/ci.yml`, `deploy-web.yml`, `deploy-api.yml`  
+Bootstrap: [`docs/DEPLOYMENT_SETUP.md`](./docs/DEPLOYMENT_SETUP.md)
+
+### Manual (emergency only)
 ```bash
-# MUST run from repo root (ai_app/), NOT from web/
-cd /path/to/ai_app
-gcloud builds submit --config=web/cloudbuild.yaml --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD) .
+export GCP_PROJECT_ID=imgstr
+./scripts/deploy-cloud-run.sh web us-central1-docker.pkg.dev/imgstr/img2x-repo/img2x-web:TAG
 ```
 
+Legacy `web/cloudbuild.yaml` is deprecated — do not re-enable Cloud Build triggers on `main`.
+
 ### Monitor
-- Build: https://console.cloud.google.com/cloud-build/builds
+- Actions: https://github.com/chvsarath-eng/ai_app/actions
 - Logs: `gcloud run services logs read img2x-web --region us-central1`
 - Production: https://img2x.com
 

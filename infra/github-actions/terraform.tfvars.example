@@ -1,0 +1,5 @@
+project_id = "imgstr"
+region     = "us-central1"
+
+# github_owner = "chvsarath-eng"
+# github_repo  = "ai_app"

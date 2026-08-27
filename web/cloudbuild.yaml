@@ -1,11 +1,14 @@
 # ============================================
+# DEPRECATED — use GitHub Actions instead
+# ============================================
+# Authoritative deploy: .github/workflows/deploy-web.yml
+# Retained for manual emergency builds only. Do NOT auto-trigger on push to main.
+
+# ============================================
 # Cloud Build Configuration for img2x-web
 # ============================================
-# Triggers on push to main branch
-# Builds Docker image and deploys to Cloud Run
 
 steps:
-  # Step 1: Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
@@ -16,14 +19,12 @@ steps:
       - '.'
     dir: 'web'
 
-  # Step 2: Push the Docker image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
       - '--all-tags'
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}'
 
-  # Step 3: Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
     args:
@@ -52,7 +53,6 @@ steps:
       - '--set-secrets'
       - 'SMTP_HOST=smtp-host:latest,SMTP_PORT=smtp-port:latest,SMTP_USER=smtp-user:latest,SMTP_PASS=smtp-pass:latest,STORY_SERVICE_URL=story-service-url:latest,STORY_INVOKER_CREDENTIALS_JSON=story-invoker-credentials:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest'
 
-# Substitution variables (can be overridden in trigger)
 substitutions:
   _REGION: 'us-central1'
   _REPO: 'img2x-repo'
@@ -63,16 +63,12 @@ substitutions:
   _STRIPE_PRICE_DIGITAL_ID: ''
   _STRIPE_PRICE_HARDCOVER_ID: ''
 
-# Secrets from Secret Manager
-# Build options
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: 'E2_HIGHCPU_8'
 
-# Build timeout (10 minutes)
 timeout: '600s'
 
-# Store images in Artifact Registry
 images:
   - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:${COMMIT_SHA}'
   - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}:latest'
