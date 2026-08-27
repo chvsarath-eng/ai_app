@@ -9,7 +9,7 @@ Next.js (App Router) frontend for img2x — a personalized storybook generator t
 - React Hook Form + Zod
 - React Query
 - Three.js / @react-three/fiber for 3D previews
-- Dodo Payments for payments (hosted checkout, webhooks, tax)
+- Stripe Checkout for international payments (hosted checkout, webhooks, Stripe Tax)
 - Nodemailer for transactional emails (SMTP)
 
 ## Project Structure
@@ -31,9 +31,9 @@ Key entry points:
 - `src/app/page.tsx` — Home page
 - `src/app/order/[orderId]/page.tsx` — Order confirmation (with receipt download)
 - `src/app/api/storybook/*` — Server routes that call the story service
-- `src/app/api/checkout/route.ts` — Dodo checkout session creation + verification
-- `src/app/api/webhooks/dodo/route.ts` — Dodo webhook handler
-- `src/app/api/payments/[paymentId]/invoice/route.ts` — Invoice PDF redirect
+- `src/app/api/checkout/route.ts` — Stripe Checkout session creation + verification
+- `src/app/api/webhooks/stripe/route.ts` — Stripe webhook handler
+- `src/app/api/payments/[paymentId]/invoice/route.ts` — Stripe receipt redirect
 - `src/app/api/contact/route.ts` — Contact form email
 
 ## Local Development
@@ -60,36 +60,36 @@ Required variables:
   - OR `STORY_INVOKER_CREDENTIALS_JSON`
 - SMTP credentials for transactional emails:
   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`
-- **Dodo Payments**:
-  - `DODO_PAYMENTS_ENVIRONMENT` — `test_mode` or `live_mode`
-  - `DODO_PRODUCT_DIGITAL_ID` — Dodo product ID for the digital book
-  - `DODO_PRODUCT_HARDCOVER_ID` — Dodo product ID for the hardcover book
-  - `DODO_PRODUCT_SHIPPING_ID` — Dodo pay-what-you-want product ID used for dynamic Lulu shipping
-  - `DODO_PAYMENTS_API_KEY` — Server-side API key
-  - `DODO_PAYMENTS_WEBHOOK_KEY` — Webhook signature verification key
+- **Stripe Payments**:
+  - `STRIPE_SECRET_KEY` — Server-side secret key (`sk_test_...` / `sk_live_...`)
+  - `STRIPE_WEBHOOK_SECRET` — Webhook signing secret
+  - Optional `STRIPE_PRICE_DIGITAL_ID` / `STRIPE_PRICE_HARDCOVER_ID`
+  - Fallback amounts: `STRIPE_AMOUNT_DIGITAL_CENTS=999`, `STRIPE_AMOUNT_HARDCOVER_CENTS=3999`
+  - `STRIPE_AUTOMATIC_TAX=true` (requires Stripe Tax enabled in Dashboard)
 
 Current pricing:
 - Digital ebook retail: `$9.99`
 - Hardcover: `$39.99`
-- Shipping is quoted from Lulu and billed as a dynamic Dodo checkout line item via the configured shipping product
+- Shipping is quoted from Lulu and billed as a dynamic Stripe Checkout line item
+- Tax/VAT/GST calculated by Stripe Tax at checkout for the customer’s country
 
 ### Local Testing Before Push
 
-Use a local `.env` (do not commit) and set Dodo values explicitly:
+Use a local `.env` (do not commit):
 
 ```bash
-DODO_PAYMENTS_ENVIRONMENT=live_mode
-DODO_PRODUCT_DIGITAL_ID=product_xxx
-DODO_PRODUCT_HARDCOVER_ID=product_xxx
-DODO_PRODUCT_SHIPPING_ID=product_xxx
-DODO_PAYMENTS_API_KEY=dodo_live_xxx
-DODO_PAYMENTS_WEBHOOK_KEY=whsec_xxx
+STRIPE_SECRET_KEY=sk_test_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+STRIPE_AMOUNT_DIGITAL_CENTS=999
+STRIPE_AMOUNT_HARDCOVER_CENTS=3999
+STRIPE_AUTOMATIC_TAX=true
 ```
 
-If you want to test with Dodo sandbox locally, switch the above to:
-- `DODO_PAYMENTS_ENVIRONMENT=test_mode`
-- test-mode API key + webhook key
-- sandbox/test-mode product IDs for digital, hardcover, and shipping
+Forward webhooks locally with Stripe CLI:
+
+```bash
+stripe listen --forward-to localhost:3000/api/webhooks/stripe
+```
 
 ### 3) Run dev server
 
@@ -130,16 +130,16 @@ Terraform creates:
 Before deploying, ensure these secrets exist in Secret Manager:
 
 ```bash
-# Create Dodo secrets (one-time setup)
-gcloud secrets create dodo-payments-api-key --replication-policy="automatic" --project=imgstr
-gcloud secrets create dodo-payments-webhook-key --replication-policy="automatic" --project=imgstr
+# Create Stripe secrets (one-time setup)
+gcloud secrets create stripe-secret-key --replication-policy="automatic" --project=imgstr
+gcloud secrets create stripe-webhook-secret --replication-policy="automatic" --project=imgstr
 
 # Add secret values
-echo -n "YOUR_DODO_PAYMENTS_API_KEY" | gcloud secrets versions add dodo-payments-api-key --data-file=- --project=imgstr
-echo -n "YOUR_DODO_PAYMENTS_WEBHOOK_KEY" | gcloud secrets versions add dodo-payments-webhook-key --data-file=- --project=imgstr
+echo -n "YOUR_STRIPE_SECRET_KEY" | gcloud secrets versions add stripe-secret-key --data-file=- --project=imgstr
+echo -n "YOUR_STRIPE_WEBHOOK_SECRET" | gcloud secrets versions add stripe-webhook-secret --data-file=- --project=imgstr
 ```
 
-**All required secrets for temporary partner testing:**
+**Required secrets:**
 | Secret Name | Description |
 |-------------|-------------|
 | `smtp-host` | SMTP server hostname |
@@ -148,12 +148,8 @@ echo -n "YOUR_DODO_PAYMENTS_WEBHOOK_KEY" | gcloud secrets versions add dodo-paym
 | `smtp-pass` | SMTP password |
 | `story-service-url` | Story service Cloud Run URL |
 | `story-invoker-credentials` | Service account JSON for story service |
-
-**Additional secrets required when hosted Dodo payments are re-enabled:**
-| Secret Name | Description |
-|-------------|-------------|
-| `dodo-payments-api-key` | Dodo Payments server-side API key |
-| `dodo-payments-webhook-key` | Dodo Payments webhook verification key |
+| `stripe-secret-key` | Stripe secret API key |
+| `stripe-webhook-secret` | Stripe webhook signing secret |
 
 ### CI/CD Pipeline
 
@@ -209,38 +205,29 @@ gcloud builds submit --config=web/cloudbuild.yaml --substitutions=COMMIT_SHA=$(g
 
 ## API Flow (High Level)
 
-> Temporary partner testing mode is enabled while payment approval is blocked. `/checkout`
-> currently asks for an email and partner access code, then creates the storybook job
-> directly instead of opening hosted payment checkout.
-
 1. User uploads photo + enters details (name, theme, email)
-2. User selects book type (Digital $9.99 retail, launch offer can discount to $6.99 / Hardcover $39.99)
+2. User selects book type (Digital $9.99 / Hardcover $39.99)
 3. For hardcover: user enters shipping address, selects shipping option (Lulu API calculates costs)
-4. Click "Create My Book" → `/api/checkout` creates a Dodo checkout session server-side
-   - For digital: session includes the digital product
-   - For hardcover: session includes the hardcover product plus a pay-what-you-want shipping product amount from Lulu
-5. User is redirected to Dodo checkout
-6. User completes payment (Dodo handles tax calculation)
-7. User returns to `/checkout`, which verifies the Dodo session/payment and only then creates the storybook job
-8. Redirect to order confirmation page (with Dodo payment ID for receipt access)
-9. Dodo webhook (`payment.succeeded`) triggers order confirmation email
-10. Story service generates book (async)
-11. Book-ready email sent with download link or shipping info
+4. User confirms 18+, photo permission, and Terms
+5. Click "Pay with Stripe" → `/api/checkout` creates a Stripe Checkout Session
+6. User completes international payment on Stripe (tax calculated for their country)
+7. Return to `/checkout?payment_return=1&session_id=...` → payment verified → job created
+8. Webhook `/api/webhooks/stripe` sends order confirmation email
+9. Story service generates book (async)
+10. Book-ready email sent with download link or shipping info
 
 ## Troubleshooting
 
-### Dodo checkout return flow
+### Stripe checkout return flow
 
-Dodo checkout is hosted, so the app stores uploaded photos in IndexedDB before redirecting away
-from `/checkout`. When the customer returns, `/checkout` restores the files, verifies the Dodo
+Stripe Checkout is hosted, so the app stores uploaded photos in IndexedDB before redirecting away
+from `/checkout`. When the customer returns, `/checkout` restores the files, verifies the Stripe
 session via `/api/checkout`, and only then starts story generation.
 
-### Shipping charges in Dodo
+### Shipping charges
 
-Shipping costs from Lulu are billed through Dodo using a dedicated pay-what-you-want shipping
-product. The `/api/checkout` route creates a checkout session with:
-- Base product: the digital or hardcover Dodo product
-- Shipping product: `DODO_PRODUCT_SHIPPING_ID` with the per-session amount set from Lulu
+Shipping costs from Lulu are billed as a dynamic Stripe Checkout `price_data` line item
+(amount in cents from the selected Lulu shipping option).
 
 ### Build Errors
 
@@ -258,14 +245,14 @@ product. The `/api/checkout` route creates a checkout session with:
 | Contact form fails | SMTP misconfiguration | Check `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` |
 | 500 errors | Check Cloud Run logs | `gcloud run services logs read img2x-web --region us-central1` |
 
-### Dodo Payments Errors
+### Stripe Payments Errors
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| Checkout session fails | Missing/invalid Dodo product IDs | Verify `DODO_PRODUCT_DIGITAL_ID`, `DODO_PRODUCT_HARDCOVER_ID`, and `DODO_PRODUCT_SHIPPING_ID` |
-| Payment verification fails after return | Missing pending checkout session or webhook key mismatch | Verify `DODO_PAYMENTS_WEBHOOK_KEY` and do not clear checkout storage before return |
-| Order email not sent | SMTP misconfiguration or webhook not configured | Check SMTP settings and Dodo webhook endpoint |
-| Invoice PDF 404 | Payment has no invoice yet | Retry after payment finalization or confirm Dodo invoice settings |
+| Checkout session fails | Missing `STRIPE_SECRET_KEY` or Tax not enabled | Set secret key; enable Stripe Tax or set `STRIPE_AUTOMATIC_TAX=false` for testing |
+| Payment verification fails after return | Missing `session_id` / IndexedDB cleared | Do not clear browser storage mid-checkout; use `session_id` query param |
+| Order email not sent | SMTP misconfiguration or webhook not configured | Check SMTP + Stripe webhook endpoint `/api/webhooks/stripe` |
+| Receipt 404 | Charge receipt not ready yet | Retry after payment finalizes |
 
 ### Slow Builds
 

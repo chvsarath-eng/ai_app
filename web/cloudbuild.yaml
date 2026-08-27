@@ -48,19 +48,20 @@ steps:
       - '--max-instances'
       - '10'
       - '--set-env-vars'
-      - 'DODO_PAYMENTS_ENVIRONMENT=${_DODO_PAYMENTS_ENVIRONMENT},DODO_PRODUCT_DIGITAL_ID=${_DODO_PRODUCT_DIGITAL_ID},DODO_PRODUCT_HARDCOVER_ID=${_DODO_PRODUCT_HARDCOVER_ID},DODO_PRODUCT_SHIPPING_ID=${_DODO_PRODUCT_SHIPPING_ID}'
+      - 'STRIPE_AMOUNT_DIGITAL_CENTS=${_STRIPE_AMOUNT_DIGITAL_CENTS},STRIPE_AMOUNT_HARDCOVER_CENTS=${_STRIPE_AMOUNT_HARDCOVER_CENTS},STRIPE_AUTOMATIC_TAX=${_STRIPE_AUTOMATIC_TAX},STRIPE_PRICE_DIGITAL_ID=${_STRIPE_PRICE_DIGITAL_ID},STRIPE_PRICE_HARDCOVER_ID=${_STRIPE_PRICE_HARDCOVER_ID}'
       - '--set-secrets'
-      - 'SMTP_HOST=smtp-host:latest,SMTP_PORT=smtp-port:latest,SMTP_USER=smtp-user:latest,SMTP_PASS=smtp-pass:latest,STORY_SERVICE_URL=story-service-url:latest,STORY_INVOKER_CREDENTIALS_JSON=story-invoker-credentials:latest'
+      - 'SMTP_HOST=smtp-host:latest,SMTP_PORT=smtp-port:latest,SMTP_USER=smtp-user:latest,SMTP_PASS=smtp-pass:latest,STORY_SERVICE_URL=story-service-url:latest,STORY_INVOKER_CREDENTIALS_JSON=story-invoker-credentials:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest'
 
 # Substitution variables (can be overridden in trigger)
 substitutions:
   _REGION: 'us-central1'
   _REPO: 'img2x-repo'
   _SERVICE_NAME: 'img2x-web'
-  _DODO_PAYMENTS_ENVIRONMENT: 'live_mode'
-  _DODO_PRODUCT_DIGITAL_ID: 'product_digital'
-  _DODO_PRODUCT_HARDCOVER_ID: 'product_hardcover'
-  _DODO_PRODUCT_SHIPPING_ID: 'product_shipping'
+  _STRIPE_AMOUNT_DIGITAL_CENTS: '999'
+  _STRIPE_AMOUNT_HARDCOVER_CENTS: '3999'
+  _STRIPE_AUTOMATIC_TAX: 'true'
+  _STRIPE_PRICE_DIGITAL_ID: ''
+  _STRIPE_PRICE_HARDCOVER_ID: ''
 
 # Secrets from Secret Manager
 # Build options

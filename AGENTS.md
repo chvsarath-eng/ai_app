@@ -1,5 +1,7 @@
 # img2x - AI Agent Onboarding Guide
 
+> **Current status & next steps:** see [`AGENT_HANDOFF.md`](./AGENT_HANDOFF.md) (Stripe go-live, monorepo `web/` + `api/`).
+
 This document provides everything an AI agent needs to understand and work on the img2x project.
 
 ## What is img2x?
@@ -48,18 +50,18 @@ This document provides everything an AI agent needs to understand and work on th
 │                                                                 │
 │  • App Router (pages, API routes)                               │
 │  • Photo upload + validation                                    │
-│  • Order management + Dodo Payments checkout                    │
+│  • Order management + Stripe checkout                    │
 │  • 3D book preview (Three.js)                                   │
 └──────────────┬──────────────────────────────┬───────────────────┘
                │ ID Token Auth                │ Webhooks
                ▼                              ▼
 ┌──────────────────────────────┐  ┌───────────────────────────────┐
-│    Story Service (Python)    │  │        Dodo Payments          │
+│    Story Service (Python)    │  │        Stripe          │
 │    Cloud Run - us-central1   │  │        (Payment Gateway)      │
 │                              │  │                               │
 │  • AI image generation       │  │  • Hosted checkout            │
 │  • Story composition         │  │  • Tax calculation            │
-│  • PDF/flipbook generation   │  │  • payment.succeeded         │
+│  • PDF/flipbook generation   │  │  • checkout.session.completed         │
 │  • Book-ready email          │  │  • Invoices/receipts          │
 └──────────────────────────────┘  └───────────────────────────────┘
                │
@@ -95,9 +97,9 @@ ai_app/
     │   │   ├── api/
     │   │   │   ├── storybook/generate/    # Create storybook job
     │   │   │   ├── storybook/jobs/[id]/   # Job status
-│   │   │   ├── checkout/              # Dodo checkout session flow
-│   │   │   ├── webhooks/dodo/         # Dodo webhook handler
-│   │   │   ├── payments/[paymentId]/  # Invoice PDF redirect
+│   │   │   ├── checkout/              # Stripe checkout session flow
+    │   │   │   ├── webhooks/stripe/       # Stripe webhook handler
+    │   │   │   ├── payments/[paymentId]/  # Receipt redirect
     │   │   │   └── contact/               # Contact form (SMTP)
     │   │   ├── order/[orderId]/   # Order confirmation (+ receipt link)
     │   │   ├── gallery/           # Example storybooks
@@ -117,7 +119,8 @@ ai_app/
     │   ├── lib/           # Utilities
     │   │   ├── storyApiServer.ts  # Story service client
     │   │   ├── storybookApi.ts    # API helpers
-│   │   ├── dodo-payments.ts   # Dodo Payments server helpers
+    │   │   ├── stripe.ts          # Stripe server helpers
+    │   │   ├── order-emails.ts    # Order confirmation emails
     │   │   ├── analytics.ts       # GA event tracking helper
     │   │   └── utils.ts           # General utilities
     │   │
@@ -142,7 +145,7 @@ ai_app/
 | 3D | Three.js / @react-three/fiber |
 | Forms | React Hook Form + Zod |
 | State | React Query (server) + Zustand (client) |
-| Payments | Dodo Payments (hosted checkout, webhooks, tax) |
+| Payments | Stripe (hosted checkout, webhooks, tax) |
 | Email | Nodemailer (SMTP via Hostinger) |
 | Hosting | Google Cloud Run |
 | CI/CD | Cloud Build + GitHub triggers |
@@ -160,18 +163,18 @@ ai_app/
 5. User enters child's name + optional storyline
 6. User enters email
 7. User selects "Digital PDF" book type
-8. Click "Create My Book" → Dodo checkout session is created and the user is redirected to hosted checkout
-9. User completes payment (Dodo handles tax calculation)
+8. Click "Create My Book" → Stripe checkout session is created and the user is redirected to hosted checkout
+9. User completes payment (Stripe handles tax calculation)
 10. User returns to `/checkout`, payment is verified, and then `/api/storybook/generate` creates job
 11. Redirect to order confirmation page (with payment ID)
-12. Dodo webhook (`payment.succeeded`) → Order confirmation email sent from `team@img2x.com`
+12. Stripe webhook (`checkout.session.completed`) → Order confirmation email sent from `team@img2x.com`
 13. Story service generates book (async)
 14. Book-ready email sent with download link
 
 ### 2. Order Hardcover ($39.99)
 1. User selects "Hardcover" book type
 2. User fills shipping address form (name, address, city, country, etc.)
-3. Click "Create My Book" → Dodo checkout session is created and the user is redirected to hosted checkout
+3. Click "Create My Book" → Stripe checkout session is created and the user is redirected to hosted checkout
 4. User completes payment
 5. On success → Job created with shipping details
 6. Order confirmation email sent (includes shipping address)
@@ -182,7 +185,7 @@ ai_app/
 ### Email Flow (from team@img2x.com)
 | Trigger | Email Type | Content |
 |---------|------------|---------|
-| `payment.succeeded` webhook | Order Confirmation | Receipt, order details, "what's next" |
+| `checkout.session.completed` webhook | Order Confirmation | Receipt, order details, "what's next" |
 | Story job finished | Book Ready | Download link (digital) or shipping info (hardcover) |
 
 ---
@@ -202,13 +205,15 @@ SMTP_PORT=587
 SMTP_USER=team@img2x.com
 SMTP_PASS=xxx
 
-# Dodo Payments
-DODO_PAYMENTS_ENVIRONMENT=test_mode  # or "live_mode"
-DODO_PRODUCT_DIGITAL_ID=product_xxx
-DODO_PRODUCT_HARDCOVER_ID=product_xxx
-DODO_PRODUCT_SHIPPING_ID=product_xxx  # pay-what-you-want shipping product
-DODO_PAYMENTS_API_KEY=dodo_xxx
-DODO_PAYMENTS_WEBHOOK_KEY=whsec_xxx
+# Stripe (international payments)
+STRIPE_SECRET_KEY=sk_test_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+STRIPE_AMOUNT_DIGITAL_CENTS=999
+STRIPE_AMOUNT_HARDCOVER_CENTS=3999
+STRIPE_AUTOMATIC_TAX=true
+# Optional Dashboard Price IDs:
+# STRIPE_PRICE_DIGITAL_ID=price_xxx
+# STRIPE_PRICE_HARDCOVER_ID=price_xxx
 
 # Lulu Print-on-Demand
 LULU_CLIENT_KEY=xxx
@@ -226,13 +231,13 @@ LULU_API_BASE=https://api.sandbox.lulu.com  # or api.lulu.com for production
 | `smtp-pass` | SMTP_PASS | SMTP password |
 | `story-service-url` | STORY_SERVICE_URL | Story service Cloud Run URL |
 | `story-invoker-credentials` | STORY_INVOKER_CREDENTIALS_JSON | Service account JSON |
-| `dodo-payments-api-key` | DODO_PAYMENTS_API_KEY | Dodo Payments server-side API key |
-| `dodo-payments-webhook-key` | DODO_PAYMENTS_WEBHOOK_KEY | Dodo Payments webhook key |
+| `stripe-secret-key` | STRIPE_SECRET_KEY | Stripe secret API key |
+| `stripe-webhook-secret` | STRIPE_WEBHOOK_SECRET | Stripe webhook signing secret |
 
 **Create secrets (one-time):**
 ```bash
-gcloud secrets create dodo-payments-api-key --replication-policy="automatic" --project=imgstr
-gcloud secrets create dodo-payments-webhook-key --replication-policy="automatic" --project=imgstr
+gcloud secrets create stripe-secret-key --replication-policy="automatic" --project=imgstr
+gcloud secrets create stripe-webhook-secret --replication-policy="automatic" --project=imgstr
 ```
 
 ---
@@ -264,11 +269,11 @@ gcloud builds submit --config=web/cloudbuild.yaml --substitutions=COMMIT_SHA=$(g
 | Build uploading 300+ MiB | Missing `.gcloudignore` | Ensure `web/.gcloudignore` exists and excludes `node_modules/` |
 | `DialogContent requires DialogTitle` | Radix UI accessibility | Add `<DialogTitle className="sr-only">` |
 | API calls fail | Invalid service URL or credentials | Check `STORY_SERVICE_URL` and service account |
-| Dodo checkout session fails | Missing product IDs or invalid checkout config | Check `DODO_PRODUCT_DIGITAL_ID`, `DODO_PRODUCT_HARDCOVER_ID`, and `DODO_PRODUCT_SHIPPING_ID` |
-| Invoice PDF 404 | Payment has no invoice yet | Retry after payment finalization in Dodo |
-| Webhook signature invalid | Wrong secret or verification logic | Check `DODO_PAYMENTS_WEBHOOK_KEY` |
+| Stripe checkout session fails | Missing product IDs or invalid checkout config | Check `Stripe_PRODUCT_DIGITAL_ID`, `Stripe_PRODUCT_HARDCOVER_ID`, and `Stripe_PRODUCT_SHIPPING_ID` |
+| Invoice PDF 404 | Payment has no invoice yet | Retry after payment finalization in Stripe |
+| Webhook signature invalid | Wrong secret or verification logic | Check `Stripe_PAYMENTS_WEBHOOK_KEY` |
 | Webhook 401 after deploying | Secret has trailing newline | See "GCP Secret Trailing Newline" fix below |
-| Order confirmation email not sent | Webhook misconfigured or SMTP issue | Check `/api/webhooks/dodo` and SMTP credentials |
+| Order confirmation email not sent | Webhook misconfigured or SMTP issue | Check `/api/webhooks/Stripe` and SMTP credentials |
 
 ---
 
@@ -296,15 +301,15 @@ See `.cursor/rules/coding-standards.mdc` for details.
 - Domain mapping (img2x.com + www.img2x.com)
 - Google Analytics 4 (Measurement ID: G-Q12Z62SK1Q)
 - Cookie Consent Banner (GDPR compliant, react-cookie-consent + GA Consent Mode)
-- **Dodo Payments Integration:**
+- **Stripe Integration:**
   - Hosted checkout flow with return verification
-  - Tax calculation handled by Dodo Payments
+  - Tax calculation handled by Stripe
   - Shipping address collection (hardcover orders)
   - Server-side session creation for both digital and hardcover orders
   - Shipping costs from Lulu billed via a pay-what-you-want shipping product
-  - Webhook handling (`payment.succeeded`, `payment.failed`)
+  - Webhook handling (`checkout.session.completed`, `payment.failed`)
   - Order confirmation emails from `team@img2x.com`
-  - Invoice/receipt download via Dodo payment invoices
+  - Invoice/receipt download via Stripe payment invoices
   - Analytics events (`checkout_opened`, `checkout_completed`, etc.)
 - **Checkout Page UI:**
   - Clean, centered header with animated gradient title (ultraGlowText)
@@ -321,7 +326,7 @@ See `.cursor/rules/coding-standards.mdc` for details.
   - Email confirmations list all character names
 
 ### 🔄 In Progress
-- Production Dodo setup
+- Production Stripe setup
 
 ### 📋 Backlog
 - Blog section for SEO content
@@ -343,18 +348,18 @@ See `web/SEO_CHECKLIST.md` for detailed SEO roadmap.
 
 4. **Face-lock Technology:** The key differentiator - AI keeps the child's face consistent across all illustrations (not just pasting).
 
-5. **Dodo Payments:** Checkout is now created server-side via Dodo, with receipts/invoices coming from the payment provider and tax calculated during hosted checkout.
+5. **Stripe:** Checkout is now created server-side via Stripe, with receipts/invoices coming from the payment provider and tax calculated during hosted checkout.
 
-6. **Payment Flow:** Dodo checkout redirects away from the app, so uploaded image files are cached in IndexedDB before redirect. On return, `/checkout` verifies the Dodo session/payment and only then creates the storybook job.
+6. **Payment Flow:** Stripe checkout redirects away from the app, so uploaded image files are cached in IndexedDB before redirect. On return, `/checkout` verifies the Stripe session/payment and only then creates the storybook job.
 
 7. **Two-Email System:** 
    - Email 1: Order confirmation (immediately after payment via webhook)
    - Email 2: Book ready (after AI generation completes)
    - Both sent from `team@img2x.com` via SMTP.
 
-8. **Dodo Shipping Product:** Hardcover checkout uses a dedicated pay-what-you-want Dodo product so Lulu shipping can be billed as a dynamic line item.
+8. **Stripe Shipping Product:** Hardcover checkout uses a dedicated pay-what-you-want Stripe product so Lulu shipping can be billed as a dynamic line item.
 
-9. **Hosted Return Verification:** The `/api/checkout` route both creates Dodo sessions and verifies returned session IDs so book generation only starts after confirmed payment success.
+9. **Hosted Return Verification:** The `/api/checkout` route both creates Stripe sessions and verifies returned session IDs so book generation only starts after confirmed payment success.
 
 10. **GCP Secret Trailing Newline:** When creating GCP secrets via PowerShell piping (e.g., `"value" | gcloud secrets versions add`), PowerShell adds a trailing newline. This breaks signature verification. **Fix:** Write secret to a file without newline first:
     ```powershell
@@ -363,15 +368,15 @@ See `web/SEO_CHECKLIST.md` for detailed SEO roadmap.
     ```
     Or use `echo -n` on Linux/Mac.
 
-11. **Payment Success UX:** The success state remains branded and inline after returning from Dodo, with receipt download and "Create Another Book" actions.
+11. **Payment Success UX:** The success state remains branded and inline after returning from Stripe, with receipt download and "Create Another Book" actions.
 
-12. **Webhook Email Payload:** Dodo webhook events already include the customer on successful payments, so the webhook route can send order confirmations directly from `payment.succeeded`.
+12. **Webhook Email Payload:** Stripe webhook events already include the customer on successful payments, so the webhook route can send order confirmations directly from `checkout.session.completed`.
 
-13. **Checkout Redirect Tradeoff:** Because Dodo checkout is hosted, the app no longer depends on a browser overlay callback. Verification happens through a return-to-app step plus webhook delivery.
+13. **Checkout Redirect Tradeoff:** Because Stripe checkout is hosted, the app no longer depends on a browser overlay callback. Verification happens through a return-to-app step plus webhook delivery.
 
-14. **Dynamic Shipping Billing:** Shipping costs from Lulu are dynamic and are billed via the configured Dodo shipping product using a per-session `amount`.
+14. **Dynamic Shipping Billing:** Shipping costs from Lulu are dynamic and are billed via the configured Stripe shipping product using a per-session `amount`.
 
-15. **Pricing Preview:** Localized price display now uses Dodo checkout preview with a graceful USD fallback when no country signal is available.
+15. **Pricing Preview:** Localized price display now uses Stripe checkout preview with a graceful USD fallback when no country signal is available.
 
 16. **Invoice Access:** Receipt links now resolve through `/api/payments/[paymentId]/invoice` instead of old provider-specific transaction URLs.
 
@@ -396,10 +401,10 @@ See `web/SEO_CHECKLIST.md` for detailed SEO roadmap.
 ### Complete Flow
 
 1. **User fills checkout form** → 1-4 character photos with metadata (name, age, gender, relationship), storyline, email (+ shipping for hardcover)
-2. **Browser calls `/api/checkout`** → Creates a Dodo checkout session with metadata
-3. **Hosted Dodo checkout opens** → User completes payment
+2. **Browser calls `/api/checkout`** → Creates a Stripe checkout session with metadata
+3. **Hosted Stripe checkout opens** → User completes payment
 4. **Payment succeeds** → Two things happen in parallel:
-   - **Webhook** (`/api/webhooks/dodo`) → Sends Order Confirmation Email
+   - **Webhook** (`/api/webhooks/Stripe`) → Sends Order Confirmation Email
    - **Browser return to `/checkout`** → Verifies payment and then calls Story Service API to generate book
 5. **Browser redirects** → `/order/[jobId]` shows order confirmation
 6. **Story Service generates book** (async, 15-30 min)
@@ -409,7 +414,7 @@ See `web/SEO_CHECKLIST.md` for detailed SEO roadmap.
 
 | Email | Sent By | When | Contains |
 |-------|---------|------|----------|
-| Order Confirmation | Webhook (`/api/webhooks/dodo`) | Immediately after payment | Order ID, price, receipt link |
+| Order Confirmation | Webhook (`/api/webhooks/Stripe`) | Immediately after payment | Order ID, price, receipt link |
 | Book Ready | Story Service | After generation complete | Download link or tracking info |
 
 ### Email Template Styling
@@ -420,7 +425,7 @@ The order confirmation email uses branded styling consistent with the website:
 - **Checkmark Icon**: Green gradient (`#10b981` → `#34d399`) circle with white checkmark
 - **Button Gradient**: Violet to fuchsia (`#7c3aed` → `#c026d3`) with solid fallback
 - **Accent Color**: Violet-600 (`#7c3aed`) for links and totals
-- **Template Location**: `web/src/app/api/webhooks/dodo/route.ts` (`sendCustomerOrderConfirmation` function)
+- **Template Location**: `web/src/app/api/webhooks/Stripe/route.ts` (`sendCustomerOrderConfirmation` function)
 
 ### Story Service API Contract (v2 - Multi-Character)
 

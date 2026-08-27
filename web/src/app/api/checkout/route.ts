@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import type DodoPayments from 'dodopayments'
+import type Stripe from 'stripe'
 import type { OutputType } from '@/types/storybook'
-import { DODO_PRODUCTS, formatMinorUnits, getDodoClient, getDodoProductId } from '@/lib/dodo-payments'
+import {
+  buildBookLineItem,
+  buildShippingLineItem,
+  getStripe,
+  isStripeAutomaticTaxEnabled,
+  truncateMetadataValue
+} from '@/lib/stripe'
+
+export const runtime = 'nodejs'
 
 type CharacterFormValue = {
   name?: string
@@ -29,6 +37,11 @@ type CreateCheckoutBody = {
   outputType?: OutputType
   discountCode?: string
   formData?: CheckoutFormData
+  consents?: {
+    ageConfirmed?: boolean
+    likenessPermission?: boolean
+    termsAccepted?: boolean
+  }
 }
 
 function getOrigin (request: NextRequest) {
@@ -50,9 +63,9 @@ function buildMetadata (outputType: OutputType, formData: CheckoutFormData = {})
 
   const metadata: Record<string, string> = {
     outputType,
-    storyline: formData.storyline || '',
-    characters: JSON.stringify(characters),
-    characterNames: characterNames.join(', '),
+    storyline: truncateMetadataValue(formData.storyline || ''),
+    characters: truncateMetadataValue(JSON.stringify(characters)),
+    characterNames: truncateMetadataValue(characterNames.join(', ')),
     numCharacters: String(formData.numCharacters || characters.length || 1)
   }
 
@@ -72,56 +85,24 @@ function buildMetadata (outputType: OutputType, formData: CheckoutFormData = {})
 
   Object.entries(optionalFields).forEach(([key, value]) => {
     if (typeof value === 'undefined' || value === '') return
-    metadata[key] = String(value)
+    metadata[key] = truncateMetadataValue(String(value))
   })
 
   return metadata
 }
 
-function buildBillingAddress (outputType: OutputType, formData: CheckoutFormData): DodoPayments.CheckoutSessionBillingAddress | undefined {
-  if (outputType !== 'LULU_BOOK' || !formData.shippingCountry) {
-    return undefined
-  }
-
-  return {
-    country: formData.shippingCountry as DodoPayments.CountryCode,
-    city: formData.shippingCity || undefined,
-    state: formData.shippingRegion || undefined,
-    street: formData.shippingAddress1 || undefined,
-    zipcode: formData.shippingPostalCode || undefined
-  }
-}
-
-function buildProductCart (outputType: OutputType, formData: CheckoutFormData): DodoPayments.CheckoutSessionCreateParams['product_cart'] {
-  const productCart: DodoPayments.CheckoutSessionCreateParams['product_cart'] = [
-    {
-      product_id: getDodoProductId(outputType),
-      quantity: 1
-    }
-  ]
-
-  if (outputType === 'LULU_BOOK') {
-    const shippingCost = Number(formData.shippingCost || 0)
-    if (shippingCost > 0) {
-      if (!DODO_PRODUCTS.SHIPPING) {
-        throw new Error('DODO_PRODUCT_SHIPPING_ID is not configured')
-      }
-
-      productCart.push({
-        product_id: DODO_PRODUCTS.SHIPPING,
-        quantity: 1,
-        amount: formatMinorUnits(shippingCost)
-      })
-    }
-  }
-
-  return productCart
+function mapPaymentStatus (session: Stripe.Checkout.Session) {
+  if (session.payment_status === 'paid') return 'succeeded'
+  if (session.status === 'expired') return 'cancelled'
+  if (session.payment_status === 'unpaid') return 'requires_payment_method'
+  return session.payment_status || 'processing'
 }
 
 async function createCheckoutSession (request: NextRequest, body: CreateCheckoutBody) {
   const email = typeof body.email === 'string' ? body.email.trim() : ''
   const outputType = body.outputType
   const formData = body.formData || {}
+  const consents = body.consents || {}
 
   if (!outputType) {
     return NextResponse.json(
@@ -130,10 +111,17 @@ async function createCheckoutSession (request: NextRequest, body: CreateCheckout
     )
   }
 
-  if (!getDodoProductId(outputType)) {
+  if (!email || !/\S+@\S+\.\S+/.test(email)) {
     return NextResponse.json(
-      { error: 'Payment product not configured for selected book type' },
-      { status: 500 }
+      { error: 'A valid email address is required' },
+      { status: 400 }
+    )
+  }
+
+  if (!consents.ageConfirmed || !consents.likenessPermission || !consents.termsAccepted) {
+    return NextResponse.json(
+      { error: 'Required checkout consents are missing' },
+      { status: 400 }
     )
   }
 
@@ -155,68 +143,57 @@ async function createCheckoutSession (request: NextRequest, body: CreateCheckout
     }
   }
 
-  const client = getDodoClient()
-  const metadata = buildMetadata(outputType, formData)
-  const billingAddress = buildBillingAddress(outputType, formData)
+  const stripe = getStripe()
   const origin = getOrigin(request)
-  const customer = email
-    ? {
-        email,
-        phone_number: formData.shippingPhone || undefined
-      }
-    : undefined
-  const customization = {
-    theme: 'light',
-    show_order_details: false,
-    show_on_demand_tag: false,
-    force_language: 'en',
-    theme_config: {
-      font_primary_url: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
-      font_size: 'md',
-      font_weight: 'medium',
-      radius: '12px',
-      pay_button_text: 'Continue to Payment',
-      light: {
-        bg_primary: '#ffffff',
-        bg_secondary: '#ffffff',
-        text_primary: '#18181b',
-        text_secondary: '#71717a',
-        button_primary: '#7c3aed',
-        button_primary_hover: '#7c3aed',
-        button_text_primary: '#ffffff',
-        border_primary: '#e4e4e7'
-      },
-      dark: {
-        bg_primary: '#18181b',
-        bg_secondary: '#18181b',
-        text_primary: '#fafafa',
-        text_secondary: '#d4d4d8',
-        button_primary: '#7c3aed',
-        button_primary_hover: '#6d28d9',
-        button_text_primary: '#ffffff',
-        border_primary: '#3f3f46'
-      }
+  const metadata = buildMetadata(outputType, formData)
+  metadata.ageConfirmed = 'true'
+  metadata.likenessPermission = 'true'
+  metadata.termsAccepted = 'true'
+
+  const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
+    buildBookLineItem(outputType)
+  ]
+
+  if (outputType === 'LULU_BOOK') {
+    const shippingItem = buildShippingLineItem(Number(formData.shippingCost || 0))
+    if (shippingItem) {
+      lineItems.push(shippingItem)
     }
-  } as unknown as DodoPayments.CheckoutSessionCreateParams['customization']
+  }
 
-  const checkoutSession = await client.checkoutSessions.create({
-    product_cart: buildProductCart(outputType, formData),
-    customer,
-    billing_address: billingAddress,
-    discount_code: body.discountCode || undefined,
+  const sessionParams: Stripe.Checkout.SessionCreateParams = {
+    mode: 'payment',
+    customer_email: email,
+    line_items: lineItems,
+    success_url: `${origin}/checkout?payment_return=1&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${origin}/checkout?payment_cancelled=1`,
     metadata,
-    return_url: `${origin}/checkout?payment_return=1`,
-    feature_flags: {
-      allow_customer_editing_email: true,
-      allow_discount_code: true,
-      allow_currency_selection: false,
-      allow_phone_number_collection: outputType === 'LULU_BOOK',
-      redirect_immediately: true
+    payment_intent_data: {
+      metadata
     },
-    customization
-  })
+    automatic_tax: {
+      enabled: isStripeAutomaticTaxEnabled()
+    },
+    billing_address_collection: 'required',
+    phone_number_collection: {
+      enabled: outputType === 'LULU_BOOK'
+    },
+    allow_promotion_codes: true,
+    locale: 'auto'
+  }
 
-  if (!checkoutSession.checkout_url) {
+  if (isStripeAutomaticTaxEnabled()) {
+    sessionParams.tax_id_collection = { enabled: true }
+  }
+
+  if (body.discountCode) {
+    // Promotion codes are entered on Stripe Checkout; store intended code for support.
+    metadata.discountCode = truncateMetadataValue(body.discountCode)
+  }
+
+  const checkoutSession = await stripe.checkout.sessions.create(sessionParams)
+
+  if (!checkoutSession.url) {
     return NextResponse.json(
       { error: 'Payment provider did not return a checkout URL' },
       { status: 500 }
@@ -226,9 +203,9 @@ async function createCheckoutSession (request: NextRequest, body: CreateCheckout
   return NextResponse.json({
     success: true,
     checkout: {
-      sessionId: checkoutSession.session_id,
-      checkoutUrl: checkoutSession.checkout_url,
-      email: email || null
+      sessionId: checkoutSession.id,
+      checkoutUrl: checkoutSession.url,
+      email
     }
   })
 }
@@ -240,30 +217,35 @@ async function verifyCheckoutSession (request: NextRequest) {
     return NextResponse.json({ error: 'Missing sessionId' }, { status: 400 })
   }
 
-  const client = getDodoClient()
-  const session = await client.checkoutSessions.retrieve(sessionId)
+  const stripe = getStripe()
+  const session = await stripe.checkout.sessions.retrieve(sessionId)
+  const paymentIntentId = typeof session.payment_intent === 'string'
+    ? session.payment_intent
+    : session.payment_intent?.id
 
-  if (!session.payment_id) {
+  const status = mapPaymentStatus(session)
+
+  if (status !== 'succeeded' || !paymentIntentId) {
     return NextResponse.json({
       success: true,
       checkout: {
         sessionId,
-        status: session.payment_status || 'requires_payment_method'
+        status
       }
     })
   }
-
-  const payment = await client.payments.retrieve(session.payment_id)
 
   return NextResponse.json({
     success: true,
     checkout: {
       sessionId,
-      paymentId: payment.payment_id,
-      status: payment.status || session.payment_status || 'processing',
-      customerEmail: payment.customer.email,
-      invoiceUrl: payment.invoice_url || null,
-      metadata: payment.metadata
+      paymentId: paymentIntentId,
+      status,
+      customerEmail: session.customer_details?.email || session.customer_email || null,
+      invoiceUrl: session.invoice
+        ? null
+        : null,
+      metadata: session.metadata || {}
     }
   })
 }
@@ -273,7 +255,7 @@ export async function POST (request: NextRequest) {
     const body = await request.json() as CreateCheckoutBody
     return await createCheckoutSession(request, body)
   } catch (error) {
-    console.error('Dodo checkout creation failed:', error)
+    console.error('Stripe checkout creation failed:', error)
     return NextResponse.json(
       { error: 'Failed to initialize checkout' },
       { status: 500 }
@@ -285,7 +267,7 @@ export async function GET (request: NextRequest) {
   try {
     return await verifyCheckoutSession(request)
   } catch (error) {
-    console.error('Dodo checkout verification failed:', error)
+    console.error('Stripe checkout verification failed:', error)
     return NextResponse.json(
       { error: 'Failed to verify checkout session' },
       { status: 500 }

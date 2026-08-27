@@ -1,10 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
-import { getDodoClient, getDodoWebhookKey } from '@/lib/dodo-payments'
 
-export const runtime = 'nodejs'
-
-type ShippingDetails = {
+export type ShippingDetails = {
   name?: string
   address1?: string
   address2?: string
@@ -14,30 +10,10 @@ type ShippingDetails = {
   country?: string
 }
 
-function getStringValue (value: unknown) {
-  return typeof value === 'string' ? value : undefined
-}
-
-function extractShipping (metadata?: Record<string, string>): ShippingDetails | null {
-  if (!metadata) return null
-
-  const shipping = {
-    name: getStringValue(metadata.shippingName),
-    address1: getStringValue(metadata.shippingAddress1),
-    address2: getStringValue(metadata.shippingAddress2),
-    city: getStringValue(metadata.shippingCity),
-    region: getStringValue(metadata.shippingRegion),
-    postalCode: getStringValue(metadata.shippingPostalCode),
-    country: getStringValue(metadata.shippingCountry)
-  }
-
-  return Object.values(shipping).some(Boolean) ? shipping : null
-}
-
 function formatAmount (amount: number | undefined, currency = 'USD') {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency
+    currency: currency.toUpperCase()
   }).format((amount || 0) / 100)
 }
 
@@ -62,7 +38,7 @@ function getTransporter () {
   })
 }
 
-async function sendOrderNotification (payload: {
+export async function sendOrderNotification (payload: {
   paymentId: string
   customerEmail?: string
   outputType?: string
@@ -107,7 +83,7 @@ async function sendOrderNotification (payload: {
   })
 }
 
-async function sendCustomerOrderConfirmation (payload: {
+export async function sendCustomerOrderConfirmation (payload: {
   paymentId: string
   customerEmail: string
   customerName?: string
@@ -151,7 +127,7 @@ async function sendCustomerOrderConfirmation (payload: {
           </tr>
           <tr>
             <td style="padding:40px 40px 20px;text-align:center;">
-              <div style="width:64px;height:64px;margin:0 auto 20px;background:linear-gradient(135deg,#10b981,#34d399);background-color:#10b981;border-radius:50%;line-height:64px;text-align:center;">
+              <div style="width:64px;height:64px;margin:0 auto 20px;background-color:#10b981;border-radius:50%;line-height:64px;text-align:center;">
                 <span style="font-size:28px;color:#ffffff;">✓</span>
               </div>
               <h2 style="margin:0 0 8px;font-size:24px;font-weight:600;color:#111827;">Thank You for Your Order!</h2>
@@ -218,7 +194,7 @@ async function sendCustomerOrderConfirmation (payload: {
           </tr>
           <tr>
             <td style="padding:0 40px 20px;text-align:center;">
-              <a href="${receiptUrl}" style="display:inline-block;padding:14px 32px;background:linear-gradient(90deg,#7c3aed,#c026d3);background-color:#7c3aed;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px;">
+              <a href="${receiptUrl}" style="display:inline-block;padding:14px 32px;background-color:#7c3aed;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px;">
                 Download Receipt
               </a>
             </td>
@@ -261,67 +237,4 @@ async function sendCustomerOrderConfirmation (payload: {
     text,
     html
   })
-}
-
-export async function POST (request: NextRequest) {
-  try {
-    const rawBody = await request.text()
-    const headers = Object.fromEntries(request.headers.entries())
-    const client = getDodoClient()
-    const webhookKey = getDodoWebhookKey()
-    const event = webhookKey
-      ? client.webhooks.unwrap(rawBody, { headers, key: webhookKey })
-      : client.webhooks.unsafeUnwrap(rawBody)
-
-    switch (event.type) {
-      case 'payment.succeeded': {
-        const payment = event.data
-        const metadata = payment.metadata || {}
-        const shipping = extractShipping(metadata)
-        const outputType = getStringValue(metadata.outputType)
-        const customerEmail = payment.customer.email
-        const customerName = payment.customer.name
-
-        await sendOrderNotification({
-          paymentId: payment.payment_id,
-          customerEmail,
-          outputType,
-          metadata,
-          shipping
-        })
-
-        if (customerEmail) {
-          await sendCustomerOrderConfirmation({
-            paymentId: payment.payment_id,
-            customerEmail,
-            customerName,
-            outputType,
-            currencyCode: payment.currency,
-            totalAmount: payment.total_amount,
-            taxAmount: payment.tax || 0,
-            shipping,
-            characterNames: getStringValue(metadata.characterNames),
-            numCharacters: metadata.numCharacters ? parseInt(metadata.numCharacters, 10) : undefined
-          })
-        }
-
-        break
-      }
-
-      case 'payment.failed':
-        console.log('Dodo payment failed:', event.data.payment_id, event.data.error_message)
-        break
-
-      default:
-        console.log('Unhandled Dodo webhook event:', event.type)
-    }
-
-    return NextResponse.json({ received: true })
-  } catch (error) {
-    console.error('Dodo webhook error:', error)
-    return NextResponse.json(
-      { error: 'Webhook processing failed' },
-      { status: 500 }
-    )
-  }
 }

@@ -2,10 +2,9 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { KeyRound, Mail, ShieldCheck, Truck } from 'lucide-react'
+import { Mail, ShieldCheck, Truck } from 'lucide-react'
 import { useCheckoutStore } from '@/lib/checkout-store'
-import { clearCheckoutFiles, loadCheckoutFiles } from '@/lib/checkout-files'
-import { closeDodoOverlayCheckout } from '@/lib/dodo-checkout-overlay'
+import { clearCheckoutFiles, loadCheckoutFiles, saveCheckoutFiles } from '@/lib/checkout-files'
 import { createStorybookJob } from '@/lib/storybookApi'
 import { trackEvent } from '@/lib/analytics'
 import type { OutputType } from '@/types/storybook'
@@ -26,8 +25,6 @@ export interface ShippingOption {
   estimatedDelivery?: string
 }
 
-const PARTNER_TEST_ACCESS_CODE = '1345'
-
 export default function CheckoutPage () {
   const router = useRouter()
   const store = useCheckoutStore()
@@ -42,18 +39,14 @@ export default function CheckoutPage () {
   const [urlDiscountCode, setUrlDiscountCode] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [paymentProcessing, setPaymentProcessing] = useState(false)
-  const [partnerCode, setPartnerCode] = useState('')
+  const [ageConfirmed, setAgeConfirmed] = useState(false)
+  const [likenessPermission, setLikenessPermission] = useState(false)
+  const [termsAccepted, setTermsAccepted] = useState(false)
 
   const lastFetchedAddressRef = useRef<string>('')
   const hasHandledReturnRef = useRef(false)
 
   const isHardcover = store.outputType === 'LULU_BOOK'
-
-  useEffect(() => {
-    return () => {
-      closeDodoOverlayCheckout()
-    }
-  }, [])
 
   useEffect(() => {
     let isCancelled = false
@@ -127,6 +120,10 @@ export default function CheckoutPage () {
     const params = new URLSearchParams(window.location.search)
     const incoming = (params.get('discount') || params.get('coupon') || '').trim().toUpperCase()
     setUrlDiscountCode(incoming)
+
+    if (params.get('payment_cancelled') === '1') {
+      setCheckoutError('Checkout was cancelled. You can review your details and try again.')
+    }
   }, [])
 
   useEffect(() => {
@@ -248,12 +245,12 @@ export default function CheckoutPage () {
   )
 
   const hasCustomerEmail = /\S+@\S+\.\S+/.test(store.email)
-  const hasPartnerAccess = partnerCode.trim() === PARTNER_TEST_ACCESS_CODE
+  const hasConsents = ageConfirmed && likenessPermission && termsAccepted
   const canPlaceOrder = Boolean(
     store.outputType &&
     store.imageFiles.length > 0 &&
     hasCustomerEmail &&
-    hasPartnerAccess &&
+    hasConsents &&
     (isHardcover ? isAddressComplete && selectedShipping : true)
   )
 
@@ -291,7 +288,8 @@ export default function CheckoutPage () {
 
       trackEvent('checkout_completed', {
         payment_id: paymentId,
-        output_type: outputType
+        output_type: outputType,
+        checkout_provider: 'stripe'
       })
 
       store.clearPendingCheckout()
@@ -360,14 +358,16 @@ export default function CheckoutPage () {
 
     hasHandledReturnRef.current = true
 
-    if (!store.pendingCheckoutSessionId) {
+    const sessionId = params.get('session_id') || store.pendingCheckoutSessionId
+    if (!sessionId) {
       setCheckoutError('We could not find your pending checkout session. Please contact support if you were charged.')
       setIsLoading(false)
       return
     }
 
-    void verifyReturnedCheckout(store.pendingCheckoutSessionId)
-  }, [filesReady, store.pendingCheckoutSessionId, verifyReturnedCheckout])
+    store.setPendingCheckout(sessionId)
+    void verifyReturnedCheckout(sessionId)
+  }, [filesReady, store, verifyReturnedCheckout])
 
   const handlePlaceOrder = async () => {
     if (!store.outputType || store.imageFiles.length === 0 || isSubmitting) return
@@ -376,53 +376,63 @@ export default function CheckoutPage () {
       setCheckoutError('Enter a valid email address so we can send the finished storybook.')
       return
     }
-    if (!hasPartnerAccess) {
-      setCheckoutError('Enter the partner access code to create a test order.')
+    if (!hasConsents) {
+      setCheckoutError('Please confirm age, photo permission, and Terms before paying.')
       return
     }
 
     setIsSubmitting(true)
-    setPaymentProcessing(true)
     setCheckoutError(null)
 
     try {
-      const outputType = store.outputType as OutputType
-      const shippingAddress = outputType === 'LULU_BOOK'
-        ? {
-            fullName: store.shippingName,
-            phone: store.shippingPhone || undefined,
-            line1: store.shippingAddress1,
-            line2: store.shippingAddress2 || undefined,
-            city: store.shippingCity,
-            region: store.shippingRegion,
-            postalCode: store.shippingPostalCode,
-            countryCode: store.shippingCountry
+      await saveCheckoutFiles(store.imageFiles)
+
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: store.email,
+          outputType: store.outputType,
+          discountCode: store.discountCode || undefined,
+          consents: {
+            ageConfirmed,
+            likenessPermission,
+            termsAccepted
+          },
+          formData: {
+            characters: store.characters,
+            storyline: store.storyline,
+            numCharacters: store.characters.length,
+            shippingName: store.shippingName,
+            shippingPhone: store.shippingPhone,
+            shippingAddress1: store.shippingAddress1,
+            shippingAddress2: store.shippingAddress2,
+            shippingCity: store.shippingCity,
+            shippingRegion: store.shippingRegion,
+            shippingPostalCode: store.shippingPostalCode,
+            shippingCountry: store.shippingCountry,
+            shippingLevel: store.selectedShippingLevel || undefined,
+            shippingCost: store.shippingCost,
+            orderTotal: selectedShipping?.total
           }
-        : undefined
-
-      const res = await createStorybookJob({
-        imageFiles: store.imageFiles,
-        characters: store.characters,
-        storyline: store.storyline,
-        email: store.email,
-        outputType,
-        shippingAddress
+        })
       })
 
-      trackEvent('checkout_completed', {
-        payment_id: 'partner-test',
-        output_type: outputType,
-        checkout_provider: 'partner_access'
+      const data = await response.json()
+      if (!response.ok || !data?.checkout?.checkoutUrl || !data?.checkout?.sessionId) {
+        throw new Error(data?.error || 'Failed to start Stripe checkout')
+      }
+
+      store.setPendingCheckout(data.checkout.sessionId)
+      trackEvent('checkout_started', {
+        output_type: store.outputType,
+        checkout_provider: 'stripe'
       })
 
-      store.clearPendingCheckout()
-      await clearCheckoutFiles()
-      store.reset()
-      router.push(`/order/${res.jobId}?type=${outputType}&payment=partner-test`)
+      window.location.href = data.checkout.checkoutUrl
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create test order'
+      const message = error instanceof Error ? error.message : 'Failed to start checkout'
       console.error(message, error)
-      setPaymentProcessing(false)
       setCheckoutError(message)
       setIsSubmitting(false)
     }
@@ -457,18 +467,18 @@ export default function CheckoutPage () {
             Checkout
           </h1>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-zinc-600 sm:text-base">
-            Review your order and use the partner access code to create a test storybook.
+            Secure international checkout powered by Stripe. Tax is calculated for your country at payment.
           </p>
 
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 text-xs text-zinc-600 sm:gap-3">
             <div className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5">
               <ShieldCheck className="h-3.5 w-3.5 text-violet-500" />
-              <span>Partner testing</span>
+              <span>Stripe secure pay</span>
             </div>
             {isHardcover && (
               <div className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5">
                 <Truck className="h-3.5 w-3.5 text-violet-500" />
-                <span>Live shipping rates</span>
+                <span>Worldwide shipping</span>
               </div>
             )}
           </div>
@@ -483,12 +493,16 @@ export default function CheckoutPage () {
         <div className={isHardcover ? 'grid gap-4 lg:grid-cols-3 lg:gap-6' : 'mx-auto max-w-xl'}>
           {isHardcover && (
             <div className="space-y-4 lg:col-span-2">
-              <PartnerAccessForm
+              <ContactAndConsentForm
                 email={store.email}
-                partnerCode={partnerCode}
                 isSubmitting={isSubmitting || paymentProcessing}
+                ageConfirmed={ageConfirmed}
+                likenessPermission={likenessPermission}
+                termsAccepted={termsAccepted}
                 onEmailChange={store.setEmail}
-                onPartnerCodeChange={setPartnerCode}
+                onAgeConfirmedChange={setAgeConfirmed}
+                onLikenessPermissionChange={setLikenessPermission}
+                onTermsAcceptedChange={setTermsAccepted}
               />
               <ShippingForm
                 store={store}
@@ -519,12 +533,16 @@ export default function CheckoutPage () {
             <div className={isHardcover ? 'lg:sticky lg:top-24' : ''}>
               {!isHardcover && (
                 <div className="mb-4">
-                  <PartnerAccessForm
+                  <ContactAndConsentForm
                     email={store.email}
-                    partnerCode={partnerCode}
                     isSubmitting={isSubmitting || paymentProcessing}
+                    ageConfirmed={ageConfirmed}
+                    likenessPermission={likenessPermission}
+                    termsAccepted={termsAccepted}
                     onEmailChange={store.setEmail}
-                    onPartnerCodeChange={setPartnerCode}
+                    onAgeConfirmedChange={setAgeConfirmed}
+                    onLikenessPermissionChange={setLikenessPermission}
+                    onTermsAcceptedChange={setTermsAccepted}
                   />
                 </div>
               )}
@@ -534,8 +552,8 @@ export default function CheckoutPage () {
                 isSubmitting={isSubmitting}
                 isCheckoutOpen={false}
                 canPlaceOrder={canPlaceOrder}
-                ctaLabel="Create Test Order"
-                submittingLabel="Creating order..."
+                ctaLabel="Pay with Stripe"
+                submittingLabel="Redirecting to Stripe..."
                 onPlaceOrder={handlePlaceOrder}
               />
             </div>
@@ -546,25 +564,33 @@ export default function CheckoutPage () {
   )
 }
 
-function PartnerAccessForm ({
+function ContactAndConsentForm ({
   email,
-  partnerCode,
   isSubmitting,
+  ageConfirmed,
+  likenessPermission,
+  termsAccepted,
   onEmailChange,
-  onPartnerCodeChange
+  onAgeConfirmedChange,
+  onLikenessPermissionChange,
+  onTermsAcceptedChange
 }: {
   email: string
-  partnerCode: string
   isSubmitting: boolean
+  ageConfirmed: boolean
+  likenessPermission: boolean
+  termsAccepted: boolean
   onEmailChange: (email: string) => void
-  onPartnerCodeChange: (code: string) => void
+  onAgeConfirmedChange: (value: boolean) => void
+  onLikenessPermissionChange: (value: boolean) => void
+  onTermsAcceptedChange: (value: boolean) => void
 }) {
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
       <div className="mb-4">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900">
           <Mail className="h-5 w-5 text-violet-600" />
-          Contact Information
+          Contact &amp; Consent
         </h2>
         <p className="mt-1 text-sm text-zinc-500">
           We&apos;ll send the finished storybook to this email.
@@ -588,25 +614,45 @@ function PartnerAccessForm ({
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="partnerAccessCode">
-            Partner access code <span className="text-red-500">*</span>
-          </Label>
-          <div className="relative">
-            <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-            <Input
-              id="partnerAccessCode"
-              type="password"
-              inputMode="numeric"
-              autoComplete="off"
-              placeholder="Enter access code"
-              disabled={isSubmitting}
-              value={partnerCode}
-              onChange={(event) => onPartnerCodeChange(event.target.value)}
-              className="border-zinc-200 bg-white pl-9 focus-visible:ring-violet-500 focus-visible:ring-offset-white"
-            />
-          </div>
-        </div>
+        <label className="flex items-start gap-3 text-sm text-zinc-700">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={ageConfirmed}
+            disabled={isSubmitting}
+            onChange={(event) => onAgeConfirmedChange(event.target.checked)}
+          />
+          <span>I confirm I am at least 18 years old.</span>
+        </label>
+
+        <label className="flex items-start gap-3 text-sm text-zinc-700">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={likenessPermission}
+            disabled={isSubmitting}
+            onChange={(event) => onLikenessPermissionChange(event.target.checked)}
+          />
+          <span>
+            I own these photos or have permission to use them, including parental/guardian permission for any minors shown.
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 text-sm text-zinc-700">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={termsAccepted}
+            disabled={isSubmitting}
+            onChange={(event) => onTermsAcceptedChange(event.target.checked)}
+          />
+          <span>
+            I agree to the{' '}
+            <a href="/terms" className="text-violet-600 underline" target="_blank" rel="noreferrer">Terms</a>
+            {' '}and{' '}
+            <a href="/refund" className="text-violet-600 underline" target="_blank" rel="noreferrer">Refund Policy</a>.
+          </span>
+        </label>
       </div>
     </div>
   )

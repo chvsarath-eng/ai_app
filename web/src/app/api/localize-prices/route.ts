@@ -1,28 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server'
-import type DodoPayments from 'dodopayments'
-import { DODO_PRODUCTS, getDodoClient } from '@/lib/dodo-payments'
+import { NextResponse } from 'next/server'
+import { getStripe, STRIPE_AMOUNTS, STRIPE_PRICE_IDS } from '@/lib/stripe'
 
 export const runtime = 'nodejs'
 
 const DEFAULT_RESPONSE = {
   currencyCode: 'USD',
   currencySymbol: '$',
-  digital: { price: '$9.99', priceRaw: 999 },
-  hardcover: { price: '$39.99', priceRaw: 3999 },
-  isLocalized: false
-}
-
-function getCountryCode (request: NextRequest) {
-  const headerCandidates = [
-    request.headers.get('x-vercel-ip-country'),
-    request.headers.get('cf-ipcountry'),
-    request.headers.get('x-country-code'),
-    request.headers.get('x-appengine-country'),
-    request.headers.get('x-geo-country')
-  ]
-
-  const countryCode = headerCandidates.find((value) => typeof value === 'string' && value.length === 2)
-  return countryCode || undefined
+  digital: { price: '$9.99', priceRaw: STRIPE_AMOUNTS.DIGITAL_CENTS },
+  hardcover: { price: '$39.99', priceRaw: STRIPE_AMOUNTS.HARDCOVER_CENTS },
+  isLocalized: false,
+  taxNote: 'Tax calculated at checkout for your country'
 }
 
 function formatAmount (amount: number, currencyCode: string) {
@@ -41,62 +28,44 @@ function getCurrencySymbol (currencyCode: string) {
   return parts.find((part) => part.type === 'currency')?.value || currencyCode
 }
 
-type PreviewProduct = DodoPayments.CheckoutSessionPreviewResponse['product_cart'][number]
-
-function getPreviewAmount (item?: PreviewProduct) {
-  if (!item) return undefined
-  return item.discounted_price + (item.tax || 0)
-}
-
-export async function GET (request: NextRequest) {
-  if (!DODO_PRODUCTS.DIGITAL || !DODO_PRODUCTS.HARDCOVER) {
-    console.warn('Dodo product IDs not configured, returning default prices')
-    return NextResponse.json(DEFAULT_RESPONSE)
-  }
-
-  if (!process.env.DODO_PAYMENTS_API_KEY) {
-    return NextResponse.json(DEFAULT_RESPONSE)
+async function getPriceAmountCents (priceId: string | undefined, fallback: number) {
+  if (!priceId || !process.env.STRIPE_SECRET_KEY) {
+    return fallback
   }
 
   try {
-    const client = getDodoClient()
-    const countryCode = getCountryCode(request)
+    const stripe = getStripe()
+    const price = await stripe.prices.retrieve(priceId)
+    return typeof price.unit_amount === 'number' ? price.unit_amount : fallback
+  } catch (error) {
+    console.warn('Failed to retrieve Stripe price, using fallback:', priceId, error)
+    return fallback
+  }
+}
 
-    const previewBody: DodoPayments.CheckoutSessionPreviewParams = {
-      product_cart: [
-        { product_id: DODO_PRODUCTS.DIGITAL, quantity: 1 },
-        { product_id: DODO_PRODUCTS.HARDCOVER, quantity: 1 }
-      ]
-    }
-
-    if (countryCode) {
-      previewBody.billing_address = {
-        country: countryCode as DodoPayments.CountryCode
-      }
-    }
-
-    const preview = await client.checkoutSessions.preview(previewBody)
-    const currencyCode = preview.currency || 'USD'
-    const digitalItem = preview.product_cart.find((item) => item.product_id === DODO_PRODUCTS.DIGITAL)
-    const hardcoverItem = preview.product_cart.find((item) => item.product_id === DODO_PRODUCTS.HARDCOVER)
-    const digitalAmount = getPreviewAmount(digitalItem) || DEFAULT_RESPONSE.digital.priceRaw
-    const hardcoverAmount = getPreviewAmount(hardcoverItem) || DEFAULT_RESPONSE.hardcover.priceRaw
+export async function GET () {
+  try {
+    const [digitalAmount, hardcoverAmount] = await Promise.all([
+      getPriceAmountCents(STRIPE_PRICE_IDS.DIGITAL, STRIPE_AMOUNTS.DIGITAL_CENTS),
+      getPriceAmountCents(STRIPE_PRICE_IDS.HARDCOVER, STRIPE_AMOUNTS.HARDCOVER_CENTS)
+    ])
 
     return NextResponse.json({
-      currencyCode,
-      currencySymbol: getCurrencySymbol(currencyCode),
+      currencyCode: 'USD',
+      currencySymbol: getCurrencySymbol('USD'),
       digital: {
-        price: formatAmount(digitalAmount, currencyCode),
+        price: formatAmount(digitalAmount, 'USD'),
         priceRaw: digitalAmount
       },
       hardcover: {
-        price: formatAmount(hardcoverAmount, currencyCode),
+        price: formatAmount(hardcoverAmount, 'USD'),
         priceRaw: hardcoverAmount
       },
-      isLocalized: Boolean(countryCode && currencyCode !== 'USD')
+      isLocalized: false,
+      taxNote: DEFAULT_RESPONSE.taxNote
     })
   } catch (error) {
-    console.error('Dodo localization preview failed:', error)
+    console.error('Stripe price localization failed:', error)
     return NextResponse.json(DEFAULT_RESPONSE)
   }
 }
