@@ -900,13 +900,17 @@ def _ensure_story_paths_consistent_v2(
             all_idxs = list(range(1, num_characters + 1))
             book["characters_in_scene"] = all_idxs
             book["input_images"] = _build_input_images_for_scene(all_idxs)
+        if not book.get("output_image"):
+            book["output_image"] = "generated/book_cover.png"
 
     # Fix page paths
     pages = story.get("pages")
     if isinstance(pages, list):
-        for page in pages:
+        for i, page in enumerate(pages, 1):
             if not isinstance(page, dict):
                 continue
+            if page.get("page_number") is None:
+                page["page_number"] = i
             cis = page.get("characters_in_scene")
             if isinstance(cis, list) and cis:
                 page["input_images"] = _build_input_images_for_scene(cis)
@@ -914,6 +918,8 @@ def _ensure_story_paths_consistent_v2(
                 # Default: just the main character
                 page["characters_in_scene"] = [1]
                 page["input_images"] = _build_input_images_for_scene([1])
+            if not page.get("output_image"):
+                page["output_image"] = f"generated/page_{page['page_number']}.png"
 
     return story
 
@@ -932,6 +938,7 @@ def generate_ebook_html_bundle_v2(
     thinking_level: str = "high",
     seed: int = 42,
     progress_cb: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+    image_params: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     V2 multi-character pipeline:
@@ -943,15 +950,18 @@ def generate_ebook_html_bundle_v2(
     Args:
         face_image_paths: List of 1-4 face image paths.
         character_metadata: Optional list of dicts with name/age/gender/relationship.
+        image_params: Optional per-job overrides for image generation:
+            ``provider``, ``model``, ``model_pages``, ``quality``, ``size``.
+
+    Progress events (via ``progress_cb``), in addition to the legacy stage names:
+        ``story_ready``  -> {title, cover_text, pages:[{page_number, story}], characters:[{index,name}]}
+        ``image_ready``  -> {type, name, page_number, output_image, saved_path, elapsed_s, done, total}
     """
     from imggen import image_generator
     from create_storybook_html import create_storybook_html
     from lulu_digi_book_maker import generate_lulu_pdfs
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    # #region agent log
-    import json as _json; open(r'f:\Users\sarat\Documents\ai_api\.cursor\debug.log','a').write(_json.dumps({"location":"story_api.py:952","message":"GENERATE_EBOOK_HTML_BUNDLE_V2_ENTRY","data":{"job_dir":job_dir,"num_faces":len(face_image_paths),"model":model,"provider":model_provider},"hypothesisId":"D","timestamp":__import__('time').time()})+'\n')
-    # #endregion
 
     num_chars = len(face_image_paths)
     if num_chars < 1 or num_chars > 4:
@@ -1009,9 +1019,6 @@ def generate_ebook_html_bundle_v2(
         },
     )
 
-    # #region agent log
-    import json as _json; open(r'f:\Users\sarat\Documents\ai_api\.cursor\debug.log','a').write(_json.dumps({"location":"story_api.py:1008","message":"CALLING_STORY_CONTENT_GENERATOR_V2","data":{"model":model,"provider":model_provider,"num_chars":num_chars},"hypothesisId":"B","timestamp":__import__('time').time()})+'\n')
-    # #endregion
     story_result = Story_content_generator_v2(
         story_prompt=story_prompt,
         character_inputs=character_inputs,
@@ -1022,9 +1029,6 @@ def generate_ebook_html_bundle_v2(
         thinking_level=thinking_level,
         seed=seed,
     )
-    # #region agent log
-    import json as _json; open(r'f:\Users\sarat\Documents\ai_api\.cursor\debug.log','a').write(_json.dumps({"location":"story_api.py:1020","message":"STORY_CONTENT_GENERATOR_V2_RETURNED","data":{"has_text":bool(story_result.get("text")),"usage":str(story_result.get("usage",""))[:100]},"hypothesisId":"B","timestamp":__import__('time').time()})+'\n')
-    # #endregion
 
     raw_text = _coerce_model_text_to_string(story_result.get("text"))
     usage = dict(story_result.get("usage") or {})
@@ -1060,8 +1064,37 @@ def generate_ebook_html_bundle_v2(
         },
     )
 
+    # Publish the readable story text right away so the client can fill the book shell
+    # while illustrations are still rendering.
+    _book_meta = story.get("book") if isinstance(story.get("book"), dict) else {}
+    _progress(
+        "story_ready",
+        {
+            "title": _book_meta.get("title") or "",
+            "cover_text": _book_meta.get("cover_text") or _book_meta.get("subtitle") or "",
+            "pages": [
+                {"page_number": p.get("page_number", i + 1), "story": p.get("story") or ""}
+                for i, p in enumerate(story.get("pages") or [])
+                if isinstance(p, dict)
+            ],
+            "characters": [
+                {"index": c.get("index", i + 1), "name": c.get("name") or f"Character {i + 1}"}
+                for i, c in enumerate(story.get("characters") or [])
+                if isinstance(c, dict)
+            ],
+            "story_s": t_story,
+        },
+    )
+
     # --- Concurrency setup ---
-    max_image_workers = int(os.getenv("IMAGE_CONCURRENCY") or "5")
+    # Default is high enough to render cover + 10 pages in a single wave; 429s are retried below.
+    max_image_workers = int(os.getenv("IMAGE_CONCURRENCY") or "10")
+    _img = image_params or {}
+    _img_provider = _img.get("provider") or None
+    _img_model = _img.get("model") or None
+    _img_model_pages = _img.get("model_pages") or None
+    _img_quality = _img.get("quality") or None
+    _img_size = _img.get("size") or None
 
     def _is_retryable_error(e: Exception) -> bool:
         msg = (str(e) or "").lower()
@@ -1073,6 +1106,10 @@ def generate_ebook_html_bundle_v2(
             or "too many requests" in msg
             or "no images were generated" in msg
             or "no parts found in content" in msg
+            or "503" in msg
+            or "502" in msg
+            or "timed out" in msg
+            or "timeout" in msg
         )
 
     def _call_image_with_retry_v2(
@@ -1082,9 +1119,13 @@ def generate_ebook_html_bundle_v2(
         output_filename: str,
         task_name: str,
         image_labels: Optional[List[str]] = None,
+        task_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         max_attempts = int(os.getenv("IMAGE_MAX_ATTEMPTS") or "6")
         base_sleep_s = float(os.getenv("IMAGE_RETRY_BASE_SLEEP_S") or "2.0")
+        model_for_task = _img_model
+        if task_type == "page" and _img_model_pages:
+            model_for_task = _img_model_pages
         for attempt in range(1, max_attempts + 1):
             try:
                 logger.info(
@@ -1097,6 +1138,12 @@ def generate_ebook_html_bundle_v2(
                     image_filenames=image_filenames,
                     output_filename=output_filename,
                     image_labels=image_labels,
+                    image_provider=_img_provider,
+                    image_model=model_for_task,
+                    image_quality=_img_quality,
+                    image_size=_img_size,
+                    task_type=task_type,
+                    output_type=output_type,
                 )
                 logger.info(
                     "image_call_done task=%s attempt=%d elapsed_s=%.2f",
@@ -1179,11 +1226,15 @@ def generate_ebook_html_bundle_v2(
         phase2_tasks.append({
             "type": "page",
             "name": f"Page {page.get('page_number', '?')}",
+            "page_number": page.get("page_number"),
             "prompt": page.get("prompt", ""),
             "input_images": page_imgs,
             "output_image": page.get("output_image", "generated/page.png"),
             "image_labels": page_labels,
         })
+
+    total_image_tasks = len(phase1_tasks) + len(phase2_tasks)
+    images_done_counter = {"n": 0}
 
     _progress(
         "images_start",
@@ -1227,18 +1278,42 @@ def generate_ebook_html_bundle_v2(
             output_filename=abs_out,
             task_name=task_name,
             image_labels=labels,
+            task_type=task_type,
         )
         saved = (res.get("images") or [None])[0]
+        elapsed = time.time() - task_start
         logger.info(
             "image_task_done name=%s type=%s elapsed_s=%.2f output=%s",
-            task_name, task_type, time.time() - task_start, rel_out,
+            task_name, task_type, elapsed, rel_out,
         )
         return {
             "name": task.get("name"),
             "type": task.get("type"),
+            "page_number": task.get("page_number"),
             "output_image": rel_out,
             "saved_path": saved,
+            "elapsed_s": elapsed,
+            "model": res.get("model"),
+            "usage": res.get("usage"),
         }
+
+    def _emit_image_ready(item: Dict[str, Any]) -> None:
+        images_done_counter["n"] += 1
+        _progress(
+            "image_ready",
+            {
+                "type": item.get("type"),
+                "name": item.get("name"),
+                "page_number": item.get("page_number"),
+                "output_image": item.get("output_image"),
+                "saved_path": item.get("saved_path"),
+                "elapsed_s": item.get("elapsed_s"),
+                "model": item.get("model"),
+                "usage": item.get("usage"),
+                "done": images_done_counter["n"],
+                "total": total_image_tasks,
+            },
+        )
 
     def _run_phase_v2(tasks: List[Dict[str, Any]], *, phase_name: str) -> List[Dict[str, Any]]:
         if not tasks:
@@ -1252,7 +1327,9 @@ def generate_ebook_html_bundle_v2(
             for fut in as_completed(fut_to_task):
                 task = fut_to_task[fut]
                 try:
-                    results.append(fut.result())
+                    item = fut.result()
+                    results.append(item)
+                    _emit_image_ready(item)
                 except Exception as e:
                     failed.append((task, e))
         retry_rounds = int(os.getenv("IMAGE_FAILED_TASK_RETRIES") or "2")
@@ -1266,7 +1343,9 @@ def generate_ebook_html_bundle_v2(
             next_failed: List[Tuple[Dict[str, Any], Exception]] = []
             for task, _err in failed:
                 try:
-                    results.append(_run_one_v2(task))
+                    item = _run_one_v2(task)
+                    results.append(item)
+                    _emit_image_ready(item)
                 except Exception as e:
                     next_failed.append((task, e))
             failed = next_failed

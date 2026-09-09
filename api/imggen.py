@@ -54,14 +54,240 @@ def _env_int(key: str, default: int) -> int:
 
 
 def _resolve_image_provider(image_provider: Optional[str]) -> str:
+    """Resolve provider name.
+
+    Providers:
+      - ``openai_images``: OpenAI-compatible ``/images/edits`` (GPT-Image-2.5 via LaoZhang or OpenAI).
+      - ``laozhang``: LaoZhang Gemini-style ``:generateContent`` (Nano Banana).
+      - ``gemini``: direct Google GenAI SDK.
+    """
     provider = (image_provider or os.getenv("IMAGE_PROVIDER") or "").strip().lower()
-    if provider in ("laozhang", "lz"):
+    if provider in ("openai_images", "openai-images", "openai", "gpt-image", "gpt_image"):
+        return "openai_images"
+    if provider in ("laozhang", "lz", "laozhang_gemini"):
         return "laozhang"
     if provider in ("gemini", "google", "vertex", "genai"):
         return "gemini"
     if os.getenv("LAOZHANG_API_KEY") or os.getenv("API_KEY_LAOZHANG"):
         return "laozhang"
     return "gemini"
+
+
+# ---------------------------------------------------------------------------
+# OpenAI-compatible Images API (GPT-Image-2.5 flare / sunburst)
+# ---------------------------------------------------------------------------
+
+DEFAULT_IMAGE_API_BASE = "https://api.laozhang.ai/v1"
+# LaoZhang exposes GPT-Image-2.5 as "-vip" routes on the default group. The dated OpenAI snapshot
+# (gpt-image-2.5-sunburst-2026-09-08) is only routed on enterprise groups / api.openai.com; override
+# with IMAGE_MODEL when the key has access.
+DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst-vip"
+DEFAULT_IMAGE_QUALITY = "high"
+DEFAULT_IMAGE_SIZE = "1024x1024"
+
+
+def _image_api_key() -> str:
+    """Key for the OpenAI-compatible Images endpoint.
+
+    Prefers an explicit ``IMAGE_API_KEY``; otherwise the LaoZhang key when the base URL
+    points at LaoZhang, else ``OPENAI_API_KEY``.
+    """
+    explicit = os.getenv("IMAGE_API_KEY")
+    if explicit:
+        return explicit
+    base = (os.getenv("IMAGE_API_BASE") or DEFAULT_IMAGE_API_BASE).lower()
+    if "laozhang" in base:
+        key = os.getenv("API_KEY_LAOZHANG") or os.getenv("LAOZHANG_API_KEY")
+        if key:
+            return key
+    key = os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY_LAOZHANG") or os.getenv("LAOZHANG_API_KEY")
+    if not key:
+        raise RuntimeError(
+            "Missing API key for Images API. Set IMAGE_API_KEY, API_KEY_LAOZHANG or OPENAI_API_KEY."
+        )
+    return key
+
+
+def resolve_image_model(task_type: Optional[str] = None, explicit: Optional[str] = None) -> str:
+    """Pick the image model for a task type.
+
+    ``IMAGE_MODEL`` is the default for everything. ``IMAGE_MODEL_PAGES`` (optional) overrides
+    for story pages only, so identity-critical sheets/cover can stay on the precise model while
+    pages use a faster one.
+    """
+    if explicit:
+        return explicit
+    if task_type == "page":
+        pages_model = (os.getenv("IMAGE_MODEL_PAGES") or "").strip()
+        if pages_model:
+            return pages_model
+    return (os.getenv("IMAGE_MODEL") or DEFAULT_IMAGE_MODEL).strip()
+
+
+def resolve_image_size(output_type: Optional[str] = None, explicit: Optional[str] = None) -> str:
+    if explicit:
+        return explicit
+    if (output_type or "").upper() == "LULU_BOOK":
+        return (os.getenv("IMAGE_SIZE_PRINT") or "2048x2048").strip()
+    return (os.getenv("IMAGE_SIZE_DIGI") or os.getenv("IMAGE_SIZE") or DEFAULT_IMAGE_SIZE).strip()
+
+
+def resolve_image_quality(explicit: Optional[str] = None) -> str:
+    return (explicit or os.getenv("IMAGE_QUALITY") or DEFAULT_IMAGE_QUALITY).strip()
+
+
+def _prepare_reference_file(path: Path, *, max_side_px: int, target_bytes: int) -> tuple[str, bytes, str]:
+    """Return (filename, bytes, mime) for a reference image, downscaled to keep uploads small."""
+    with Image.open(path) as im:
+        im = ImageOps.exif_transpose(im)
+        if im.mode not in ("RGB", "L"):
+            im = im.convert("RGB")
+        w, h = im.size
+        scale = min(1.0, max_side_px / float(max(w, h)))
+        if scale < 1.0:
+            im = im.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+        # PNG keeps facial detail lossless; fall back to JPEG if it is too large.
+        buf = BytesIO()
+        im.save(buf, format="PNG", optimize=True)
+        data = buf.getvalue()
+        if len(data) <= target_bytes:
+            return (path.stem + ".png", data, "image/png")
+        lo, hi = 60, 95
+        best: Optional[bytes] = None
+        while lo <= hi:
+            q = (lo + hi) // 2
+            buf = BytesIO()
+            im.save(buf, format="JPEG", quality=q, optimize=True)
+            data = buf.getvalue()
+            if len(data) <= target_bytes:
+                best = data
+                lo = q + 1
+            else:
+                hi = q - 1
+        if best is None:
+            buf = BytesIO()
+            im.save(buf, format="JPEG", quality=60, optimize=True)
+            best = buf.getvalue()
+        return (path.stem + ".jpg", best, "image/jpeg")
+
+
+def _compose_prompt_with_labels(prompt: str, image_labels: Optional[List[str]], n_images: int) -> str:
+    """The Images API has no interleaved parts; describe each input image's role in the prompt."""
+    if not image_labels or len(image_labels) != n_images:
+        return prompt
+    lines = []
+    for i, label in enumerate(image_labels, 1):
+        clean = label.strip().rstrip(":")
+        lines.append(f"Input image {i}: {clean}.")
+    return "\n".join(lines) + "\n\n" + prompt
+
+
+def _image_generator_openai_images(
+    *,
+    prompt: str,
+    image_filenames: List[str],
+    output_filename: Optional[str] = None,
+    image_labels: Optional[List[str]] = None,
+    model: Optional[str] = None,
+    size: Optional[str] = None,
+    quality: Optional[str] = None,
+    task_type: Optional[str] = None,
+    output_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Generate one image via an OpenAI-compatible ``POST {base}/images/edits``.
+
+    Works with LaoZhang (default base) and api.openai.com. Reference images are sent as
+    multipart ``image[]`` parts in order; ``image_labels`` are folded into the prompt.
+    """
+    api_key = _image_api_key()
+    api_base = (os.getenv("IMAGE_API_BASE") or DEFAULT_IMAGE_API_BASE).rstrip("/")
+    if not api_base.endswith("/v1"):
+        api_base = api_base + "/v1"
+    url = f"{api_base}/images/edits"
+
+    model_name = resolve_image_model(task_type, model)
+    size_val = resolve_image_size(output_type, size)
+    quality_val = resolve_image_quality(quality)
+    timeout_s = float(os.getenv("IMAGE_HTTP_TIMEOUT_S") or "420")
+
+    ref_max_side_px = _env_int("IMAGE_REF_MAX_SIDE_PX", 1536)
+    ref_target_bytes = _env_int("IMAGE_REF_TARGET_BYTES", 3_500_000)
+
+    if not image_filenames:
+        raise ValueError("openai_images provider requires at least one reference image")
+
+    full_prompt = _compose_prompt_with_labels(prompt, image_labels, len(image_filenames))
+
+    files: List[tuple] = []
+    for path_str in image_filenames:
+        p = Path(path_str)
+        if not p.exists():
+            raise FileNotFoundError(f"Image not found: {p}")
+        fname, data, mime = _prepare_reference_file(p, max_side_px=ref_max_side_px, target_bytes=ref_target_bytes)
+        files.append(("image[]", (fname, data, mime)))
+
+    form = {
+        "model": model_name,
+        "prompt": full_prompt,
+        "size": size_val,
+        "quality": quality_val,
+        "n": "1",
+        "output_format": "png",
+    }
+
+    logger.info(
+        "🎨 openai_images model=%s size=%s quality=%s refs=%d task=%s url=%s",
+        model_name, size_val, quality_val, len(files), task_type or "-", url,
+    )
+
+    headers = {"Authorization": f"Bearer {api_key}"}
+    t_call = time.time()
+    response = requests.post(url, headers=headers, data=form, files=files, timeout=timeout_s)
+    elapsed = time.time() - t_call
+    logger.info("🕒 openai_images status=%s elapsed_s=%.2f", response.status_code, elapsed)
+
+    if response.status_code != 200:
+        raise RuntimeError(f"Images API error {response.status_code}: {response.text[:1000]}")
+
+    try:
+        data = response.json()
+    except ValueError as e:
+        raise RuntimeError(f"Images API returned non-JSON body: {response.text[:500]}") from e
+
+    items = data.get("data") or []
+    if not items:
+        err = data.get("error")
+        raise RuntimeError(f"Images API returned no image data: {json.dumps(err or data)[:800]}")
+
+    item = items[0] or {}
+    img_bytes: Optional[bytes] = None
+    if item.get("b64_json"):
+        img_bytes = base64.b64decode(item["b64_json"])
+    elif item.get("url"):
+        r2 = requests.get(item["url"], timeout=120)
+        r2.raise_for_status()
+        img_bytes = r2.content
+    if not img_bytes:
+        raise RuntimeError("Images API item had neither b64_json nor url")
+
+    if output_filename:
+        out_path = Path(output_filename)
+        if out_path.suffix == "":
+            out_path = out_path.with_suffix(".png")
+    else:
+        out_path = Path("generated_images") / f"gen_{int(time.time())}.png"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(img_bytes)
+
+    usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
+    return {
+        "images": [str(out_path)],
+        "texts": [],
+        "usage": usage,
+        "model": model_name,
+        "elapsed_s": elapsed,
+        "raw_response": {k: v for k, v in data.items() if k != "data"},
+    }
 
 
 def _encode_image_to_data_uri(
@@ -262,43 +488,15 @@ def _image_generator_laozhang(
         "Content-Type": "application/json",
     }
 
-    # #region agent log - Debug: Log payload structure (without base64 data)
-    _debug_payload = {
-        "contents": [{"parts": [{"text": prompt[:200] + "..." if len(prompt) > 200 else prompt, "num_images": len(parts) - 1}]}],
-        "generationConfig": payload["generationConfig"],
-    }
-    logger.warning("DEBUG_LAOZHANG payload_structure=%s", json.dumps(_debug_payload))
-    # #endregion
 
     t_call = time.time()
     response = requests.post(url, headers=headers, json=payload, timeout=300)
     logger.info("🕒 LaoZhang response status=%s elapsed_s=%.2f", response.status_code, time.time() - t_call)
     
-    # #region agent log - Debug: Log full response on error
-    if response.status_code != 200:
-        logger.warning("DEBUG_LAOZHANG error_response=%s", response.text[:2000])
-    # #endregion
     if response.status_code != 200:
         raise RuntimeError(f"LaoZhang API error {response.status_code}: {response.text[:1000]}")
 
     data = response.json()
-    # #region agent log
-    import json as _j2
-    _dbg2 = {"sessionId": "debug-session", "runId": "run1", "timestamp": int(time.time() * 1000),
-             "hypothesisId": "B,C,D,E", "location": "imggen.py:response_parsed",
-             "message": "Response parsed - structure check"}
-    _cands_raw = data.get("candidates") or []
-    _dbg2["data"] = {
-        "response_top_keys": sorted(data.keys()) if isinstance(data, dict) else "not_dict",
-        "num_candidates": len(_cands_raw),
-        "finishReasons": [c.get("finishReason") for c in _cands_raw],
-        "promptFeedback": data.get("promptFeedback"),
-        "has_parts": [bool((c.get("content") or {}).get("parts")) for c in _cands_raw],
-        "parts_types": [[list(p.keys()) for p in ((c.get("content") or {}).get("parts") or [])] for c in _cands_raw],
-    }
-    with open(r"f:\Users\sarat\Documents\ai_api\.cursor\debug.log", "a", encoding="utf-8") as _f2:
-        _f2.write(_j2.dumps(_dbg2) + "\n")
-    # #endregion
     data_uris: List[str] = []
     text_parts: List[str] = []
     candidates = data.get("candidates") or []
@@ -318,45 +516,11 @@ def _image_generator_laozhang(
         content = json.dumps(data)[:4000]
         data_uris.extend(_extract_data_uris(content))
 
-    # #region agent log
     if not data_uris:
-        import json as _j
-        _dbg = {"sessionId": "debug-session", "runId": "run1", "timestamp": int(time.time() * 1000)}
-        _dbg["hypothesisId"] = "A"
-        _dbg["location"] = "imggen.py:no_image_data"
-        _dbg["message"] = "API 200 but no image - full response structure"
-        _resp_keys = list(data.keys()) if isinstance(data, dict) else str(type(data))
-        _cands = data.get("candidates") or []
-        _cand_details = []
-        for _ci, _c in enumerate(_cands):
-            _cd = {"index": _ci, "finishReason": _c.get("finishReason"), "safetyRatings": _c.get("safetyRatings")}
-            _cont = _c.get("content") or {}
-            _parts_summary = []
-            for _p in (_cont.get("parts") or []):
-                if _p.get("inlineData"):
-                    _parts_summary.append({"type": "inlineData", "mimeType": _p["inlineData"].get("mimeType"), "has_data": bool(_p["inlineData"].get("data"))})
-                elif _p.get("text"):
-                    _parts_summary.append({"type": "text", "preview": _p["text"][:300]})
-                else:
-                    _parts_summary.append({"type": "unknown", "keys": list(_p.keys())})
-            _cd["parts"] = _parts_summary
-            _cand_details.append(_cd)
-        _dbg["data"] = {
-            "response_keys": _resp_keys,
-            "num_candidates": len(_cands),
-            "candidates_detail": _cand_details,
-            "promptFeedback": data.get("promptFeedback"),
-            "blockReason": data.get("blockReason"),
-            "text_parts_found": text_parts[:3] if text_parts else [],
-            "raw_truncated": _j.dumps(data)[:2000],
-        }
-        with open(r"f:\Users\sarat\Documents\ai_api\.cursor\debug.log", "a", encoding="utf-8") as _f:
-            _f.write(_j.dumps(_dbg) + "\n")
-        logger.warning("DEBUG_NO_IMAGE response_keys=%s num_candidates=%d promptFeedback=%s text_parts=%s",
-                        _resp_keys, len(_cands), data.get("promptFeedback"), text_parts[:2])
-    # #endregion
-
-    if not data_uris:
+        logger.warning(
+            "LaoZhang 200 but no image: candidates=%d promptFeedback=%s text_parts=%s",
+            len(candidates), data.get("promptFeedback"), text_parts[:2],
+        )
         raise RuntimeError("LaoZhang API returned no image data")
 
     def _resolve_out_path(out: str, ext: str) -> Path:
@@ -427,6 +591,11 @@ def image_generator(
     use_google_search: bool = False,
     image_provider: Optional[str] = None,
     image_labels: Optional[List[str]] = None,
+    image_model: Optional[str] = None,
+    image_size: Optional[str] = None,
+    image_quality: Optional[str] = None,
+    task_type: Optional[str] = None,
+    output_type: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Generate images with Gemini using a prompt + reference image filenames.
@@ -455,6 +624,18 @@ def image_generator(
           - raw_response: SDK response object
     """
     provider = _resolve_image_provider(image_provider)
+    if provider == "openai_images":
+        return _image_generator_openai_images(
+            prompt=prompt,
+            image_filenames=image_filenames,
+            output_filename=output_filename,
+            image_labels=image_labels,
+            model=image_model,
+            size=image_size,
+            quality=image_quality,
+            task_type=task_type,
+            output_type=output_type,
+        )
     if provider == "laozhang":
         return _image_generator_laozhang(
             prompt=prompt,
