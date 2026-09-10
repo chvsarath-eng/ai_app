@@ -5,14 +5,12 @@ Accepts 1-4 character face photos with metadata and generates a complete
 storybook JSON (character sheets + cover + 10 pages) with concise
 cinematic image prompts.
 
-Prompt Architecture v6 (Sep 2026):
-  Photograph the uploaded person INSIDE each scene. References are identity
-  only -- never a face to paste. Relight skin/hair/clothes to the scene.
-  Natural head angles and story-matched expressions. Recurring pets get a
-  locked identity card + sheet so they do not morph page to page.
-
-See IMAGE_GEN_FEEDBACK.md for earlier research; v6 reverses the frontal-face
-lock that produced cut-and-paste poster faces.
+Prompt Architecture v7 (Sep 2026):
+  Image models only know the uploaded FRONT of the face. A side or 3/4 view
+  invents unseen geometry and the person changes. Every human face must stay
+  camera-facing with both eyes visible. Photograph them INSIDE the scene and
+  relight that frontal face to the environment so it is not a studio cutout.
+  Subtle expressions only. Recurring pets get a locked identity card + sheet.
 """
 from __future__ import annotations
 
@@ -64,19 +62,21 @@ SHORT_NEGATIVES = (
 )
 
 SCENE_INTEGRATION_PHRASE = (
-    "Photograph them physically inside this scene. Relight face, skin, hair, and clothes "
+    "Photograph them physically inside this scene. Relight the frontal face, skin, hair, and clothes "
     "to match this scene's key light, color temperature, weather, and atmosphere. "
     "Rain, dust, sun, sweat, and color must hit the face the same way they hit the body. "
-    "Natural head angle for the action; a three-quarter view is preferred over a passport stare. "
-    "Keep the same face as the photo: only a subtle change in the eyes. "
-    "No big grin, shout, grimace, or wide-open mouth -- those change likeness. "
-    "Forbidden: face swap, cutout, poster collage, unchanged studio lighting on the face."
+    "Every human face points at the camera with both eyes visible -- the model only knows the "
+    "uploaded front of the face, so profile or three-quarter heads invent a different person. "
+    "Body does the action; head stays camera-facing. Put props between them and the lens "
+    "so they do not have to turn away. Keep a subtle, photo-like expression. "
+    "No big grin, shout, grimace, or wide-open mouth. "
+    "Forbidden: face swap, cutout, collage, studio-lit face on a location plate, side face, 3/4 face."
 )
 
 STRICT_FACE_LOCK = (
-    "Keep the same person across every page. "
-    "The reference is WHO they are, not a face to copy-paste. "
-    "Do not force a frontal passport pose."
+    "FRONTAL FACE LOCK is non-negotiable. The reference photo is a front face. "
+    "The model cannot know how that person looks from the side. "
+    "Every human face points at the camera, both eyes visible, on every page."
 )
 
 # ---------------------------------------------------------------------------
@@ -89,29 +89,31 @@ FEW_SHOT_EXAMPLE_1 = (
     "David: short dark hair, square jaw, light stubble, olive skin. Lily: dark braid, round cheeks, warm brown skin. "
     "Generate one cinematic photograph of them riding a vintage motorcycle through a dusty canyon at golden hour. "
     "He leans into the turn on the handlebars; she holds his jacket from behind, scarf streaming. "
-    "Heads turn naturally with the ride -- three-quarter faces looking down the canyon, not passport-frontal. "
-    "Dust and warm sidelight wrap their faces the same way they wrap the leather and the canyon walls. "
-    "Expressions stay subtle and close to the reference -- a hint of focus in the eyes, mouth relaxed. Medium shot, shallow depth of field. "
-    "Same people as the references, completely relit for this canyon. No face swap, no cutout, no studio portrait lighting."
+    "Bodies are mid-action, but both faces point at the camera with both eyes visible -- "
+    "as if the camera is mounted on the front of the bike. Do not invent a side of either face. "
+    "Dust and warm sidelight wrap their frontal faces the same way they wrap the leather and canyon. "
+    "Subtle focused eyes, mouths relaxed. Medium shot, shallow depth of field. "
+    "Same people as the references, fully relit. No face swap, no cutout, no profile, no 3/4 face."
 )
 
 FEW_SHOT_EXAMPLE_2 = (
     "Photograph the bearded man from the first image as Arthur and the young woman from the second image as Mia, "
     "the same two people standing inside a twilight flower garden, newly photographed there. "
     "Arthur: full beard, weathered skin, brown eyes. Mia: long dark hair, narrow face, light-olive skin. "
-    "He reaches toward a glowing moth; she turns beside him, dress caught mid-spin. "
-    "Faces take the cool jewel-toned garden light and the last warm sky -- not a separate studio key. "
-    "Soft wonder in their expressions; they look at the moth and each other, not locked to the lens. "
-    "Medium shot, eye-level, cinematic color grading. One real photograph, no collage, no pasted faces."
+    "He reaches toward a glowing moth held in front of them; she turns her body beside him, dress caught mid-spin. "
+    "Both faces stay camera-facing with both eyes visible. Faces take the cool garden light and last warm sky -- "
+    "not a separate studio key. Soft wonder only in the eyes, mouths relaxed. "
+    "Medium shot, eye-level. One real photograph, no collage, no profile, no 3/4 face."
 )
 
 FEW_SHOT_EXAMPLE_3 = (
     "Photograph the curly-haired girl from the first image as Chloe, the same child newly captured in this storm, "
     "not a face dropped onto a cliff. Chloe: tight brown curls, freckles, warm tan skin, yellow raincoat. "
     "Medium shot of her bracing on a rocky overlook as wind snaps the coat. "
-    "She looks into the weather, three-quarter face, rain on her cheeks and hair, cool storm light on skin "
-    "matching the sky. Mouth relaxed, eyes quietly determined -- same face as the photo. Same child as the reference, fully relit. "
-    "No cutout, no dry studio face in a wet scene."
+    "Her body leans into the wind, but her face points at the camera with both eyes visible. "
+    "Rain on her cheeks and hair, cool storm light on that frontal face matching the sky. "
+    "Mouth relaxed, eyes quietly determined. Same child as the reference, fully relit. "
+    "No cutout, no dry studio face in a wet scene, no profile, no 3/4 face."
 )
 
 
@@ -129,14 +131,14 @@ def _build_v2_system_prompt(num_characters: int) -> str:
     # Dynamic character limit text
     if num_characters == 1:
         char_limit_text = "There is 1 character with a face reference photo."
-        composition_text = "Single character inside the scene, natural pose for the action."
+        composition_text = "Single character inside the scene. Body acts; face stays camera-facing."
     else:
         char_limit_text = f"There are {num_characters} uploaded people, each with a face reference photo."
         composition_text = {
-            2: "2 people interacting inside the scene, not a side-by-side lineup.",
-            3: "3 people: triangle grouping around the shared action, not a mugshot row.",
-            4: "4 people: natural cluster around the action. Max 3 per scene.",
-        }.get(num_characters, "People interact inside the scene; no lineup posing.")
+            2: "2 people in the scene together, both faces camera-facing, not a mugshot lineup.",
+            3: "3 people: triangle grouping around the shared action. All faces camera-facing.",
+            4: "4 people: cluster around the action. Max 3 per scene. All faces camera-facing.",
+        }.get(num_characters, "People occupy the scene; every human face stays camera-facing.")
 
     return f'''You are a world-class Hollywood cinematic Story board writer and visual storyteller hired by "img2x" --
 a premium app where real people upload their photos and receive a stunning,
@@ -164,13 +166,17 @@ HARD CONSTRAINTS (HIGHEST PRIORITY)
 2) SCENE PHOTOGRAPHY, NOT COLLAGE: {SCENE_INTEGRATION_PHRASE}
    The worst failure is a studio-lit passport face pasted on a cinematic background.
    If the face lighting, grain, weather, or expression does not match the scene, REWRITE.
-2b) NATURAL HEAD AND GAZE: Head follows the story action. Three-quarter views are
-   preferred. Looking at a rope, clock, animal, or companion is GOOD. A locked
-   0-degree stare at the lens while the body "acts" is BANNED -- that is the
-   cut-paste look. True profiles that hide identity are still avoided; keep
-   enough of the face readable (both eyes or a clear 3/4).
-2c) BODY AND FACE ARE ONE PERSON: Pose, weight, hands, and face belong to the
-   same captured moment. NEVER repeat the same stance across pages.
+2b) FRONTAL FACE LOCK (NON-NEGOTIABLE -- IMAGE MODEL LIMIT): The uploaded
+   photo is a FRONT face. The model has never seen the side of this person.
+   Asking for profile, 3/4, looking away, looking down at a prop, or over
+   the shoulder FORCES the model to invent a new face. That is identity loss.
+   Every human face points at the camera. Both eyes visible. No profile.
+   No 3/4. No head turn away from the lens.
+2c) ACTION GEOMETRY: The BODY does the story action. The HEAD stays frontal.
+   Put the object between the person and the camera (rope in front, map held
+   toward lens, lantern in front of the chest). BAD: "looking at a bird to
+   the right." GOOD: "reaching toward a falling leaf in front of them."
+   NEVER repeat the same stance across pages.
 3) SUBTLE EXPRESSION ONLY (LIKENESS): The uploaded face must still look like
    that person. Big expressions warp the mouth, cheeks, and eyes and BREAK
    identity. Show feeling only with a slight change in the eyes and brows.
@@ -280,13 +286,13 @@ Each page's IMAGE PROMPT must MATCH the STORY TEXT on that same page exactly:
 
 MATCHING EXAMPLES:
 - Story: "She reached up and grabbed the branch."
-  → Image: Her arm extended upward, hand gripping branch, body stretched tall.
+  → Image: Arm up, branch in front of her, body stretched, face camera-facing.
 - Story: "He ran through the forest, jumping over roots."
-  → Image: Mid-stride, one foot off ground, body leaning forward, trees behind.
+  → Image: Mid-stride, body leaning forward, face still camera-facing.
 - Story: "He grabbed the rope and pulled hard. His arms shook."
-  → Image: Both hands gripping rope, arms pulled back, body leaning back with effort.
+  → Image: Rope held in front of him, arms working, face camera-facing.
 - Story: "They sat by the fire and talked quietly."
-  → Image: Both seated on logs, fire between them, facing camera.
+  → Image: Both seated, fire between them, both faces camera-facing.
 
 COMMON MISMATCHES TO AVOID:
 × Story says "running" but image prompt describes standing still.
@@ -294,9 +300,9 @@ COMMON MISMATCHES TO AVOID:
 × Story says "jumped back in surprise" but image prompt shows person just standing.
 × Story describes a dramatic climax moment but image prompt looks like a portrait session.
 
-RULE: If the story describes movement, the image MUST capture that movement
-in body AND face. Static portrait-like poses are ONLY acceptable when the
-story text also describes a static moment (e.g., "She stood and watched").
+RULE: If the story describes movement, the BODY captures that movement.
+The FACE stays camera-facing and subtly expressive. Static full-body
+portraits are only OK when the story is a waiting beat.
 
 ═══════════════════════════════════════════════════════════════════
 IMAGE PROMPT FORMAT (CRITICAL -- FOLLOW EXACTLY)
@@ -316,7 +322,7 @@ COMPOSITION PATTERN (follow this exact structure):
   2. Identity card: one short clause (age, hair, skin, unique marks).
   3. Scene + action: what they are doing, where, at what moment.
   4. Integration: {SCENE_INTEGRATION_PHRASE}
-  5. Expression and gaze that match the action (not a lens stare).
+  5. Frontal face lock + subtle eyes-only expression.
   6. Technicals: shot size, depth of field, shared lighting.
   7. Close with: {SHORT_NEGATIVES}
 
@@ -325,7 +331,7 @@ COVER ONLY: Weave the title into the sentence:
 lettering styled to match the story's mood and setting, professional movie-poster
 polish while staying purely photographic, text lighting matches scene atmosphere..."
 Cover people are photographed inside the cover scene with the same integration
-rules -- not a row of frontal headshots under a title.
+rules. Every human face stays camera-facing. Title lighting matches the scene.
 
 --- FEW-SHOT EXAMPLE 1 (2-character, ~160 words -- TARGET LENGTH) ---
 
@@ -377,8 +383,8 @@ CHARACTER SHEET PROMPT FORMAT (one photograph, never a collage):
 They wear {{COSTUME_DETAILS}} in a simple real photography studio with soft even
 light. Same person, same hair, same age. One continuous photograph filling the
 frame -- no inset headshot, no split screen, no two-panel layout, no border.
-Natural relaxed stance, face readable (slight 3/4 is fine). Ultra-realistic
-photography. {NEGATIVE_PHRASE}"
+Natural relaxed stance, face pointing at the camera, both eyes visible.
+Ultra-realistic photography. {NEGATIVE_PHRASE}"
 
 INVENTED COMPANION SHEET (no uploaded photo -- create from the identity_card):
 "Create a single full-body photograph of {{Name}}, {{identity_card}}, standing
@@ -390,16 +396,16 @@ The uploaded human photo is style and scale only -- do not copy that person's fa
 SHOT ARC (VARY PER PAGE)
 ═══════════════════════════════════════════════════════════════════
 
-- Page 1: medium, eye-level, looking into the scene
-- Page 2: MCU, slight three-quarter face, engaged with the action
-- Page 3: medium, eye-level, new pose
-- Page 4: medium, slightly high angle, interacting with a prop
-- Page 5: close-up, face taking the scene light
-- Page 6: MCU, eye-level, new action
-- Page 7: medium, eye-level, with companion or prop
-- Page 8: MCU, slightly high angle
-- Page 9: medium, slightly low angle, peak action
-- Page 10: MCU, resolution beat, still inside the location
+- Page 1: medium, eye-level, camera-facing, new body action
+- Page 2: MCU, eye-level, camera-facing
+- Page 3: medium, eye-level, new pose, camera-facing
+- Page 4: medium, slightly high angle, prop in front, camera-facing
+- Page 5: close-up, camera-facing, face taking the scene light
+- Page 6: MCU, eye-level, new action, camera-facing
+- Page 7: medium, eye-level, companion or prop in front, camera-facing
+- Page 8: MCU, slightly high angle, camera-facing
+- Page 9: medium, slightly low angle, peak body action, camera-facing
+- Page 10: MCU, resolution beat, camera-facing, still inside the location
 
 RULES: NEVER use "wide", "extreme wide", or "establishing" shots.
 Widest allowed: "medium". Closest: "close-up".
@@ -417,6 +423,8 @@ BANNED FORMATS (anti-patterns):
 - Layer headers: "LAYER 1:", "LAYER 2:", "LAYER 3:", "LAYER 4:"
 
 BANNED PHRASES:
+- Side-face asks (identity death): "three-quarter", "3/4 face", "profile",
+  "looking away", "looking down", "over the shoulder", "facing each other"
 - Camera/lens: "Shot on", "ARRI Alexa", "Sony VENICE", "Cooke lens", "anamorphic"
 - Bio-fidelity: "subsurface light scatter", "dermatological accuracy", "vellus hair"
 - Fabric: "fabric rendered with physical accuracy", "thread-level detail"
@@ -441,7 +449,7 @@ For cover and pages: input_images has 1 costume sheet per character in the scene
   ["generated/char_1_sheet.png", "generated/char_2_sheet.png"]
 
 In prompts, photograph the person from the reference inside the new scene.
-Do NOT say "use the exact face" or "faces pointed at camera (0 degrees)".
+Every human face stays pointed at the camera with both eyes visible.
 Do NOT use formal labels like "Image 1:". Do NOT use bullet points.
 
 JSON structure:
@@ -491,11 +499,11 @@ GENERATION STEPS (internal, output JSON only):
 6) Validate:
    - Every prompt is a cohesive paragraph (no bullet points, no line breaks).
    - Every prompt photographs people INSIDE the scene and asks to relight them.
-   - COLLAGE CHECK: Reject "use the exact face", "faces pointed at camera
-     (0 degrees)", "mouths closed", "both eyes fully visible and frontal",
-     "inset headshot", "split screen". Rewrite to scene photography.
-   - GAZE CHECK: The person looks at the story action, not a passport lens,
-     unless the beat is a quiet wait.
+   - COLLAGE CHECK: Reject "inset headshot", "split screen", "cutout",
+     "face swap". Rewrite to scene photography with a relit frontal face.
+   - FRONTAL CHECK: Reject "three-quarter", "3/4", "profile", "looking away",
+     "looking down", "over the shoulder", "turned toward". Rewrite so every
+     human face points at the camera with both eyes visible.
    - EXPRESSION CHECK: Reject big-expression words (grin, teeth, scream,
      grimace, shout, crying). Keep a subtle, photo-like face.
    - ACTION VARIETY CHECK: No two pages share the same stance or setup.
@@ -679,21 +687,32 @@ def build_identity_card(char: Dict[str, Any]) -> str:
 
 _COLLAGE_PATTERNS = (
     (re.compile(r"\buse (?:his|her|their|the) exact face\b", re.I), "photograph as the same person"),
-    (re.compile(r"\bfaces? (?:are |keep )?(?:pointed|point) (?:directly )?at (?:the )?camera\b", re.I), "heads follow the action"),
-    (re.compile(r"\s*\(0\s*degrees\)", re.I), ""),
-    (re.compile(r"\bboth eyes (?:fully |equally )?visible\b", re.I), "face stays readable"),
-    (re.compile(r"\bmouths? (?:MUST remain |must remain |remain )?closed\b", re.I), "mouth relaxed, subtle expression"),
-    (re.compile(r"\bno profile(?: views| angles)?\b", re.I), "three-quarter views are allowed"),
-    (re.compile(r"\bstrictly face the camera\b", re.I), "look toward the story action"),
     (re.compile(r"left inset|two views of the same person|headshot inset", re.I), "one full-body photograph"),
     (re.compile(r"split[- ]screen", re.I), "collage layout"),
 )
 
+# Image models invent unseen facial geometry on these poses -- rewrite them away.
+_PROFILE_PATTERNS = (
+    (re.compile(r"\bthree-quarter(?: face| view|s)?\b", re.I), "camera-facing"),
+    (re.compile(r"\b3\s*/\s*4(?: face| view)?\b", re.I), "camera-facing"),
+    (re.compile(r"\bprofile(?: face| view|s| angles?)?\b", re.I), "frontal camera-facing face"),
+    (re.compile(r"\blooking (?:away|aside|down|off[- ]camera|to the (?:left|right|side))\b", re.I), "facing the camera"),
+    (re.compile(r"\bover the shoulder\b", re.I), "facing the camera"),
+    (re.compile(r"\bhead(?:s)? turn(?:s|ed|ing)? naturally\b", re.I), "head stays camera-facing"),
+    (re.compile(r"\bnot (?:a )?passport[- ]frontal\b", re.I), "camera-facing with both eyes visible"),
+    (re.compile(r"\bnot locked to the lens\b", re.I), "facing the camera with both eyes visible"),
+    (re.compile(r"\bfacing each other\b", re.I), "standing together, both facing the camera"),
+    (re.compile(r"\blooking at each other\b", re.I), "together in the scene, both facing the camera"),
+    (re.compile(r"\bturned toward\b", re.I), "body angled toward, face still camera-facing"),
+)
+
 
 def strip_collage_language(prompt: str) -> str:
-    """Remove leftover frontal-lock / paste-face wording from model prompts."""
+    """Remove collage wording and rewrite side-face asks into frontal faces."""
     out = prompt or ""
     for pattern, repl in _COLLAGE_PATTERNS:
+        out = pattern.sub(repl, out)
+    for pattern, repl in _PROFILE_PATTERNS:
         out = pattern.sub(repl, out)
     out = re.sub(r"\s{2,}", " ", out).strip()
     return out
@@ -721,5 +740,7 @@ def scene_integration_prefix(characters: List[Dict[str, Any]], char_indexes: Lis
 def sheet_anti_collage_suffix() -> str:
     return (
         " One single continuous photograph of the whole figure. "
-        "No inset headshot, no split screen, no two-panel layout, no decorative border."
+        "Face points at the camera, both eyes visible. "
+        "No inset headshot, no split screen, no two-panel layout, no decorative border, "
+        "no profile, no 3/4 face."
     )
