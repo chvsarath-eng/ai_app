@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyRazorpaySignature } from '@/lib/razorpay'
 import { getSessionUser } from '@/lib/session'
 import { getProject, upsertProject } from '@/lib/projects-server'
+import { startProjectGeneration } from '@/lib/start-generation'
 
 export const runtime = 'nodejs'
 
@@ -71,11 +72,16 @@ export async function POST (request: NextRequest) {
       createdAt: existing?.createdAt || Date.now()
     })
 
+    const generation = await startProjectGeneration(resolvedProjectId)
+
     return NextResponse.json({
       success: true,
       projectId: project.id,
       orderId,
-      paymentId
+      paymentId,
+      jobId: generation.jobId || null,
+      generationStarted: generation.ok,
+      generationError: generation.error || null
     })
   } catch (error: unknown) {
     console.error('Payment verification failed:', error)
