@@ -10,7 +10,32 @@ import { useAuthStore, type AuthUser } from '@/lib/auth-store'
 import { registerWithEmail, resetPassword, signInWithEmail, signInWithGoogle } from '@/lib/firebase/client'
 import { trackEvent } from '@/lib/analytics'
 
-type Mode = 'google' | 'email' | 'register' | 'reset'
+type Mode = 'google' | 'email' | 'reset'
+
+const NO_ACCOUNT_CODES = new Set(['auth/user-not-found', 'auth/invalid-credential', 'auth/wrong-password', 'auth/invalid-login-credentials'])
+
+function authCode (err: unknown): string {
+  return (err as { code?: string })?.code || ''
+}
+
+/**
+ * One-step email auth: sign in if the account exists, otherwise create it.
+ * Returns the user plus whether a new account was created.
+ */
+async function signInOrRegister (email: string, password: string) {
+  try {
+    return { user: await signInWithEmail(email, password), isNew: false }
+  } catch (err) {
+    if (!NO_ACCOUNT_CODES.has(authCode(err))) throw err
+    try {
+      return { user: await registerWithEmail(email, password), isNew: true }
+    } catch (regErr) {
+      // Account exists but the password was wrong.
+      if (authCode(regErr) === 'auth/email-already-in-use') throw err
+      throw regErr
+    }
+  }
+}
 
 function friendlyAuthError (err: unknown): string {
   const code = (err as { code?: string })?.code || ''
@@ -25,9 +50,12 @@ function friendlyAuthError (err: unknown): string {
     case 'auth/user-not-found':
     case 'auth/wrong-password':
     case 'auth/invalid-credential':
-      return 'Incorrect email or password.'
+    case 'auth/invalid-login-credentials':
+      return 'Incorrect password for this email. Use "Forgot password?" to reset it.'
     case 'auth/email-already-in-use':
       return 'An account already exists with this email. Try signing in instead.'
+    case 'auth/operation-not-allowed':
+      return 'Email sign-in is temporarily unavailable. Please continue with Google.'
     case 'auth/weak-password':
       return 'Please choose a password with at least 6 characters.'
     case 'auth/too-many-requests':
@@ -128,10 +156,8 @@ export function SignInCard ({
         setNotice('Password reset email sent. Check your inbox.')
         return
       }
-      const user = mode === 'register'
-        ? await registerWithEmail(email.trim(), password)
-        : await signInWithEmail(email.trim(), password)
-      trackEvent('sign_in_success', { method: mode === 'register' ? 'email_register' : 'email' })
+      const { user, isNew } = await signInOrRegister(email.trim(), password)
+      trackEvent('sign_in_success', { method: isNew ? 'email_register' : 'email' })
       onSignedIn?.({
         uid: user.uid,
         email: user.email,
@@ -276,7 +302,7 @@ export function SignInCard ({
               <Input
                 id="authPassword"
                 type="password"
-                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                autoComplete="current-password"
                 required
                 minLength={6}
                 value={password}
@@ -288,17 +314,17 @@ export function SignInCard ({
           )}
           <Button type="submit" disabled={isBusy} className="h-11 w-full font-semibold">
             {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {mode === 'register' ? 'Create account' : mode === 'reset' ? 'Send reset link' : 'Sign in'}
+            {mode === 'reset' ? 'Send reset link' : 'Continue'}
           </Button>
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
             {mode === 'email' && (
               <>
-                <button type="button" className="underline" onClick={() => setMode('register')}>Create an account</button>
+                <span>New here? We&apos;ll create your account automatically.</span>
                 <button type="button" className="underline" onClick={() => setMode('reset')}>Forgot password?</button>
               </>
             )}
-            {mode !== 'email' && (
-              <button type="button" className="underline" onClick={() => setMode('email')}>Back to sign in</button>
+            {mode === 'reset' && (
+              <button type="button" className="underline" onClick={() => setMode('email')}>Back</button>
             )}
           </div>
         </form>
