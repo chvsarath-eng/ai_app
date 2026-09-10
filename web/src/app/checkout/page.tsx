@@ -590,7 +590,7 @@ export default function CheckoutPage () {
         <PageHeader
           eyebrow="Checkout"
           title={<>Almost <Accent>there</Accent></>}
-          subtitle="Secure checkout powered by Razorpay. Cards, UPI, Netbanking, and Wallets supported."
+          subtitle="Secure checkout powered by Razorpay. Pay with UPI, card, or wallet — all in this page."
           className="mb-6"
         />
 

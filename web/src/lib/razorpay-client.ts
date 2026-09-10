@@ -51,6 +51,17 @@ export interface RazorpayCheckoutOptions {
     ondismiss?: () => void
     confirm_close?: boolean
     animation?: boolean
+    escape?: boolean
+    backdropclose?: boolean
+  }
+  retry?: {
+    enabled?: boolean
+  }
+  config?: {
+    display?: {
+      hide?: Array<{ method: string }>
+      preferences?: { show_default_blocks?: boolean }
+    }
   }
 }
 
@@ -108,21 +119,39 @@ export async function openRazorpayCheckout (
   }
 
   try {
+    // Test keys use Razorpay's dummy "Software Private Ltd Bank" page, which
+    // opens a separate browser window. Hide netbanking in test so checkout
+    // stays in the overlay (card / UPI / wallet). Live keys keep netbanking.
+    const isTestKey = key.startsWith('rzp_test_')
     const rzp = new window.Razorpay({
       ...options,
       key,
       image: options.image || '/brand/img2x-logo-transparent.png',
       theme: {
         color: options.theme?.color || '#7c3aed'
+      },
+      retry: { enabled: false },
+      modal: {
+        confirm_close: true,
+        animation: true,
+        escape: true,
+        backdropclose: false,
+        ...options.modal
+      },
+      config: {
+        display: {
+          hide: isTestKey ? [{ method: 'netbanking' }] : [],
+          preferences: { show_default_blocks: true }
+        }
       }
     })
-    
+
     if (options.modal?.ondismiss) {
       rzp.on('payment.failed', () => {
         options.modal?.ondismiss?.()
       })
     }
-    
+
     rzp.open()
   } catch (err) {
     console.warn('Razorpay open failed, offering local test simulation:', err)
