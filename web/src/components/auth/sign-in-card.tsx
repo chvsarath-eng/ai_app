@@ -158,14 +158,14 @@ export function SignInCard ({
     return (
       <div className={compact ? 'space-y-4' : 'space-y-5'}>
         {reason && (
-          <p className="rounded-2xl border border-violet-100 bg-violet-50/70 px-3 py-2 text-sm text-violet-800">{reason}</p>
+          <p className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600">{reason}</p>
         )}
 
         <Button
           type="button"
           disabled
           title="Google sign-in activates once Firebase Auth is connected"
-          className="h-11 w-full justify-center gap-2 bg-zinc-900 text-white opacity-60"
+          className="h-11 w-full justify-center gap-2 bg-none bg-zinc-900 text-white opacity-60"
         >
           <GoogleIcon />
           Continue with Google
@@ -226,14 +226,14 @@ export function SignInCard ({
   return (
     <div className={compact ? 'space-y-4' : 'space-y-5'}>
       {reason && (
-        <p className="rounded-2xl border border-violet-100 bg-violet-50/70 px-3 py-2 text-sm text-violet-800">{reason}</p>
+        <p className="rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600">{reason}</p>
       )}
 
       <Button
         type="button"
         onClick={handleGoogle}
         disabled={isBusy}
-        className="h-11 w-full justify-center gap-2 bg-zinc-900 text-white hover:bg-zinc-800"
+        className="h-11 w-full justify-center gap-2 bg-none bg-zinc-900 text-white hover:bg-zinc-800"
       >
         {isBusy && mode === 'google' ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleIcon />}
         Continue with Google

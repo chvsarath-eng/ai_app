@@ -122,7 +122,7 @@ export default function ProjectsPage () {
           title={
             <span className="inline-flex flex-wrap items-center gap-3">
               My Storybooks
-              <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-700 ring-1 ring-violet-100">
+              <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-semibold text-zinc-600">
                 {projects.length} {projects.length === 1 ? 'book' : 'books'}
               </span>
             </span>
@@ -349,7 +349,7 @@ export default function ProjectsPage () {
                         asChild
                         size="sm"
                         variant="outline"
-                        className="h-8 w-full border-violet-200 bg-violet-50 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+                        className="h-8 w-full text-xs font-semibold"
                       >
                         <Link href={`/projects/${project.id}`}>
                           <Sparkles className="mr-1 h-3.5 w-3.5 animate-spin" />
@@ -362,7 +362,7 @@ export default function ProjectsPage () {
                       <Button
                         asChild
                         size="sm"
-                        className="h-8 w-full bg-amber-500 text-xs font-semibold text-white hover:bg-amber-600"
+                        className="h-8 w-full bg-none bg-amber-500 text-xs font-semibold text-white hover:bg-amber-600"
                       >
                         <Link href={`/checkout`}>Complete payment</Link>
                       </Button>

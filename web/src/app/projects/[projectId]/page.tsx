@@ -218,7 +218,7 @@ export default function ProjectDetailsPage ({
                   </span>
                 )}
                 {isGenerating && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700 ring-1 ring-violet-200/70 animate-pulse">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-pink-500 px-3 py-1 text-xs font-semibold text-white shadow-sm animate-pulse">
                     <Clock className="h-3.5 w-3.5 animate-spin" /> Generating ({progressPct}%)
                   </span>
                 )}
@@ -274,7 +274,7 @@ export default function ProjectDetailsPage ({
           {isGenerating && (
             <div className="mt-6 border-t border-zinc-100 pt-6">
               <div className="mb-2 flex items-center justify-between text-xs font-medium text-zinc-600">
-                <span className="flex items-center gap-1.5 text-violet-700">
+                <span className="flex items-center gap-1.5 text-zinc-800">
                   <Sparkles className="h-4 w-4 animate-spin" />
                   {project.stage || 'Rendering high-resolution pages…'}
                 </span>

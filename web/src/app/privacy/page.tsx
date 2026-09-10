@@ -254,7 +254,7 @@ export default function PrivacyPage () {
         </div>
       </section>
 
-      <section className="mt-10 rounded-2xl border border-violet-100 bg-violet-50/70 p-6">
+      <section className="mt-10 rounded-2xl border border-zinc-200/70 bg-zinc-50 p-6">
         <p className="text-sm text-zinc-700">
           We review and update this Privacy Policy as our service and legal obligations evolve.
           For privacy-related requests, contact{' '}

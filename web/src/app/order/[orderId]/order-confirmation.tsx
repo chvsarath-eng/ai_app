@@ -24,7 +24,9 @@ export function OrderConfirmation ({
   const iconBox = isDigital
     ? 'bg-gradient-to-br from-violet-500 to-pink-500 text-white'
     : 'bg-gradient-to-br from-emerald-500 to-cyan-500 text-white'
-  const smallIcon = isDigital ? 'bg-violet-50 text-violet-600' : 'bg-emerald-50 text-emerald-600'
+  const smallIcon = isDigital
+    ? 'bg-gradient-to-br from-violet-600 via-fuchsia-500 to-pink-500 text-white shadow-sm'
+    : 'bg-gradient-to-br from-emerald-600 to-cyan-600 text-white shadow-sm'
 
   const deliverables = isDigital
     ? [

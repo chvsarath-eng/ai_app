@@ -400,7 +400,7 @@ export default function TermsPage () {
         </div>
       </section>
 
-      <section className="mt-10 rounded-2xl border border-violet-100 bg-violet-50/70 p-6">
+      <section className="mt-10 rounded-2xl border border-zinc-200/70 bg-zinc-50 p-6">
         <p className="text-sm text-zinc-700">
           These Terms are intended to clearly describe your rights and responsibilities when using img2x.
           If you have any legal questions, please contact{' '}
