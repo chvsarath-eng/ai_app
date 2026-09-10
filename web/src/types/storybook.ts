@@ -42,6 +42,8 @@ export type CreateJobRequest = {
   email: string
   outputType: OutputType
   shippingAddress?: ShippingAddress
+  /** Paid project to attach the job to (drives My Books + admin tracking). */
+  projectId?: string
 }
 
 export type JobStage =

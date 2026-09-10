@@ -234,10 +234,12 @@ export default function Home () {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <div className="pb-16">
-      <HeroSplit
-        left={<HeroLeft />}
-        right={<GeneratorCard className="mx-auto w-full max-w-[92vw] sm:max-w-[460px] md:max-w-[520px] lg:max-w-none xl:max-w-none" />}
-      />
+      <div id="create" className="scroll-mt-20">
+        <HeroSplit
+          left={<HeroLeft />}
+          right={<GeneratorCard className="mx-auto w-full max-w-[92vw] sm:max-w-[460px] md:max-w-[520px] lg:max-w-none xl:max-w-none" />}
+        />
+      </div>
 
       {/* Gallery section — flows from hero */}
       <section id="gallery" className="relative mt-2 pt-4 pb-16">

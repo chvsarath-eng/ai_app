@@ -1,21 +1,13 @@
-import { NextResponse } from 'next/server'
-import { getStripe, STRIPE_AMOUNTS, STRIPE_PRICE_IDS } from '@/lib/stripe'
+import { NextRequest, NextResponse } from 'next/server'
+import { RAZORPAY_AMOUNTS, getProductPriceMinor } from '@/lib/razorpay'
 
 export const runtime = 'nodejs'
-
-const DEFAULT_RESPONSE = {
-  currencyCode: 'USD',
-  currencySymbol: '$',
-  digital: { price: '$9.99', priceRaw: STRIPE_AMOUNTS.DIGITAL_CENTS },
-  hardcover: { price: '$39.99', priceRaw: STRIPE_AMOUNTS.HARDCOVER_CENTS },
-  isLocalized: false,
-  taxNote: 'Tax calculated at checkout for your country'
-}
 
 function formatAmount (amount: number, currencyCode: string) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: currencyCode
+    currency: currencyCode,
+    maximumFractionDigits: 0
   }).format(amount / 100)
 }
 
@@ -28,44 +20,40 @@ function getCurrencySymbol (currencyCode: string) {
   return parts.find((part) => part.type === 'currency')?.value || currencyCode
 }
 
-async function getPriceAmountCents (priceId: string | undefined, fallback: number) {
-  if (!priceId || !process.env.STRIPE_SECRET_KEY) {
-    return fallback
-  }
-
+export async function GET (request: NextRequest) {
   try {
-    const stripe = getStripe()
-    const price = await stripe.prices.retrieve(priceId)
-    return typeof price.unit_amount === 'number' ? price.unit_amount : fallback
-  } catch (error) {
-    console.warn('Failed to retrieve Stripe price, using fallback:', priceId, error)
-    return fallback
-  }
-}
+    const searchParams = request.nextUrl.searchParams
+    const requestedCurrency = searchParams.get('currency')?.toUpperCase() || process.env.RAZORPAY_CURRENCY || 'INR'
+    const currency = requestedCurrency === 'USD' ? 'USD' : 'INR'
 
-export async function GET () {
-  try {
-    const [digitalAmount, hardcoverAmount] = await Promise.all([
-      getPriceAmountCents(STRIPE_PRICE_IDS.DIGITAL, STRIPE_AMOUNTS.DIGITAL_CENTS),
-      getPriceAmountCents(STRIPE_PRICE_IDS.HARDCOVER, STRIPE_AMOUNTS.HARDCOVER_CENTS)
-    ])
+    const digitalAmount = getProductPriceMinor('DIGI_BOOK', currency)
+    const hardcoverAmount = getProductPriceMinor('LULU_BOOK', currency)
 
     return NextResponse.json({
-      currencyCode: 'USD',
-      currencySymbol: getCurrencySymbol('USD'),
+      currencyCode: currency,
+      currencySymbol: getCurrencySymbol(currency),
       digital: {
-        price: formatAmount(digitalAmount, 'USD'),
+        price: formatAmount(digitalAmount, currency),
         priceRaw: digitalAmount
       },
       hardcover: {
-        price: formatAmount(hardcoverAmount, 'USD'),
+        price: formatAmount(hardcoverAmount, currency),
         priceRaw: hardcoverAmount
       },
-      isLocalized: false,
-      taxNote: DEFAULT_RESPONSE.taxNote
+      isLocalized: true,
+      provider: 'razorpay',
+      taxNote: 'Inclusive of all applicable taxes'
     })
   } catch (error) {
-    console.error('Stripe price localization failed:', error)
-    return NextResponse.json(DEFAULT_RESPONSE)
+    console.error('Price localization failed:', error)
+    return NextResponse.json({
+      currencyCode: 'INR',
+      currencySymbol: '₹',
+      digital: { price: '₹799', priceRaw: RAZORPAY_AMOUNTS.DIGITAL_INR_MINOR },
+      hardcover: { price: '₹2,999', priceRaw: RAZORPAY_AMOUNTS.HARDCOVER_INR_MINOR },
+      isLocalized: false,
+      provider: 'razorpay',
+      taxNote: 'Inclusive of all applicable taxes'
+    })
   }
 }

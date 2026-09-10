@@ -338,7 +338,7 @@ export function GeneratorCard ({ className }: { className?: string }) {
                         <span className="text-sm font-semibold text-zinc-900">Digital Book</span>
                       </div>
                       <p className="mt-0.5 text-xs text-zinc-500">HTML flipbook</p>
-                      <p className="mt-1 text-base font-bold text-violet-600">$9.99</p>
+                      <p className="mt-1 text-base font-bold text-violet-600">₹799</p>
                       {form.watch('outputType') === 'DIGI_BOOK' && (
                         <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-violet-500 text-white">
                           <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">
@@ -369,7 +369,7 @@ export function GeneratorCard ({ className }: { className?: string }) {
                         <span className="text-sm font-semibold text-zinc-900">Hardcover</span>
                       </div>
                       <p className="mt-0.5 text-xs text-zinc-500">8.5×8.5" printed</p>
-                      <p className="mt-1 text-base font-bold text-emerald-600">$39.99</p>
+                      <p className="mt-1 text-base font-bold text-emerald-600">₹2,999</p>
                       {form.watch('outputType') === 'LULU_BOOK' && (
                         <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white">
                           <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">

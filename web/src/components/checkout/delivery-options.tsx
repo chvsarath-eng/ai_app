@@ -42,8 +42,8 @@ export function DeliveryOptions ({
 
   return (
     <div className={cn(
-      'overflow-hidden rounded-2xl border bg-white shadow-sm transition-all',
-      isDisabled ? 'border-zinc-100 opacity-60' : 'border-zinc-200'
+      'overflow-hidden rounded-3xl border bg-white shadow-[0_16px_50px_rgba(10,10,15,0.07)] transition-all',
+      isDisabled ? 'border-zinc-100 opacity-60' : 'border-zinc-200/70'
     )}>
       {/* Accordion Header */}
       <button
@@ -69,10 +69,10 @@ export function DeliveryOptions ({
           </div>
           <div className="min-w-0">
             <h2 className={cn(
-              'font-semibold text-sm sm:text-base',
+              'text-sm font-semibold tracking-tight sm:text-base',
               isDisabled ? 'text-zinc-400' : 'text-zinc-900'
             )}>
-              Delivery Options
+              Delivery options
             </h2>
             {hasSelection && selectedShipping ? (
               <p className="mt-0.5 truncate text-xs text-zinc-600 sm:text-sm">
@@ -131,7 +131,7 @@ export function DeliveryOptions ({
 
           {/* Error state */}
           {shippingError && (
-            <div className="rounded-lg bg-red-50 border border-red-200 p-4">
+            <div className="rounded-2xl border border-red-200/80 bg-red-50/90 p-4">
               <div className="flex items-start gap-3">
                 <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
                 <div>
@@ -151,8 +151,8 @@ export function DeliveryOptions ({
                   className={cn(
                     'flex cursor-pointer items-center justify-between rounded-2xl border p-3 sm:p-4 transition-all',
                     selectedShipping?.level === option.level
-                      ? 'border-violet-300 bg-violet-50'
-                      : 'border-zinc-200 bg-white hover:border-zinc-300'
+                      ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-500/20'
+                      : 'border-zinc-200 bg-white hover:border-violet-300'
                   )}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">

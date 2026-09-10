@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { MapPin, Plus } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Card } from '@/components/ui/card'
 import type { CheckoutData } from '@/lib/checkout-store'
 
 const COUNTRIES = [
@@ -105,12 +106,12 @@ export function ShippingForm ({ store, onAddressComplete, isSubmitting }: Shippi
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+    <Card className="p-5 sm:p-6">
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900">
+          <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-zinc-900">
             <MapPin className="h-5 w-5 text-violet-600" />
-            Shipping Address
+            Shipping address
           </h2>
           <p className="mt-1 text-sm text-zinc-500">
             Enter the delivery address first so we can show accurate live shipping rates.
@@ -293,6 +294,6 @@ export function ShippingForm ({ store, onAddressComplete, isSubmitting }: Shippi
           )}
         </div>
       </div>
-    </div>
+    </Card>
   )
 }

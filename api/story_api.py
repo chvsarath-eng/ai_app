@@ -1121,25 +1121,38 @@ def generate_ebook_html_bundle_v2(
         image_labels: Optional[List[str]] = None,
         task_type: Optional[str] = None,
     ) -> Dict[str, Any]:
+        from imggen import is_moderation_error, soften_prompt_for_moderation
+
         max_attempts = int(os.getenv("IMAGE_MAX_ATTEMPTS") or "6")
         base_sleep_s = float(os.getenv("IMAGE_RETRY_BASE_SLEEP_S") or "2.0")
         model_for_task = _img_model
         if task_type == "page" and _img_model_pages:
             model_for_task = _img_model_pages
+
+        # Moderation blocks are deterministic for a given prompt: rewrite the scene to be
+        # clearly wholesome (2 levels), then try the alternate provider before giving up.
+        moderation_level = 0
+        max_moderation_rewrites = int(os.getenv("IMAGE_MODERATION_REWRITES") or "3")
+        provider_for_task = _img_provider
+        current_prompt = prompt
+        has_gemini = bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+        tried_alt_provider = False
+
         for attempt in range(1, max_attempts + 1):
             try:
                 logger.info(
-                    "image_call_start task=%s attempt=%d/%d prompt_len=%d inputs=%d",
-                    task_name, attempt, max_attempts, len(prompt or ""), len(image_filenames),
+                    "image_call_start task=%s attempt=%d/%d prompt_len=%d inputs=%d provider=%s moderation_level=%d",
+                    task_name, attempt, max_attempts, len(current_prompt or ""), len(image_filenames),
+                    provider_for_task or "auto", moderation_level,
                 )
                 t_call = time.time()
                 result = image_generator(
-                    prompt=prompt,
+                    prompt=current_prompt,
                     image_filenames=image_filenames,
                     output_filename=output_filename,
                     image_labels=image_labels,
-                    image_provider=_img_provider,
-                    image_model=model_for_task,
+                    image_provider=provider_for_task,
+                    image_model=model_for_task if provider_for_task == _img_provider else None,
                     image_quality=_img_quality,
                     image_size=_img_size,
                     task_type=task_type,
@@ -1149,9 +1162,34 @@ def generate_ebook_html_bundle_v2(
                     "image_call_done task=%s attempt=%d elapsed_s=%.2f",
                     task_name, attempt, time.time() - t_call,
                 )
+                if moderation_level or tried_alt_provider:
+                    result["moderation_rewritten"] = moderation_level
+                    result["provider_fallback"] = provider_for_task if tried_alt_provider else None
                 return result
             except Exception as e:
                 err_msg = (str(e) or "")[:300]
+                if is_moderation_error(e):
+                    if moderation_level < max_moderation_rewrites:
+                        moderation_level += 1
+                        current_prompt = soften_prompt_for_moderation(prompt, level=moderation_level)
+                        logger.warning(
+                            "image_moderation_blocked task=%s attempt=%d; retrying with softened prompt level=%d",
+                            task_name, attempt, moderation_level,
+                        )
+                        continue
+                    if not tried_alt_provider and has_gemini and (provider_for_task or "") != "gemini":
+                        tried_alt_provider = True
+                        provider_for_task = "gemini"
+                        # Keep the most-softened prompt we already have for the alternate provider.
+                        if moderation_level == 0:
+                            current_prompt = soften_prompt_for_moderation(prompt, level=1)
+                        logger.warning(
+                            "image_moderation_blocked task=%s attempt=%d; falling back to provider=gemini",
+                            task_name, attempt,
+                        )
+                        continue
+                    logger.error("image_call_failed task=%s attempt=%d error=%s", task_name, attempt, err_msg)
+                    raise
                 if attempt >= max_attempts or not _is_retryable_error(e):
                     logger.error("image_call_failed task=%s attempt=%d error=%s", task_name, attempt, err_msg)
                     raise

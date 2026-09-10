@@ -11,7 +11,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-[color:var(--md-primary)] text-white hover:bg-[color:color-mix(in_srgb,var(--md-primary)_92%,black)]',
+        default: 'bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white shadow-md transition hover:brightness-105',
         secondary: 'bg-zinc-100 text-zinc-950 hover:bg-zinc-200',
         outline: 'border border-zinc-200 bg-transparent hover:bg-zinc-50',
         ghost: 'hover:bg-zinc-100',

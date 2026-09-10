@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 
+import { LegalPage } from '@/components/legal-page'
+
 export const metadata: Metadata = {
   title: 'Terms of Service',
   description: 'Read img2x Terms of Service. Learn about our refund policy, user responsibilities, intellectual property rights, and service terms.',
@@ -12,15 +14,8 @@ export const metadata: Metadata = {
 
 export default function TermsPage () {
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 pb-16 pt-12 sm:px-6 lg:px-10">
-      <h1 className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
-        Terms of Service
-      </h1>
-      <p className="mt-3 text-sm text-zinc-600">
-        Last Updated: January 24, 2026
-      </p>
-
-      <section className="mt-8 space-y-4 text-sm text-zinc-700 leading-relaxed">
+    <LegalPage title="Terms of Service" lastUpdated="January 24, 2026">
+      <section className="space-y-4 text-sm text-zinc-700 leading-relaxed">
         <p>
           Welcome to img2x. These Terms of Service ("Terms") govern your access to and use of the img2x website, 
           mobile applications, and AI-powered personalized storybook service (collectively, the "Service"). 
@@ -399,20 +394,20 @@ export default function TermsPage () {
         <p className="text-sm text-zinc-700">
           For questions, concerns, or notices regarding these Terms, please contact us:
         </p>
-        <div className="mt-4 p-4 bg-zinc-50 rounded-lg text-sm text-zinc-700">
+        <div className="mt-4 rounded-2xl border border-zinc-200/70 bg-zinc-50 p-4 text-sm text-zinc-700">
           <p className="font-semibold">img2x</p>
           <p>Email: <a className="text-violet-600 hover:text-violet-700 underline" href="mailto:team@img2x.com">team@img2x.com</a></p>
-      </div>
+        </div>
       </section>
 
-      <section className="mt-10 p-6 bg-violet-50 rounded-lg">
+      <section className="mt-10 rounded-2xl border border-violet-100 bg-violet-50/70 p-6">
         <p className="text-sm text-zinc-700">
           These Terms are intended to clearly describe your rights and responsibilities when using img2x.
           If you have any legal questions, please contact{' '}
           <a className="text-violet-600 hover:text-violet-700 underline" href="mailto:team@img2x.com">team@img2x.com</a>.
         </p>
       </section>
-    </main>
+    </LegalPage>
   )
 }
 

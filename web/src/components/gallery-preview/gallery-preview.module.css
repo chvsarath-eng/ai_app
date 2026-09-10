@@ -28,7 +28,7 @@
     #fff 100%
   );
   display: grid;
-  grid-template-columns: repeat(5, var(--book-width));
+  grid-template-columns: repeat(4, var(--book-width));
   grid-auto-rows: var(--book-height);
   gap: 42px;
   align-content: center;

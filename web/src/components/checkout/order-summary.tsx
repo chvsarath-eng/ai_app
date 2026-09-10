@@ -2,6 +2,7 @@
 
 import { ShoppingBag, Lock, Book, Sparkles, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import type { CheckoutData } from '@/lib/checkout-store'
 import type { ShippingOption } from '@/app/checkout/page'
 
@@ -13,6 +14,7 @@ interface OrderSummaryProps {
   canPlaceOrder: boolean
   ctaLabel?: string
   submittingLabel?: string
+  currency?: string
   onPlaceOrder: () => void
 }
 
@@ -22,14 +24,17 @@ export function OrderSummary ({
   isSubmitting,
   isCheckoutOpen,
   canPlaceOrder,
-  ctaLabel = 'Continue to Payment',
-  submittingLabel = 'Processing...',
+  ctaLabel = 'Pay with Razorpay',
+  submittingLabel = 'Opening Razorpay...',
+  currency = 'INR',
   onPlaceOrder
 }: OrderSummaryProps) {
   const isHardcover = store.outputType === 'LULU_BOOK'
-  const bookPrice = isHardcover ? store.bookPrice : 9.99
+  const isINR = currency.toUpperCase() === 'INR'
+  const bookPrice = isHardcover ? (isINR ? 2999 : 39.99) : (isINR ? 799 : 9.99)
   const shippingCost = isHardcover ? (selectedShipping?.shipping_cost || 0) : 0
   const subtotal = bookPrice + shippingCost
+  const currencySymbol = isINR ? '₹' : '$'
 
   const characterNames = store.characters.map((c) => c.name).filter(Boolean)
   const featuredNames = characterNames.length > 0
@@ -37,20 +42,20 @@ export function OrderSummary ({
     : 'your characters'
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-      <div className="border-b border-zinc-200 px-5 py-4">
+    <Card className="overflow-hidden">
+      <div className="border-b border-zinc-100 px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="flex items-center gap-2 text-base font-semibold text-zinc-900">
+            <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight text-zinc-900">
               <ShoppingBag className="h-4 w-4 text-violet-600" />
-              Order Summary
+              Order summary
             </h2>
           </div>
         </div>
       </div>
 
       <div className="space-y-4 p-5">
-        <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+        <div className="rounded-2xl border border-zinc-200/70 bg-zinc-50 p-4">
           <div className="flex items-start gap-3">
             <div className="relative shrink-0">
               {store.imagePreviewUrls.length > 0 ? (
@@ -98,7 +103,7 @@ export function OrderSummary ({
         </div>
 
         <div className="space-y-1.5 rounded-2xl bg-zinc-50 p-3.5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">What&apos;s included</p>
+          <p className="text-xs font-medium uppercase tracking-widest text-zinc-500">What&apos;s included</p>
           <div className="space-y-1 text-xs">
             <div className="flex items-center gap-1.5 text-zinc-700">
               <CheckCircle className="h-3.5 w-3.5 shrink-0 text-violet-500" />
@@ -121,18 +126,18 @@ export function OrderSummary ({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-zinc-200/80 bg-white/90 p-4 text-sm shadow-sm">
+        <div className="rounded-2xl border border-zinc-200/70 bg-white p-4 text-sm">
           <div className="flex items-center justify-between">
             <span className="text-zinc-600">
               {isHardcover ? 'Hardcover' : 'Digital Book'}
             </span>
-            <span className="font-semibold text-zinc-900">${bookPrice.toFixed(2)}</span>
+            <span className="font-semibold text-zinc-900">{currencySymbol}{bookPrice.toLocaleString()}</span>
           </div>
           {isHardcover && (
             <div className="mt-2 flex items-center justify-between">
               <span className="text-zinc-600">Shipping</span>
               {selectedShipping ? (
-                <span className="font-semibold text-zinc-900">${shippingCost.toFixed(2)}</span>
+                <span className="font-semibold text-zinc-900">{currencySymbol}{shippingCost.toLocaleString()}</span>
               ) : (
                 <span className="text-zinc-400 text-xs italic">Select delivery</span>
               )}
@@ -147,7 +152,7 @@ export function OrderSummary ({
               <span className="text-sm font-semibold text-zinc-900">Subtotal</span>
               <div className="text-right">
                 <span className="text-lg font-bold text-zinc-900">
-                  ${subtotal.toFixed(2)}
+                  {currencySymbol}{subtotal.toLocaleString()}
                 </span>
                 <span className="ml-1 text-xs text-zinc-400">+ tax</span>
               </div>
@@ -158,7 +163,7 @@ export function OrderSummary ({
         <Button
           onClick={onPlaceOrder}
           disabled={!canPlaceOrder || isSubmitting || isCheckoutOpen}
-          className="h-11 w-full bg-violet-600 text-white transition hover:bg-violet-700 disabled:opacity-50"
+          className="h-11 w-full font-semibold"
         >
           {isSubmitting ? (
             <span className="flex items-center gap-2 text-sm">
@@ -193,6 +198,6 @@ export function OrderSummary ({
           )}
         </Button>
       </div>
-    </div>
+    </Card>
   )
 }

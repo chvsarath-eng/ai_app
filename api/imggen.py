@@ -10,6 +10,7 @@ import logging
 import base64
 import mimetypes
 import re
+import threading
 import requests
 
 from PIL import Image, ImageOps
@@ -25,9 +26,6 @@ from langchain_core.messages import HumanMessage
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# NOTE: Set GOOGLE_APPLICATION_CREDENTIALS in your notebook/script, not here.
-# Example: os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = r"path/to/your/credentials.json"
 
 from strgen import Story_content_generator
 
@@ -57,18 +55,29 @@ def _resolve_image_provider(image_provider: Optional[str]) -> str:
     """Resolve provider name.
 
     Providers:
-      - ``openai_images``: OpenAI-compatible ``/images/edits`` (GPT-Image-2.5 via LaoZhang or OpenAI).
+      - ``openai_images``: OpenAI-compatible ``/images/edits`` (GPT-Image-2.5 flare / sunburst via LaoZhang or OpenAI).
       - ``laozhang``: LaoZhang Gemini-style ``:generateContent`` (Nano Banana).
       - ``gemini``: direct Google GenAI SDK.
     """
     provider = (image_provider or os.getenv("IMAGE_PROVIDER") or "").strip().lower()
-    if provider in ("openai_images", "openai-images", "openai", "gpt-image", "gpt_image"):
+    if provider in ("openai_images", "openai-images", "openai", "gpt-image", "gpt_image", "gpt-image-2.5", "sunburst", "flare"):
         return "openai_images"
     if provider in ("laozhang", "lz", "laozhang_gemini"):
+        # If the configured model is a gpt-image model, use openai_images endpoint
+        configured_model = (os.getenv("IMAGE_MODEL") or os.getenv("LAOZHANG_IMAGE_MODEL") or "").lower()
+        if "gpt-image" in configured_model or "sunburst" in configured_model or "flare" in configured_model:
+            return "openai_images"
         return "laozhang"
     if provider in ("gemini", "google", "vertex", "genai"):
         return "gemini"
+    
+    # Auto-detection based on configured keys and model
+    configured_model = (os.getenv("IMAGE_MODEL") or os.getenv("LAOZHANG_IMAGE_MODEL") or "").lower()
+    if "gpt-image" in configured_model or "sunburst" in configured_model or "flare" in configured_model:
+        return "openai_images"
     if os.getenv("LAOZHANG_API_KEY") or os.getenv("API_KEY_LAOZHANG"):
+        if os.getenv("IMAGE_MODEL"):
+            return "openai_images"
         return "laozhang"
     return "gemini"
 
@@ -78,12 +87,243 @@ def _resolve_image_provider(image_provider: Optional[str]) -> str:
 # ---------------------------------------------------------------------------
 
 DEFAULT_IMAGE_API_BASE = "https://api.laozhang.ai/v1"
-# LaoZhang exposes GPT-Image-2.5 as "-vip" routes on the default group. The dated OpenAI snapshot
-# (gpt-image-2.5-sunburst-2026-09-08) is only routed on enterprise groups / api.openai.com; override
-# with IMAGE_MODEL when the key has access.
-DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst-vip"
+# Support gpt-image-2.5-sunburst-2026-09-08 / gpt-image-2.5-sunburst / gpt-image-2.5-flare-2026-09-08
+DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst-2026-09-08"
 DEFAULT_IMAGE_QUALITY = "high"
 DEFAULT_IMAGE_SIZE = "1024x1024"
+
+
+OFFICIAL_OPENAI_API_BASE = "https://api.openai.com/v1"
+
+# Names each endpoint actually serves. LaoZhang only exposes the ``-vip`` aliases for
+# GPT-Image-2.5 (the official snapshot names return 503 "no channel"), while api.openai.com
+# serves the dated snapshots. Ordering the aliases per endpoint avoids wasted round-trips.
+_LAOZHANG_ALIASES = {
+    "sunburst": ["gpt-image-2.5-sunburst-vip", "gpt-image-2.5-sunburst", "gpt-image-2.5-sunburst-2026-09-08"],
+    "flare": ["gpt-image-2.5-flare-vip", "gpt-image-2.5-flare", "gpt-image-2.5-flare-2026-09-08"],
+}
+_OPENAI_ALIASES = {
+    "sunburst": ["gpt-image-2.5-sunburst-2026-09-08", "gpt-image-2.5-sunburst"],
+    "flare": ["gpt-image-2.5-flare-2026-09-08", "gpt-image-2.5-flare"],
+}
+
+
+def _model_family(model_name: str) -> Optional[str]:
+    m = model_name.lower()
+    if "sunburst" in m:
+        return "sunburst"
+    if "flare" in m:
+        return "flare"
+    return None
+
+
+def _get_model_candidates(model_name: str, api_base: Optional[str] = None) -> List[str]:
+    """Ordered candidate model names (aliases/snapshots) for a given endpoint."""
+    family = _model_family(model_name)
+    if family is None:
+        return [model_name]
+    base = (api_base or "").lower()
+    table = _LAOZHANG_ALIASES if "laozhang" in base else _OPENAI_ALIASES
+    candidates: List[str] = []
+    is_official = "openai.com" in base
+    # Keep the caller's exact name first unless we know this endpoint cannot serve it.
+    if not (is_official and model_name.endswith("-vip")):
+        candidates.append(model_name)
+    for alt in table[family]:
+        if alt not in candidates:
+            candidates.append(alt)
+    return candidates
+
+
+def _normalize_api_base(base: str) -> str:
+    base = base.rstrip("/")
+    if not base.endswith("/v1"):
+        base = base + "/v1"
+    return base
+
+
+def _image_endpoints() -> List[tuple[str, str, str]]:
+    """Ordered ``(label, api_base, api_key)`` endpoints to try for the Images API.
+
+    The configured ``IMAGE_API_BASE`` is always first. When ``IMAGE_API_FALLBACK`` is not
+    disabled and a key for the *other* provider exists, it is appended so a rate limit or
+    outage on one proxy fails over instead of failing the whole job.
+    """
+    primary_base = _normalize_api_base(os.getenv("IMAGE_API_BASE") or DEFAULT_IMAGE_API_BASE)
+    endpoints: List[tuple[str, str, str]] = [("primary", primary_base, _image_api_key())]
+
+    if (os.getenv("IMAGE_API_FALLBACK") or "1").strip().lower() in ("0", "false", "no", "off"):
+        return endpoints
+
+    explicit_fallback = (os.getenv("IMAGE_API_FALLBACK_BASE") or "").strip()
+    explicit_key = (os.getenv("IMAGE_API_FALLBACK_KEY") or "").strip()
+    if explicit_fallback and explicit_key:
+        fb = _normalize_api_base(explicit_fallback)
+        if fb != primary_base:
+            endpoints.append(("fallback", fb, explicit_key))
+        return endpoints
+
+    openai_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    laozhang_key = (os.getenv("LAOZHANG_API_KEY") or os.getenv("API_KEY_LAOZHANG") or "").strip()
+    if "openai.com" not in primary_base and openai_key:
+        endpoints.append(("openai", OFFICIAL_OPENAI_API_BASE, openai_key))
+    elif "laozhang" not in primary_base and laozhang_key:
+        endpoints.append(("laozhang", DEFAULT_IMAGE_API_BASE, laozhang_key))
+    return endpoints
+
+
+# (api_base, model) -> unix time until which the pair is skipped. Populated when an
+# endpoint answers 429/5xx so parallel page renders fail over immediately instead of each
+# paying the same rate-limit round-trips.
+_ENDPOINT_COOLDOWN: Dict[tuple[str, str], float] = {}
+_COOLDOWN_LOCK = threading.Lock()
+
+
+def _cooldown_seconds() -> float:
+    return float(os.getenv("IMAGE_API_COOLDOWN_S") or "120")
+
+
+def _in_cooldown(api_base: str, model_name: str) -> bool:
+    with _COOLDOWN_LOCK:
+        until = _ENDPOINT_COOLDOWN.get((api_base, model_name), 0.0)
+    return until > time.time()
+
+
+def _set_cooldown(api_base: str, model_name: str) -> None:
+    with _COOLDOWN_LOCK:
+        _ENDPOINT_COOLDOWN[(api_base, model_name)] = time.time() + _cooldown_seconds()
+
+
+def _clear_cooldown(api_base: str, model_name: str) -> None:
+    with _COOLDOWN_LOCK:
+        _ENDPOINT_COOLDOWN.pop((api_base, model_name), None)
+
+
+class ImageModerationError(RuntimeError):
+    """The provider's safety system rejected the prompt/output (not fixable by retrying as-is)."""
+
+
+_MODERATION_MARKERS = (
+    "moderation_blocked",
+    "safety system",
+    "content_policy",
+    "image_safety",
+    "safety policy",
+    "filtered by the safety",
+    "prohibited_content",
+    "blocked by safety",
+)
+
+
+def _looks_like_moderation(text: str) -> bool:
+    low = (text or "").lower()
+    return any(marker in low for marker in _MODERATION_MARKERS)
+
+
+def is_moderation_error(err: BaseException) -> bool:
+    if isinstance(err, ImageModerationError):
+        return True
+    return _looks_like_moderation(str(err) or "")
+
+
+# Words that make realistic children's-book scenes read as "child in danger" to output moderation.
+_PERIL_REWRITES = [
+    (r"\b(terrified|frightened|scared|afraid|fearful|panicked)\b", "brave and focused"),
+    (r"\b(screaming|crying|sobbing|wounded|injured|bleeding|hurt)\b", "smiling"),
+    (r"\b(collapsing|crumbling|breaking apart|falling apart|snapping|snapped|tearing|torn)\b", "swaying gently"),
+    (r"\b(dangerous|deadly|perilous|life-threatening|treacherous)\b", "exciting"),
+    (r"\b(falling|plunging|tumbling)\b", "balancing"),
+    (r"\b(blood|gore|weapon|weapons|gun|guns|knife|knives)\b", ""),
+    (r"\b(explosion|explosions|exploding|fire|flames|burning|smoke)\b", "sparkles"),
+    (r"\b(dark|deep) shadows\b", "soft shadows"),
+]
+
+
+_SAFETY_REWRITE_SYSTEM = (
+    "You rewrite image-generation prompts for a children's picture book so they pass strict "
+    "image-safety filters while keeping the same characters, outfits, setting and story beat.\n"
+    "Rules:\n"
+    "- Keep every instruction about using the reference image for the child's exact face, build, "
+    "outfit and identity, and about facing the camera with both eyes visible.\n"
+    "- Remove anything that shows a child in danger, distress, fear, injury, cold, drowning, "
+    "falling, being chased, or near hazards (deep/rushing water, cliffs, fire, storms, collapsing things).\n"
+    "- Replace it with a calm, joyful, clearly safe version of the same moment: the child stands on "
+    "dry safe ground or a stable surface, water is shallow and gentle, animals are friendly, "
+    "the child smiles or looks curious and confident.\n"
+    "- Keep it photographic and cinematic, warm lighting, but avoid words like 'hyper-realistic', "
+    "'scared', 'struggle', 'hardest pull', 'crashing wave', 'shaking', 'debris'.\n"
+    "- Output ONLY the rewritten prompt text, no preamble."
+)
+
+
+def rewrite_prompt_for_safety(prompt: str) -> Optional[str]:
+    """Ask a text LLM to rewrite a blocked scene prompt. Returns None if unavailable."""
+    if (os.getenv("IMAGE_MODERATION_LLM_REWRITE") or "1").strip().lower() in ("0", "false", "no", "off"):
+        return None
+    text: Optional[str] = None
+    try:
+        if os.getenv("OPENAI_API_KEY"):
+            from langchain_openai import ChatOpenAI
+
+            # Small, fast text model is plenty for a prompt rewrite.
+            model = os.getenv("IMAGE_MODERATION_REWRITE_MODEL") or "gpt-5.4-mini"
+            llm = ChatOpenAI(model=model, api_key=os.getenv("OPENAI_API_KEY"), timeout=45, max_retries=1)
+            resp = llm.invoke([("system", _SAFETY_REWRITE_SYSTEM), ("human", prompt)])
+            text = resp.content if isinstance(resp.content, str) else str(resp.content)
+        elif os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
+            llm = ChatGoogleGenerativeAI(model=os.getenv("IMAGE_MODERATION_REWRITE_MODEL") or "gemini-3-flash-preview", temperature=0.3)
+            resp = llm.invoke([("system", _SAFETY_REWRITE_SYSTEM), ("human", prompt)])
+            text = resp.content if isinstance(resp.content, str) else str(resp.content)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("safety prompt rewrite via LLM failed: %s", e)
+        return None
+    text = (text or "").strip().strip("`").strip()
+    if len(text) < 80:
+        return None
+    logger.info("safety prompt rewrite via LLM ok (%d -> %d chars)", len(prompt), len(text))
+    return text
+
+
+def soften_prompt_for_moderation(prompt: str, level: int = 1) -> str:
+    """Rewrite a scene prompt so it stays on-story but reads as clearly safe and wholesome.
+
+    ``level`` 1 swaps peril/fear vocabulary; level 2 additionally drops the hyper-realistic
+    framing (realistic children in distress is what output moderation most often blocks);
+    level 3 asks a text LLM to rewrite the scene (falls back to level 2 if that fails).
+    """
+    if level >= 3:
+        rewritten = rewrite_prompt_for_safety(prompt)
+        if rewritten:
+            return (
+                "Wholesome, family-friendly children's picture-book scene. Everyone is safe, calm and happy. "
+                + rewritten
+            )
+        level = 2
+    out = prompt
+    for pattern, repl in _PERIL_REWRITES:
+        out = re.sub(pattern, repl, out, flags=re.IGNORECASE)
+    out = re.sub(r"\s{2,}", " ", out).strip()
+    prefix = (
+        "Wholesome, family-friendly children's picture-book scene. Everyone is safe, calm and happy; "
+        "the mood is warm and playful with no danger, injury or distress. "
+    )
+    if level >= 2:
+        out = re.sub(
+            r"(ultra-realistic|hyper-realistic|hyperrealistic|photorealistic|purely photographic|8K realism|cinematic close-up)",
+            "beautifully illustrated, soft painterly",
+            out,
+            flags=re.IGNORECASE,
+        )
+        prefix += "Render as a gentle storybook illustration with soft lighting and a cheerful palette. "
+    return prefix + out
+
+
+def _is_failover_status(status_code: int, err_text: str) -> bool:
+    """True when the error is worth retrying on another alias/endpoint."""
+    if status_code in (408, 409, 425, 429, 500, 502, 503, 504):
+        return True
+    low = err_text.lower()
+    return any(kw in low for kw in ("model", "not found", "does not exist", "unsupported", "invalid_model", "rate_limit", "no available channel"))
 
 
 def _image_api_key() -> str:
@@ -97,13 +337,13 @@ def _image_api_key() -> str:
         return explicit
     base = (os.getenv("IMAGE_API_BASE") or DEFAULT_IMAGE_API_BASE).lower()
     if "laozhang" in base:
-        key = os.getenv("API_KEY_LAOZHANG") or os.getenv("LAOZHANG_API_KEY")
+        key = os.getenv("LAOZHANG_API_KEY") or os.getenv("API_KEY_LAOZHANG")
         if key:
             return key
-    key = os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY_LAOZHANG") or os.getenv("LAOZHANG_API_KEY")
+    key = os.getenv("LAOZHANG_API_KEY") or os.getenv("API_KEY_LAOZHANG") or os.getenv("OPENAI_API_KEY")
     if not key:
         raise RuntimeError(
-            "Missing API key for Images API. Set IMAGE_API_KEY, API_KEY_LAOZHANG or OPENAI_API_KEY."
+            "Missing API key for Images API. Set LAOZHANG_API_KEY, API_KEY_LAOZHANG, or IMAGE_API_KEY."
         )
     return key
 
@@ -121,7 +361,7 @@ def resolve_image_model(task_type: Optional[str] = None, explicit: Optional[str]
         pages_model = (os.getenv("IMAGE_MODEL_PAGES") or "").strip()
         if pages_model:
             return pages_model
-    return (os.getenv("IMAGE_MODEL") or DEFAULT_IMAGE_MODEL).strip()
+    return (os.getenv("IMAGE_MODEL") or os.getenv("LAOZHANG_IMAGE_MODEL") or DEFAULT_IMAGE_MODEL).strip()
 
 
 def resolve_image_size(output_type: Optional[str] = None, explicit: Optional[str] = None) -> str:
@@ -198,14 +438,9 @@ def _image_generator_openai_images(
 
     Works with LaoZhang (default base) and api.openai.com. Reference images are sent as
     multipart ``image[]`` parts in order; ``image_labels`` are folded into the prompt.
+    Includes smart model snapshot fallback for gpt-image-2.5 models.
     """
-    api_key = _image_api_key()
-    api_base = (os.getenv("IMAGE_API_BASE") or DEFAULT_IMAGE_API_BASE).rstrip("/")
-    if not api_base.endswith("/v1"):
-        api_base = api_base + "/v1"
-    url = f"{api_base}/images/edits"
-
-    model_name = resolve_image_model(task_type, model)
+    primary_model = resolve_image_model(task_type, model)
     size_val = resolve_image_size(output_type, size)
     quality_val = resolve_image_quality(quality)
     timeout_s = float(os.getenv("IMAGE_HTTP_TIMEOUT_S") or "420")
@@ -218,76 +453,130 @@ def _image_generator_openai_images(
 
     full_prompt = _compose_prompt_with_labels(prompt, image_labels, len(image_filenames))
 
-    files: List[tuple] = []
+    # Prepare reference bytes once; fresh tuples are built per HTTP attempt below.
+    prepared_refs: List[tuple[str, bytes, str]] = []
     for path_str in image_filenames:
         p = Path(path_str)
         if not p.exists():
             raise FileNotFoundError(f"Image not found: {p}")
-        fname, data, mime = _prepare_reference_file(p, max_side_px=ref_max_side_px, target_bytes=ref_target_bytes)
-        files.append(("image[]", (fname, data, mime)))
+        prepared_refs.append(_prepare_reference_file(p, max_side_px=ref_max_side_px, target_bytes=ref_target_bytes))
 
-    form = {
-        "model": model_name,
-        "prompt": full_prompt,
-        "size": size_val,
-        "quality": quality_val,
-        "n": "1",
-        "output_format": "png",
-    }
+    # Flatten (endpoint, model) attempts so a 429/503 on one proxy fails over to the next.
+    attempts: List[tuple[str, str, str, str]] = []
+    for label, api_base, api_key in _image_endpoints():
+        for candidate in _get_model_candidates(primary_model, api_base):
+            attempts.append((label, api_base, api_key, candidate))
 
-    logger.info(
-        "🎨 openai_images model=%s size=%s quality=%s refs=%d task=%s url=%s",
-        model_name, size_val, quality_val, len(files), task_type or "-", url,
-    )
+    # Skip (endpoint, model) pairs that recently rate-limited, unless nothing else is left.
+    live_attempts = [a for a in attempts if not _in_cooldown(a[1], a[3])]
+    if live_attempts and len(live_attempts) < len(attempts):
+        skipped = [f"{a[0]}:{a[3]}" for a in attempts if a not in live_attempts]
+        logger.info("openai_images skipping cooled-down attempts: %s", ", ".join(skipped))
+        attempts = live_attempts
 
-    headers = {"Authorization": f"Bearer {api_key}"}
-    t_call = time.time()
-    response = requests.post(url, headers=headers, data=form, files=files, timeout=timeout_s)
-    elapsed = time.time() - t_call
-    logger.info("🕒 openai_images status=%s elapsed_s=%.2f", response.status_code, elapsed)
+    last_err: Optional[Exception] = None
+    data: Dict[str, Any] = {}
+    model_name = primary_model
+    for idx, (label, api_base, api_key, model_name) in enumerate(attempts):
+        is_last = idx + 1 >= len(attempts)
+        url = f"{api_base}/images/edits"
+        headers = {"Authorization": f"Bearer {api_key}"}
+        files: List[tuple] = [("image[]", ref) for ref in prepared_refs]
+        form = {
+            "model": model_name,
+            "prompt": full_prompt,
+            "size": size_val,
+            "quality": quality_val,
+            "n": "1",
+            "output_format": "png",
+        }
 
-    if response.status_code != 200:
-        raise RuntimeError(f"Images API error {response.status_code}: {response.text[:1000]}")
+        logger.info(
+            "🎨 openai_images endpoint=%s model=%s (attempt %d/%d) size=%s quality=%s refs=%d task=%s url=%s",
+            label, model_name, idx + 1, len(attempts), size_val, quality_val, len(files), task_type or "-", url,
+        )
 
-    try:
-        data = response.json()
-    except ValueError as e:
-        raise RuntimeError(f"Images API returned non-JSON body: {response.text[:500]}") from e
+        t_call = time.time()
+        try:
+            response = requests.post(url, headers=headers, data=form, files=files, timeout=timeout_s)
+        except Exception as e:
+            last_err = e
+            logger.warning("HTTP post error endpoint=%s model=%s: %s", label, model_name, e)
+            if is_last:
+                raise
+            continue
 
-    items = data.get("data") or []
-    if not items:
-        err = data.get("error")
-        raise RuntimeError(f"Images API returned no image data: {json.dumps(err or data)[:800]}")
+        elapsed = time.time() - t_call
+        logger.info("🕒 openai_images endpoint=%s model=%s status=%s elapsed_s=%.2f", label, model_name, response.status_code, elapsed)
 
-    item = items[0] or {}
-    img_bytes: Optional[bytes] = None
-    if item.get("b64_json"):
-        img_bytes = base64.b64decode(item["b64_json"])
-    elif item.get("url"):
-        r2 = requests.get(item["url"], timeout=120)
-        r2.raise_for_status()
-        img_bytes = r2.content
-    if not img_bytes:
-        raise RuntimeError("Images API item had neither b64_json nor url")
+        if response.status_code != 200:
+            err_text = response.text[:1000]
+            last_err = RuntimeError(f"Images API error {response.status_code} on {label} model {model_name}: {err_text}")
+            if response.status_code == 451 or _looks_like_moderation(err_text):
+                # Same prompt will be blocked everywhere; let the caller rewrite it instead.
+                raise ImageModerationError(
+                    f"Images API moderation block on {label} model {model_name}: {err_text[:400]}"
+                )
+            if response.status_code in (429, 502, 503, 504):
+                _set_cooldown(api_base, model_name)
+            if not is_last and _is_failover_status(response.status_code, err_text):
+                nxt = attempts[idx + 1]
+                logger.warning(
+                    "endpoint=%s model=%s failed (%s %s); failing over to endpoint=%s model=%s",
+                    label, model_name, response.status_code, err_text[:160], nxt[0], nxt[3],
+                )
+                continue
+            raise last_err
 
-    if output_filename:
-        out_path = Path(output_filename)
-        if out_path.suffix == "":
-            out_path = out_path.with_suffix(".png")
-    else:
-        out_path = Path("generated_images") / f"gen_{int(time.time())}.png"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_bytes(img_bytes)
+        _clear_cooldown(api_base, model_name)
+        try:
+            data = response.json()
+        except ValueError as e:
+            raise RuntimeError(f"Images API returned non-JSON body: {response.text[:500]}") from e
 
-    usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
-    return {
-        "images": [str(out_path)],
-        "texts": [],
-        "usage": usage,
-        "model": model_name,
-        "elapsed_s": elapsed,
-        "raw_response": {k: v for k, v in data.items() if k != "data"},
-    }
+        items = data.get("data") or []
+        if not items:
+            err = data.get("error")
+            last_err = RuntimeError(f"Images API returned no image data: {json.dumps(err or data)[:800]}")
+            if not is_last:
+                logger.warning("No image data from endpoint=%s model=%s, trying next...", label, model_name)
+                continue
+            raise last_err
+
+        item = items[0] or {}
+        img_bytes: Optional[bytes] = None
+        if item.get("b64_json"):
+            img_bytes = base64.b64decode(item["b64_json"])
+        elif item.get("url"):
+            r2 = requests.get(item["url"], timeout=120)
+            r2.raise_for_status()
+            img_bytes = r2.content
+        if not img_bytes:
+            raise RuntimeError("Images API item had neither b64_json nor url")
+
+        if output_filename:
+            out_path = Path(output_filename)
+            if out_path.suffix == "":
+                out_path = out_path.with_suffix(".png")
+        else:
+            out_path = Path("generated_images") / f"gen_{int(time.time())}.png"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_bytes(img_bytes)
+
+        usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
+        return {
+            "images": [str(out_path)],
+            "texts": [],
+            "usage": usage,
+            "model": model_name,
+            "endpoint": label,
+            "api_base": api_base,
+            "elapsed_s": elapsed,
+            "raw_response": {k: v for k, v in data.items() if k != "data"},
+        }
+
+    # All (endpoint, model) attempts were exhausted without a successful response.
+    raise last_err or RuntimeError("Images API: no endpoint/model attempt succeeded")
 
 
 def _encode_image_to_data_uri(
@@ -448,12 +737,9 @@ def _image_generator_laozhang(
                 parts.append({"inlineData": {"mimeType": mime, "data": b64_data}})
 
     # Generation config - using only documented parameters from LaoZhang API
-    # Note: temperature/topP/seed may not be supported by all models
-    # personGeneration moved inside imageConfig per Gemini API spec
     use_experimental_params = _env_bool("LAOZHANG_EXPERIMENTAL_PARAMS", False)
     
     if use_experimental_params:
-        # Experimental: includes temperature, topP, seed, personGeneration
         payload = {
             "contents": [{"parts": parts}],
             "generationConfig": {
@@ -470,7 +756,6 @@ def _image_generator_laozhang(
         }
         logger.info("⚙️ Using EXPERIMENTAL params: temperature, topP, seed, personGeneration")
     else:
-        # Safe/minimal: only documented working parameters
         payload = {
             "contents": [{"parts": parts}],
             "generationConfig": {
@@ -487,7 +772,6 @@ def _image_generator_laozhang(
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-
 
     t_call = time.time()
     response = requests.post(url, headers=headers, json=payload, timeout=300)
@@ -598,30 +882,7 @@ def image_generator(
     output_type: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Generate images with Gemini using a prompt + reference image filenames.
-
-    Hardcoded:
-      - model="gemini-3-pro-image-preview"
-      - output_dir="generated_images"
-      - temperature (tunable)
-      - system_instruction focused on photoreal fidelity (esp. eyes/face)
-
-    Args:
-        prompt: The text prompt.
-        image_filenames: List of paths (str) to reference images.
-        output_filename: Desired output filename (with or without extension).
-                         If multiple images are returned, they will be numbered:
-                         <stem>_1.<ext>, <stem>_2.<ext>, ...
-        use_google_search: If True, enables Google Search grounding for real-time
-                          information (e.g., accurate costume details, cultural 
-                          references, historical accuracy). Default: False.
-
-    Returns:
-        dict with:
-          - images: saved image file paths
-          - texts: any text parts returned
-          - grounding_metadata: search grounding info (if enabled)
-          - raw_response: SDK response object
+    Generate images with Gemini or GPT-Image using a prompt + reference image filenames.
     """
     provider = _resolve_image_provider(image_provider)
     if provider == "openai_images":
@@ -649,24 +910,14 @@ def image_generator(
     DEFAULT_OUTPUT_DIR = Path("generated_images")
     DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Sampling params: lower randomness helps identity lock.
     TEMPERATURE = 0.2
     TOP_P = 0.7
-    # Reproducibility (best-effort; model may still vary).
     SEED = 42
-    # THINKING MODE:
-    # Some Vertex image models reject ThinkingConfig/include_thoughts unless "thinking" is enabled
-    # for that model. To avoid 400 INVALID_ARGUMENT, keep this OFF for image generation.
     ENABLE_THINKING = False
     
-    # IMAGE RESOLUTION: Options are "1K", "2K", "4K" (4K costs more)
-    # See: https://dev.to/googleai/introducing-nano-banana-pro-complete-developer-tutorial-5fc8
     IMAGE_RESOLUTION = "4K"
-    
-    # ASPECT RATIO: "1:1", "16:9", "9:16", "4:3", "3:4", etc.
     ASPECT_RATIO = "1:1"
 
-    # System instruction optimized for identity-preserving storybook generation
     SYSTEM_INSTRUCTION = (
         "You are a photoreal image generator specializing in character-consistent storybook illustrations. "
         "Follow the prompt instructions exactly. "
@@ -678,37 +929,26 @@ def image_generator(
         "Always maintain the exact face angle, expression, and identity specified in the prompt."
     )
 
-
-    # ---- Client ----
     client = _make_genai_client()
 
-    # ---- Open images as PIL Images (simpler approach) ----
     reference_images = []
     for path_str in image_filenames:
         p = Path(path_str)
         if not p.exists():
             raise FileNotFoundError(f"Image not found: {p}")
-        # Load as PIL Image directly
         pil_image = Image.open(p).convert("RGB")
-        reference_images.append((p, pil_image))  # Keep path for labeling
+        reference_images.append((p, pil_image))
         logger.info(f"Loaded reference image: {p}")
 
-    # ---- Build INTERLEAVED contents: text-image-text-image-prompt ----
-    # Pattern C from ARCHITECTURE_V2.md: Each image preceded by its label
-    # for clear model understanding of multi-character references.
-    # See: https://ai.google.dev/gemini-api/docs/image-understanding
-    
     contents = []
     
     if image_labels and len(image_labels) == len(reference_images):
-        # V2: Use provided labels for precise character identification
         logger.info("📌 Using interleaved Pattern C labeling (%d images)", len(reference_images))
         for label, (p, pil_image) in zip(image_labels, reference_images):
             contents.append(label)
             contents.append(pil_image)
             logger.info(f"Added: '{label}' -> {p.name}")
     else:
-        # V1 legacy: auto-generated labels from filenames
         for i, (p, pil_image) in enumerate(reference_images):
             char_name = p.stem.replace("_", " ").replace("-", " ").title()
             if i == 0:
@@ -721,37 +961,30 @@ def image_generator(
             contents.append(pil_image)
             logger.info(f"Added: '{label}' -> {p.name}")
     
-    # Add the prompt text last
     contents.append(prompt)
     logger.info(f"Added prompt ({len(prompt)} chars)")
 
-    # ---- CRITICAL: Request both IMAGE and TEXT output ----
-    # See: https://dev.to/googleai/introducing-nano-banana-pro-complete-developer-tutorial-5fc8
+    # ``person_generation`` only exists in some google-genai releases; build the config
+    # defensively so an SDK upgrade/downgrade cannot break the Gemini fallback path.
+    try:
+        image_config = ImageConfig(
+            image_size=IMAGE_RESOLUTION,
+            aspect_ratio=ASPECT_RATIO,
+            person_generation="ALLOW_ALL",
+        )
+    except Exception:  # noqa: BLE001  (pydantic extra_forbidden on older/newer SDKs)
+        image_config = ImageConfig(image_size=IMAGE_RESOLUTION, aspect_ratio=ASPECT_RATIO)
+
     gen_config_kwargs: dict = dict(
         system_instruction=SYSTEM_INSTRUCTION,
         response_modalities=[Modality.TEXT, Modality.IMAGE],
         temperature=TEMPERATURE,
         top_p=TOP_P,
         seed=SEED,
-        # IMAGE CONFIG: Resolution, aspect ratio, and person generation
-        # personGeneration: ALLOW_ALL enables generation of adults AND children (required for storybooks)
-        image_config=ImageConfig(
-            image_size=IMAGE_RESOLUTION,  # "1K", "2K", or "4K"
-            aspect_ratio=ASPECT_RATIO,    # "1:1", "16:9", etc.
-            person_generation="ALLOW_ALL",  # Enable adults + children for storybooks
-        ),
+        image_config=image_config,
     )
     
-    # ---- GOOGLE SEARCH GROUNDING ----
-    # When enabled, the model can search for real-time information like:
-    # - Accurate costume/outfit details for characters
-    # - Cultural/historical references
-    # - Location-specific details
-    # - Current trends or styles
-    # Note: Image-based search results are excluded from generation
     if use_google_search:
-        # The SDK has had both google_search and googleSearch shapes across examples.
-        # Prefer the snake_case constructor used by our imports, but fall back if needed.
         try:
             gen_config_kwargs["tools"] = [Tool(google_search=GoogleSearch())]
         except TypeError:
@@ -759,9 +992,6 @@ def image_generator(
         logger.info("Google Search grounding ENABLED - model can fetch real-time info")
     
     if ENABLE_THINKING:
-        # Only enable when you have confirmed your target model supports it.
-        # Otherwise Vertex may return:
-        # "Thinking_config.include_thoughts is only enabled when thinking is enabled."
         gen_config_kwargs["thinking_config"] = ThinkingConfig(include_thoughts=True)
 
     gen_config = GenerateContentConfig(**gen_config_kwargs)
@@ -776,10 +1006,8 @@ def image_generator(
         logger.error(f"Error calling Gemini API: {e}")
         raise RuntimeError(f"Gemini API call failed: {e}") from e
 
-    # ---- Simplified response processing with better error handling ----
     logger.info(f"Response received from model: {MODEL}")
     
-    # Basic validation
     if not hasattr(response, 'candidates') or not response.candidates:
         logger.error("No candidates in response")
         if hasattr(response, 'prompt_feedback'):
@@ -804,21 +1032,14 @@ def image_generator(
     
     logger.info(f"Found {len(parts)} parts in response")
 
-    # ---- Parse and save outputs ----
     saved_paths: List[str] = []
     text_parts: List[str] = []
-
     ts = int(time.time())
 
     def _resolve_out_path(out: str) -> Path:
-        """
-        Respect user-provided directories in output_filename.
-        If no extension is provided, default to .png.
-        """
         p = Path(out)
         if p.suffix == "":
             p = p.with_suffix(".png")
-        # Ensure directory exists (supports output like generated/page_1.png)
         if p.parent and str(p.parent) not in (".", ""):
             p.parent.mkdir(parents=True, exist_ok=True)
         return p
@@ -830,29 +1051,24 @@ def image_generator(
         requested_out_path = None
         base_stem = f"gen_{ts}"
 
-    # ---- Process parts and save outputs ----
     img_counter = 1
-    first_image_saved = False  # Track if we've saved the first image
-    thought_parts: List[str] = []  # Store model's thinking process
+    first_image_saved = False
+    thought_parts: List[str] = []
     
     for i, part in enumerate(parts):
         logger.info(f"Processing part {i+1}/{len(parts)}")
         
-        # Handle THINKING parts (model's reasoning process)
-        # See: https://dev.to/googleai/introducing-nano-banana-pro-complete-developer-tutorial-5fc8
         if hasattr(part, "thought") and part.thought:
             thought_text = part.text if hasattr(part, "text") else str(part)
             logger.info(f"🧠 Model Thought: {thought_text[:200]}...")
             thought_parts.append(thought_text)
             continue
         
-        # Handle text parts (captions, descriptions)
         if hasattr(part, "text") and part.text:
             logger.info(f"Found text part: {part.text[:100]}...")
             text_parts.append(part.text.strip())
             continue
 
-        # Handle image parts
         if hasattr(part, "inline_data") and part.inline_data and hasattr(part.inline_data, "data"):
             data = part.inline_data.data
             if not data:
@@ -860,12 +1076,10 @@ def image_generator(
                 continue
             logger.info(f"Found image part {i+1} with data length: {len(data)}")
             
-            # CRITICAL FIX: Only save the FIRST image to avoid filename conflicts
             if first_image_saved and output_filename:
                 logger.warning(f"Skipping additional image {i+1} - only using first image to match expected filename")
                 continue
             
-            # Determine output filename - always use exact name requested (no _1, _2 suffixes)
             if output_filename:
                 out_path = requested_out_path
             else:
@@ -874,7 +1088,6 @@ def image_generator(
             logger.info(f"Saving image to: {out_path}")
 
             try:
-                # Save the image
                 img = Image.open(BytesIO(data))
                 img.save(out_path)
                 saved_paths.append(str(out_path))
@@ -886,15 +1099,8 @@ def image_generator(
                 logger.error(f"Error saving image: {e}")
                 raise RuntimeError(f"Failed to save image: {e}") from e
     
-    # ---- Validate we got at least one image ----
     if len(saved_paths) == 0:
         logger.error("No images were generated!")
-        logger.error("This might be because:")
-        logger.error("1. Safety filters blocked the content")
-        logger.error("2. The model didn't understand it should return an image")
-        logger.error("3. There was an issue with the response_modalities setting")
-        
-        # Show what we did get
         logger.error(f"Text parts received: {len(text_parts)}")
         for i, text in enumerate(text_parts):
             logger.error(f"  Text {i+1}: {text[:200]}...")
@@ -904,19 +1110,16 @@ def image_generator(
             "and consider rephrasing your prompt to avoid safety filters."
         )
 
-    # Log thinking summary if available
     if thought_parts:
         logger.info(f"🧠 Model reasoning captured ({len(thought_parts)} thought blocks)")
         for i, thought in enumerate(thought_parts):
             logger.debug(f"  Thought {i+1}: {thought[:300]}...")
     
-    # ---- Extract grounding metadata if Google Search was used ----
     grounding_metadata = None
     if use_google_search and hasattr(first_candidate, 'grounding_metadata'):
         grounding_metadata = first_candidate.grounding_metadata
         if grounding_metadata:
             logger.info("🔍 Google Search grounding metadata captured")
-            # Log search queries if available
             if hasattr(grounding_metadata, 'search_entry_point'):
                 logger.info(f"   Search entry: {grounding_metadata.search_entry_point}")
             if hasattr(grounding_metadata, 'grounding_chunks') and grounding_metadata.grounding_chunks:
@@ -938,27 +1141,6 @@ def image_generator_with_search(
     output_filename: Optional[str] = None,
     image_labels: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """
-    Convenience wrapper for image_generator with Google Search grounding enabled.
-    
-    Use this when you need the model to look up real-time information for:
-    - Accurate costume/outfit details (e.g., "traditional Indian wedding attire")
-    - Cultural/historical references (e.g., "Viking warrior armor")
-    - Location-specific details (e.g., "current Tokyo street fashion")
-    - Character-specific details (e.g., "Spider-Man suit details")
-    
-    Note: Image-based search results are excluded from generation.
-    The model uses text-based search results to inform the image creation.
-    
-    Args:
-        prompt: The text prompt (can include search-worthy terms).
-        image_filenames: List of paths to reference images.
-        output_filename: Desired output filename.
-        image_labels: Optional labels for interleaved Pattern C labeling.
-    
-    Returns:
-        dict with images, texts, thoughts, grounding_metadata, raw_response
-    """
     return image_generator(
         prompt=prompt,
         image_filenames=image_filenames,
@@ -966,4 +1148,3 @@ def image_generator_with_search(
         use_google_search=True,
         image_labels=image_labels,
     )
-

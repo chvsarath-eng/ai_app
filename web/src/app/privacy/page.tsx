@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 
+import { LegalPage } from '@/components/legal-page'
+
 export const metadata: Metadata = {
   title: 'Privacy Policy',
   description: 'Learn how img2x collects, uses, and protects your personal information. GDPR, CCPA, and COPPA compliant. Photos deleted within 30 days.',
@@ -12,15 +14,8 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage () {
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 pb-16 pt-12 sm:px-6 lg:px-10">
-      <h1 className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
-        Privacy Policy
-      </h1>
-      <p className="mt-3 text-sm text-zinc-600">
-        Last Updated: January 24, 2026
-      </p>
-
-      <section className="mt-8 space-y-4 text-sm text-zinc-700 leading-relaxed">
+    <LegalPage title="Privacy Policy" lastUpdated="January 24, 2026">
+      <section className="space-y-4 text-sm text-zinc-700 leading-relaxed">
         <p>
           img2x ("we," "us," or "our") respects your privacy and is committed to protecting your personal information. 
           This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our 
@@ -251,7 +246,7 @@ export default function PrivacyPage () {
         <p className="text-sm text-zinc-700">
           If you have questions, concerns, or requests regarding this Privacy Policy or our data practices, please contact us:
         </p>
-        <div className="mt-4 p-4 bg-zinc-50 rounded-lg text-sm text-zinc-700">
+        <div className="mt-4 rounded-2xl border border-zinc-200/70 bg-zinc-50 p-4 text-sm text-zinc-700">
           <p className="font-semibold">img2x</p>
           <p>Email: <a className="text-violet-600 hover:text-violet-700 underline" href="mailto:team@img2x.com">team@img2x.com</a></p>
           <p className="mt-2">For GDPR-related inquiries, please include "GDPR Request" in your subject line.</p>
@@ -259,14 +254,14 @@ export default function PrivacyPage () {
         </div>
       </section>
 
-      <section className="mt-10 p-6 bg-violet-50 rounded-lg">
+      <section className="mt-10 rounded-2xl border border-violet-100 bg-violet-50/70 p-6">
         <p className="text-sm text-zinc-700">
           We review and update this Privacy Policy as our service and legal obligations evolve.
           For privacy-related requests, contact{' '}
           <a className="text-violet-600 hover:text-violet-700 underline" href="mailto:team@img2x.com">team@img2x.com</a>.
         </p>
       </section>
-    </main>
+    </LegalPage>
   )
 }
 

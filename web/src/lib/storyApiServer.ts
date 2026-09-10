@@ -52,12 +52,26 @@ function getCredentialsFromKnownPaths () {
   return undefined
 }
 
-export async function getStoryAuthHeaders () {
-  const credentials = getCredentialsFromEnv() || getCredentialsFromKnownPaths()
-  const auth = new GoogleAuth({ credentials })
+export async function getStoryAuthHeaders (): Promise<Record<string, string>> {
+  const serviceUrl = getServiceUrl()
+  if (serviceUrl.includes('localhost') || serviceUrl.includes('127.0.0.1')) {
+    return {}
+  }
 
-  const client = await auth.getIdTokenClient(getAudience())
-  return await client.getRequestHeaders()
+  const credentials = getCredentialsFromEnv() || getCredentialsFromKnownPaths()
+  if (!credentials) {
+    return {}
+  }
+
+  try {
+    const auth = new GoogleAuth({ credentials })
+    const client = await auth.getIdTokenClient(getAudience())
+    const headers = await client.getRequestHeaders()
+    return headers as unknown as Record<string, string>
+  } catch (err) {
+    console.warn('Could not generate GCP auth headers for story service:', err)
+    return {}
+  }
 }
 
 export function getStoryServiceUrl () {

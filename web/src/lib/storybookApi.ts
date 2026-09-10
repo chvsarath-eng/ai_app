@@ -37,6 +37,7 @@ export async function createStorybookJob (req: CreateJobRequest): Promise<{ jobI
   form.append('email', req.email)
   form.append('output_type', req.outputType)
   form.append('keep_job_dir', 'false')
+  if (req.projectId) form.append('project_id', req.projectId)
   if (req.shippingAddress) {
     form.append('shipping_name', req.shippingAddress.fullName)
     if (req.shippingAddress.phone) {
