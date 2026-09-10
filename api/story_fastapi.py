@@ -372,18 +372,24 @@ def _gcs_signing_kwargs() -> Dict[str, str]:
     from google.auth.transport.requests import Request as GoogleAuthRequest
 
     credentials, _project = google.auth.default()
-    sa_email = getattr(credentials, "service_account_email", None) or (
-        os.getenv("GCS_SIGNING_SERVICE_ACCOUNT") or ""
-    ).strip()
-    if not sa_email or sa_email == "default":
+    request = GoogleAuthRequest()
+    try:
+        credentials.refresh(request)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("GCS signing credential refresh failed: %s", exc)
+
+    env_sa = (os.getenv("GCS_SIGNING_SERVICE_ACCOUNT") or "").strip()
+    sa_email = env_sa or getattr(credentials, "service_account_email", None) or ""
+    if sa_email in ("", "default"):
+        logger.warning("GCS signing skipped: no service account email on ADC")
         return {}
-    if not getattr(credentials, "token", None) or not getattr(credentials, "valid", True):
-        credentials.refresh(GoogleAuthRequest())
     token = getattr(credentials, "token", None)
     if not token:
+        logger.warning("GCS signing skipped: ADC has no access token")
         return {}
     _GCS_SIGNING = {"service_account_email": sa_email, "access_token": token}
     _GCS_SIGNING_AT = time.time()
+    logger.info("GCS signing via IAM as %s", sa_email)
     return _GCS_SIGNING
 
 
@@ -922,7 +928,8 @@ def _run_ebook_job(
         # Local fallback: serve the file straight from the job dir so the web app can
         # render live previews without GCS (dev / single-instance deployments).
         if not url:
-            url = f"/jobs/{job_id}/images/{Path(rel).name}"
+            site = (os.getenv("PUBLIC_SITE_URL") or "https://img2x.com").rstrip("/")
+            url = f"{site}/api/storybook/jobs/{job_id}/images/{Path(rel).name}"
         _JOBS[job_id].setdefault("images", {})[Path(rel).name] = {
             "url": url,
             "gcs_uri": gcs_uri,
@@ -1492,18 +1499,26 @@ def get_job(job_id: str) -> JSONResponse:
 
 
 @app.get("/jobs/{job_id}/images/{name}")
-def get_job_image(job_id: str, name: str) -> FileResponse:
-    """Serve a generated preview image from the local job dir (no-GCS fallback)."""
-    job = _JOBS.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+def get_job_image(job_id: str, name: str):
+    """Serve a generated preview image from the local job dir, then GCS."""
     safe_name = Path(name).name
-    entry = (job.get("images") or {}).get(safe_name) or {}
-    local_path = entry.get("local_path")
-    if not local_path or not Path(local_path).exists():
-        raise HTTPException(status_code=404, detail="Image not found")
-    media_type = "image/png" if str(local_path).lower().endswith(".png") else "image/jpeg"
-    return FileResponse(path=local_path, media_type=media_type, headers={"Cache-Control": "public, max-age=3600"})
+    job = _JOBS.get(job_id)
+    if job:
+        entry = (job.get("images") or {}).get(safe_name) or {}
+        local_path = entry.get("local_path")
+        if local_path and Path(local_path).exists():
+            media_type = "image/png" if str(local_path).lower().endswith(".png") else "image/jpeg"
+            return FileResponse(path=local_path, media_type=media_type, headers={"Cache-Control": "public, max-age=3600"})
+
+    data = _gcs_download_bytes(job_id=job_id, name=f"images/{safe_name}")
+    if data:
+        media_type = "image/png" if safe_name.lower().endswith(".png") else "image/jpeg"
+        return StreamingResponse(
+            BytesIO(data),
+            media_type=media_type,
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+    raise HTTPException(status_code=404, detail="Image not found")
 
 
 @app.get("/jobs/{job_id}/storybook.pdf")

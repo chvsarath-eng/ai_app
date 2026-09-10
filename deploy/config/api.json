@@ -21,7 +21,8 @@
     "IMAGE_CONCURRENCY": "5",
     "PUBLIC_SITE_URL": "https://img2x.com",
     "SMTP_FROM": "team@img2x.com",
-    "SMTP_FROM_NAME": "IMG2X"
+    "SMTP_FROM_NAME": "IMG2X",
+    "GCS_SIGNING_SERVICE_ACCOUNT": "502566942325-compute@developer.gserviceaccount.com"
   },
   "secrets": {
     "GOOGLE_API_KEY": "gemini-api-key:latest",

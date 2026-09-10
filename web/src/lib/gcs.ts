@@ -68,6 +68,19 @@ export async function signReadUrl (gcsUri: string, options?: { expiresInDays?: n
   return url
 }
 
+export async function downloadObject (gcsUri: string): Promise<{ data: Buffer, contentType: string } | null> {
+  const { bucket, name } = parseGcsUri(gcsUri)
+  const file = getStorage().bucket(bucket).file(name)
+  const [exists] = await file.exists()
+  if (!exists) return null
+  const [data] = await file.download()
+  const [metadata] = await file.getMetadata()
+  return {
+    data,
+    contentType: String(metadata.contentType || (name.endsWith('.png') ? 'image/png' : 'image/jpeg'))
+  }
+}
+
 export async function deleteObject (gcsUri: string): Promise<void> {
   const { bucket, name } = parseGcsUri(gcsUri)
   await getStorage().bucket(bucket).file(name).delete({ ignoreNotFound: true })

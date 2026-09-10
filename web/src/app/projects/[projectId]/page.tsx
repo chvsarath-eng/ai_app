@@ -25,6 +25,18 @@ import { Card } from '@/components/ui/card'
 import { useAuthStore } from '@/lib/auth-store'
 import type { Project } from '@/types/project'
 
+function resolveMedia (jobId: string | null | undefined, url: string | null | undefined) {
+  if (!url) return null
+  if (url.startsWith('/jobs/')) return `/api/storybook${url}`
+  if (url.startsWith('https://img2x.com/api/storybook/')) {
+    return url.replace('https://img2x.com', '')
+  }
+  if (!url.startsWith('http') && !url.startsWith('/') && jobId) {
+    return `/api/storybook/jobs/${jobId}/images/${url}`
+  }
+  return url
+}
+
 export default function ProjectDetailsPage ({
   params
 }: {
@@ -142,14 +154,34 @@ export default function ProjectDetailsPage ({
   // Polling while generating
   useEffect(() => {
     if (!project) return
-    const isGenerating = project.status === 'generating' || project.status === 'starting'
-    if (!isGenerating) return
+    const generating = project.status === 'generating' || project.status === 'starting'
+    if (!generating) return
 
     const interval = setInterval(() => {
       void fetchProject()
     }, 3000)
     return () => clearInterval(interval)
   }, [project, fetchProject])
+
+  const lastReadyCount = useRef(0)
+  useEffect(() => {
+    if (!project) return
+    const generating = project.status === 'generating' || project.status === 'starting'
+    if (!generating) return
+    const readyKeys = Object.entries(project.images || {}).filter(([, img]) => Boolean(img?.url))
+    if (readyKeys.length <= lastReadyCount.current) return
+    lastReadyCount.current = readyKeys.length
+    const pagesReady = readyKeys
+      .map(([key]) => key)
+      .filter((key) => key.startsWith('page_'))
+      .map((key) => Number(key.slice(5)))
+      .filter((n) => Number.isFinite(n))
+    if (pagesReady.length > 0) {
+      setSelectedPage(Math.max(...pagesReady))
+      return
+    }
+    if (project.images?.cover?.url) setSelectedPage(0)
+  }, [project])
 
   useEffect(() => {
     if (!project || isStarting || autoStartRef.current) return
@@ -211,8 +243,11 @@ export default function ProjectDetailsPage ({
 
   const pages = project.story?.pages || []
   const activePage = pages.find((p) => p.pageNumber === selectedPage) || pages[0]
-  const activePageImage = project.images?.[`page_${activePage?.pageNumber || selectedPage}`]?.url || null
-  const coverImage = project.coverUrl || project.images?.cover?.url || null
+  const activePageImage = resolveMedia(
+    project.jobId,
+    project.images?.[`page_${activePage?.pageNumber || selectedPage}`]?.url
+  )
+  const coverImage = resolveMedia(project.jobId, project.coverUrl || project.images?.cover?.url)
 
   const progressPct =
     project.imagesTotal && project.imagesTotal > 0
@@ -226,7 +261,7 @@ export default function ProjectDetailsPage ({
     (project.jobId ? `/api/storybook/jobs/${project.jobId}/storybook.html` : null)
 
   return (
-    <div className="py-8 sm:py-12">
+    <div className="py-4 sm:py-12">
       <div className="mx-auto max-w-6xl">
         {/* Breadcrumb */}
         <div className="flex items-center justify-between pb-6">
@@ -252,7 +287,7 @@ export default function ProjectDetailsPage ({
         </div>
 
         {/* Header */}
-        <Card className="mb-8 p-6 sm:p-8">
+        <Card className="mb-4 p-4 sm:mb-8 sm:p-8">
           <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -367,63 +402,60 @@ export default function ProjectDetailsPage ({
           )}
         </Card>
 
-        {/* Page viewer */}
-        <div className="grid gap-8 lg:grid-cols-12">
-          {/* Left: filmstrip */}
-          <div className="space-y-4 lg:col-span-4">
+        {/* Page viewer: image first on phones, filmstrip beside on desktop */}
+        <div className="grid gap-4 lg:grid-cols-12 lg:gap-8">
+          <div className="order-2 space-y-3 lg:order-1 lg:col-span-4">
             <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
               Pages &amp; scenes
             </h2>
 
-            {/* Cover */}
-            <button
-              type="button"
-              onClick={() => setSelectedPage(0)}
-              className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${
-                selectedPage === 0
-                  ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-500/20'
-                  : 'border-zinc-200/70 bg-white hover:border-violet-300'
-              }`}
-            >
-              <div className="relative h-14 w-14 shrink-0 rounded-xl bg-zinc-100 overflow-hidden border border-zinc-200">
-                {coverImage ? (
-                  <img src={coverImage} alt="Cover" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-[10px] text-zinc-400 font-bold">
-                    COVER
-                  </div>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-zinc-900 truncate">Book Cover</p>
-                <p className="text-[11px] text-zinc-500 truncate">
-                  {coverImage ? 'Rendered ✓' : isGenerating ? 'Rendering...' : 'Title & Art'}
-                </p>
-              </div>
-            </button>
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [-webkit-overflow-scrolling:touch] lg:max-h-[70vh] lg:flex-col lg:overflow-y-auto lg:overflow-x-visible">
+              <button
+                type="button"
+                onClick={() => setSelectedPage(0)}
+                className={`flex w-28 shrink-0 flex-col items-center gap-2 rounded-2xl border p-2 text-left transition lg:w-full lg:flex-row lg:p-3 ${
+                  selectedPage === 0
+                    ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-500/20'
+                    : 'border-zinc-200/70 bg-white hover:border-violet-300'
+                }`}
+              >
+                <div className="relative h-20 w-full shrink-0 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 lg:h-14 lg:w-14">
+                  {coverImage ? (
+                    <img src={coverImage} alt="Cover" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-zinc-400">
+                      COVER
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 w-full">
+                  <p className="truncate text-center text-xs font-semibold text-zinc-900 lg:text-left">Cover</p>
+                  <p className="truncate text-center text-[11px] text-zinc-500 lg:text-left">
+                    {coverImage ? 'Ready' : isGenerating ? 'Rendering…' : 'Title art'}
+                  </p>
+                </div>
+              </button>
 
-            {/* Page List */}
-            <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
               {(pages.length > 0
                 ? pages
                 : Array.from({ length: 10 }, (_, i) => ({ pageNumber: i + 1, story: '' }))
               ).map((p) => {
                 const pageNum = p.pageNumber
                 const isSelected = selectedPage === pageNum
-                const pageImg = project.images?.[`page_${pageNum}`]?.url || null
+                const pageImg = resolveMedia(project.jobId, project.images?.[`page_${pageNum}`]?.url)
 
                 return (
                   <button
                     key={pageNum}
                     type="button"
                     onClick={() => setSelectedPage(pageNum)}
-                    className={`flex w-full items-center gap-3 rounded-2xl border p-2.5 text-left transition ${
+                    className={`flex w-28 shrink-0 flex-col items-center gap-2 rounded-2xl border p-2 text-left transition lg:w-full lg:flex-row lg:p-2.5 ${
                       isSelected
                         ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-500/20'
                         : 'border-zinc-200/70 bg-white hover:border-violet-300'
                     }`}
                   >
-                    <div className="relative h-12 w-12 shrink-0 rounded-xl bg-zinc-100 overflow-hidden border border-zinc-200">
+                    <div className="relative h-20 w-full shrink-0 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 lg:h-12 lg:w-12">
                       {pageImg ? (
                         <img src={pageImg} alt={`Page ${pageNum}`} className="h-full w-full object-cover" />
                       ) : (
@@ -432,19 +464,10 @@ export default function ProjectDetailsPage ({
                         </div>
                       )}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-zinc-900">Page {pageNum}</p>
-                        {pageImg ? (
-                          <span className="text-[10px] font-medium text-emerald-600 flex items-center gap-0.5">
-                            <CheckCircle2 className="h-3 w-3" /> Ready
-                          </span>
-                        ) : isGenerating ? (
-                          <span className="text-[10px] text-violet-600 animate-pulse">Queued</span>
-                        ) : null}
-                      </div>
-                      <p className="text-[11px] text-zinc-500 truncate mt-0.5">
-                        {p.story || `Scene ${pageNum} illustration`}
+                    <div className="min-w-0 w-full">
+                      <p className="text-center text-xs font-semibold text-zinc-900 lg:text-left">Page {pageNum}</p>
+                      <p className="mt-0.5 line-clamp-1 text-center text-[11px] text-zinc-500 lg:text-left">
+                        {pageImg ? 'Ready' : isGenerating ? 'Queued' : (p.story || `Scene ${pageNum}`)}
                       </p>
                     </div>
                   </button>
@@ -453,25 +476,24 @@ export default function ProjectDetailsPage ({
             </div>
           </div>
 
-          {/* Right: page reader */}
-          <div className="lg:col-span-8">
-            <Card className="p-6">
-              <div className="mb-6 flex items-center justify-between border-b border-zinc-100 pb-4">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-pink-500 text-xs font-bold text-white">
+          <div className="order-1 lg:order-2 lg:col-span-8">
+            <Card className="p-3 sm:p-6">
+              <div className="mb-3 flex items-center justify-between gap-2 border-b border-zinc-100 pb-3 sm:mb-6 sm:pb-4">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-pink-500 text-xs font-bold text-white">
                     {selectedPage === 0 ? 'C' : selectedPage}
                   </span>
-                  <div>
+                  <div className="min-w-0">
                     <h3 className="text-sm font-semibold tracking-tight text-zinc-900">
                       {selectedPage === 0 ? 'Book cover' : `Page ${selectedPage}`}
                     </h3>
                     <p className="text-xs text-zinc-500">
-                      {selectedPage === 0 ? 'Title art' : 'Scene narrative and illustration'}
+                      {selectedPage === 0 ? 'Title art' : 'Scene and story'}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-1.5">
                   <Button
                     variant="outline"
                     size="sm"
@@ -479,7 +501,7 @@ export default function ProjectDetailsPage ({
                     onClick={() => setSelectedPage((prev) => Math.max(0, prev - 1))}
                     className="h-8 px-2.5 text-xs"
                   >
-                    Previous
+                    Prev
                   </Button>
                   <Button
                     variant="outline"
@@ -493,30 +515,27 @@ export default function ProjectDetailsPage ({
                 </div>
               </div>
 
-              {/* Image + Story text layout */}
-              <div className="grid gap-6 md:grid-cols-2">
-                {/* Generated Image Showcase */}
-                <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-2xl bg-zinc-900 shadow-inner">
+              <div className="grid gap-4 md:grid-cols-2 md:gap-6">
+                <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-2xl bg-zinc-100 ring-1 ring-zinc-200">
                   {selectedPage === 0 ? (
                     coverImage ? (
                       <img src={coverImage} alt="Cover" className="h-full w-full object-cover" />
                     ) : (
-                      <div className="text-center p-6 text-zinc-400">
-                        <Sparkles className="h-8 w-8 mx-auto mb-2 text-violet-400 animate-spin" />
-                        <p className="text-xs font-medium">Generating Cover Art...</p>
+                      <div className="p-6 text-center text-zinc-500">
+                        <Sparkles className="mx-auto mb-2 h-8 w-8 animate-spin text-violet-400" />
+                        <p className="text-xs font-medium">Generating cover…</p>
                       </div>
                     )
                   ) : activePageImage ? (
                     <img
                       src={activePageImage}
                       alt={`Page ${selectedPage}`}
-                      className="h-full w-full object-cover transition-opacity duration-300"
+                      className="h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="text-center p-6 text-zinc-400">
-                      <Clock className="h-8 w-8 mx-auto mb-2 text-violet-400 animate-spin" />
-                      <p className="text-xs font-medium">Rendering Scene {selectedPage}...</p>
-                      <p className="text-[11px] text-zinc-500 mt-1">High-fidelity face preservation</p>
+                    <div className="p-6 text-center text-zinc-500">
+                      <Clock className="mx-auto mb-2 h-8 w-8 animate-spin text-violet-400" />
+                      <p className="text-xs font-medium">Rendering page {selectedPage}…</p>
                     </div>
                   )}
                 </div>
