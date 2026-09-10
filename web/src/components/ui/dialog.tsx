@@ -37,7 +37,7 @@ React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
         ref={ref}
         className={cn(
           'fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-4xl rounded-3xl border border-zinc-200/80 bg-white p-7 shadow-[0_30px_80px_rgba(0,0,0,0.18)] outline-none',
-          'max-h-[calc(100dvh-2rem)] overflow-hidden',
+          'max-h-[calc(100dvh-2rem)] overflow-y-auto',
           '[@media(max-height:820px)]:p-5',
           className
         )}

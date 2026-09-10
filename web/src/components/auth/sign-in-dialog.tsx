@@ -29,9 +29,9 @@ export function SignInDialog () {
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 via-fuchsia-500 to-pink-500 text-white shadow-md">
             <Sparkles className="h-5 w-5" />
           </div>
-          <DialogTitle>Save your book to your account</DialogTitle>
+          <DialogTitle>Save your storybook</DialogTitle>
           <DialogDescription>
-            Sign in so you can watch your book being made, download it anytime, and find it later under My Books.
+            Sign in to watch it being made, download it anytime, and find it later in My Storybooks.
           </DialogDescription>
         </DialogHeader>
         <SignInCard reason={reason} onSignedIn={handleSignedIn} compact />

@@ -54,19 +54,32 @@ export function AuthProvider ({ children }: { children: React.ReactNode }) {
 
     setAuthMode('firebase')
 
+    const safety = setTimeout(() => {
+      if (!isCancelled) setLoading(false)
+    }, 6000)
+
     async function bootstrap () {
       // Seed from the server cookie first (fast path, no flash of signed-out UI).
       try {
-        const res = await fetch('/api/auth/session', { cache: 'no-store' })
+        const controller = new AbortController()
+        const abort = setTimeout(() => controller.abort(), 4000)
+        const res = await fetch('/api/auth/session', { cache: 'no-store', signal: controller.signal })
+        clearTimeout(abort)
         if (res.ok) {
           const data = await res.json()
           if (!isCancelled && data?.user) setUser(data.user as AuthUser)
         }
       } catch {
         // ignore
+      } finally {
+        if (!isCancelled) setLoading(false)
       }
 
-      await completeRedirectSignIn()
+      try {
+        await completeRedirectSignIn()
+      } catch (err) {
+        console.warn('Redirect sign-in check failed:', err)
+      }
 
       const { onIdTokenChanged } = await import('firebase/auth')
       unsubscribe = onIdTokenChanged(getFirebaseAuth(), async (firebaseUser) => {
@@ -107,6 +120,7 @@ export function AuthProvider ({ children }: { children: React.ReactNode }) {
 
     return () => {
       isCancelled = true
+      clearTimeout(safety)
       unsubscribe()
     }
   }, [setAuthMode, setConfigured, setLoading, setUser])

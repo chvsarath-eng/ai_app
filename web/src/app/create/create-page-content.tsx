@@ -235,7 +235,7 @@ export function CreatePageContent () {
                       disabled={createJobMutation.isPending}
                     >
                       <UserPlus className="mr-2 h-4 w-4" />
-                      Add character ({characterCount}/4)
+                      Add another character
                     </Button>
                   )}
 

@@ -111,7 +111,7 @@ export default function AdminPage () {
       setSavedOverrideModel(data?.settings?.images?.model || '')
       setSaveMessage(model ? `Saved. New jobs will use ${model}.` : 'Override cleared. New jobs use the story service default.')
     } catch (err) {
-      setSaveMessage(`âœ• ${err instanceof Error ? err.message : 'Failed to save'}`)
+      setSaveMessage(`Error: ${err instanceof Error ? err.message : 'Failed to save'}`)
     } finally {
       setIsSavingModel(false)
     }
@@ -148,16 +148,16 @@ export default function AdminPage () {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data?.ok) {
-        setTestResult(`âœ• ${data?.error || 'Image API unreachable'}${data?.apiBase ? ` (${data.apiBase})` : ''}`)
+        setTestResult(`Error: ${data?.error || 'Image API unreachable'}${data?.apiBase ? ` (${data.apiBase})` : ''}`)
         return
       }
       if (data.modelListed) {
-        setTestResult(`âœ“ ${data.apiBase} reachable in ${data.elapsedMs}ms Â· model "${data.matchedModel}" is available.`)
+        setTestResult(`OK ${data.apiBase} reachable in ${data.elapsedMs}ms · model "${data.matchedModel}" is available.`)
       } else {
-        setTestResult(`âš  ${data.apiBase} reachable in ${data.elapsedMs}ms, but "${selectedModel}" is not in the model list. Generation will try aliases: ${(data.candidates || []).join(', ')}.`)
+        setTestResult(`Warning: ${data.apiBase} reachable in ${data.elapsedMs}ms, but "${selectedModel}" is not in the model list. Generation will try aliases: ${(data.candidates || []).join(', ')}.`)
       }
     } catch (err) {
-      setTestResult(`âœ• ${err instanceof Error ? err.message : 'Connection test failed'}`)
+      setTestResult(`Error: ${err instanceof Error ? err.message : 'Connection test failed'}`)
     } finally {
       setIsTesting(false)
     }
@@ -323,7 +323,7 @@ export default function AdminPage () {
                 <CardContent>
                   <div className="text-2xl font-bold text-zinc-900">{stats?.totalProjects ?? jobs.length}</div>
                   <p className="mt-1 text-[11px] text-zinc-500">
-                    {stats?.completedProjects ?? 0} ready Â· {stats?.awaitingPayment ?? 0} awaiting payment
+                    {stats?.completedProjects ?? 0} ready · {stats?.awaitingPayment ?? 0} awaiting payment
                   </p>
                 </CardContent>
               </Card>
@@ -367,7 +367,7 @@ export default function AdminPage () {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-cyan-600">
-                    {typeof stats?.successRate === 'number' ? `${stats.successRate}%` : 'â€”'}
+                    {typeof stats?.successRate === 'number' ? `${stats.successRate}%` : '—'}
                   </div>
                   <p className="mt-1 text-[11px] text-zinc-500">
                     {stats?.failedProjects ? `${stats.failedProjects} failed` : 'No failures recorded'}
@@ -386,8 +386,8 @@ export default function AdminPage () {
                     <p className="font-semibold text-zinc-800">Story Service</p>
                     <p className="truncate text-zinc-500">
                       {settings?.storyServiceReachable
-                        ? `Online Â· ${settings.storyServiceLatencyMs}ms`
-                        : settings ? `Offline Â· ${settings.storyServiceError || 'unreachable'}` : 'Checkingâ€¦'}
+                        ? `Online · ${settings.storyServiceLatencyMs}ms`
+                        : settings ? `Offline · ${settings.storyServiceError || 'unreachable'}` : 'Checking…'}
                     </p>
                   </div>
                 </div>
@@ -397,7 +397,7 @@ export default function AdminPage () {
                     <p className="font-semibold text-zinc-800">Payment Gateway</p>
                     <p className="truncate text-zinc-500">
                       {settings?.razorpayKeyIdSet
-                        ? `Razorpay Â· ${settings.razorpayKeyMode || 'unknown'} keys${settings.razorpayWebhookSecretSet ? ' Â· webhook set' : ' Â· no webhook secret'}`
+                        ? `Razorpay · ${settings.razorpayKeyMode || 'unknown'} keys${settings.razorpayWebhookSecretSet ? ' · webhook set' : ' · no webhook secret'}`
                         : 'Razorpay keys missing'}
                     </p>
                   </div>
@@ -414,7 +414,7 @@ export default function AdminPage () {
                   <div className="min-w-0">
                     <p className="font-semibold text-zinc-800">Auth & Data</p>
                     <p className="truncate text-zinc-500">
-                      {settings ? `${settings.authMode} auth Â· ${settings.dataBackend} store` : 'Checkingâ€¦'}
+                      {settings ? `${settings.authMode} auth · ${settings.dataBackend} store` : 'Checking…'}
                     </p>
                   </div>
                 </div>
@@ -573,11 +573,11 @@ export default function AdminPage () {
                         .map((order) => (
                           <tr key={order.id} className="hover:bg-zinc-50 transition">
                             <td className="p-3.5 font-mono text-emerald-600">
-                              <div>{order.payment?.paymentId || 'â€”'}</div>
+                              <div>{order.payment?.paymentId || '—'}</div>
                               <div className="text-[10px] text-zinc-500">{order.payment?.orderId}</div>
                             </td>
                             <td className="p-3.5 font-medium text-zinc-800">
-                              {order.email || order.payment?.email || 'â€”'}
+                              {order.email || order.payment?.email || '—'}
                             </td>
                             <td className="p-3.5 font-semibold text-zinc-800">
                               {(order.payment?.currency || order.amounts?.currency) === 'USD' ? '$' : 'â‚¹'}
@@ -678,10 +678,10 @@ export default function AdminPage () {
               </div>
 
               <p className="text-[11px] text-zinc-500">
-                Story service default: <span className="font-mono text-zinc-700">{settings?.imageModel || 'â€”'}</span>
+                Story service default: <span className="font-mono text-zinc-700">{settings?.imageModel || '—'}</span>
                 {savedOverrideModel
-                  ? <> Â· Admin override active: <span className="font-mono text-violet-700">{savedOverrideModel}</span></>
-                  : ' Â· No admin override (using default)'}
+                  ? <> · Admin override active: <span className="font-mono text-violet-700">{savedOverrideModel}</span></>
+                  : ' · No admin override (using default)'}
               </p>
 
               <div className="pt-3 border-t border-zinc-200/70 flex flex-wrap items-center gap-3">
@@ -714,10 +714,10 @@ export default function AdminPage () {
                 </Button>
               </div>
               {saveMessage && (
-                <p className={`text-xs font-medium ${saveMessage.startsWith('âœ•') ? 'text-red-600' : 'text-emerald-600'}`}>{saveMessage}</p>
+                <p className={`text-xs font-medium ${saveMessage.startsWith('Error') ? 'text-red-600' : 'text-emerald-600'}`}>{saveMessage}</p>
               )}
               {testResult && (
-                <p className={`text-xs font-medium ${testResult.startsWith('âœ“') ? 'text-emerald-600' : testResult.startsWith('âš ') ? 'text-amber-700' : 'text-red-600'}`}>{testResult}</p>
+                <p className={`text-xs font-medium ${testResult.startsWith('OK') ? 'text-emerald-600' : testResult.startsWith('Warning') ? 'text-amber-700' : 'text-red-600'}`}>{testResult}</p>
               )}
             </Card>
 
@@ -760,27 +760,27 @@ export default function AdminPage () {
 
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 border border-zinc-200/70">
                   <span className="text-zinc-700 font-medium">Image API base</span>
-                  <span className="text-zinc-700 font-mono truncate max-w-[220px]">{settings?.imageApiBase || 'â€”'}</span>
+                  <span className="text-zinc-700 font-mono truncate max-w-[220px]">{settings?.imageApiBase || '—'}</span>
                 </div>
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 border border-zinc-200/70">
                   <span className="text-zinc-700 font-medium">Pages model</span>
-                  <span className="text-zinc-700 font-mono truncate max-w-[220px]">{settings?.imageModelPages || 'â€”'}</span>
+                  <span className="text-zinc-700 font-mono truncate max-w-[220px]">{settings?.imageModelPages || '—'}</span>
                 </div>
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 border border-zinc-200/70">
                   <span className="text-zinc-700 font-medium">Image size (digital / print)</span>
-                  <span className="text-zinc-700 font-mono">{settings?.imageSizeDigital || 'â€”'} / {settings?.imageSizePrint || 'â€”'}</span>
+                  <span className="text-zinc-700 font-mono">{settings?.imageSizeDigital || '—'} / {settings?.imageSizePrint || '—'}</span>
                 </div>
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 border border-zinc-200/70">
-                  <span className="text-zinc-700 font-medium">Quality Â· Concurrency</span>
-                  <span className="text-zinc-700 font-mono">{settings?.imageQuality || 'â€”'} Â· {settings?.imageConcurrency || 'â€”'}</span>
+                  <span className="text-zinc-700 font-medium">Quality · Concurrency</span>
+                  <span className="text-zinc-700 font-mono">{settings?.imageQuality || '—'} · {settings?.imageConcurrency || '—'}</span>
                 </div>
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 border border-zinc-200/70">
                   <span className="text-zinc-700 font-medium">Story model</span>
-                  <span className="text-zinc-700 font-mono truncate max-w-[220px]">{settings?.storyProvider || 'â€”'}{settings?.storyModel ? ` Â· ${settings.storyModel}` : ''}</span>
+                  <span className="text-zinc-700 font-mono truncate max-w-[220px]">{settings?.storyProvider || '—'}{settings?.storyModel ? ` · ${settings.storyModel}` : ''}</span>
                 </div>
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 border border-zinc-200/70">
                   <span className="text-zinc-700 font-medium">Story service</span>
-                  <span className="text-zinc-700 font-mono truncate max-w-[220px]">{settings?.storyServiceUrl || 'â€”'}</span>
+                  <span className="text-zinc-700 font-mono truncate max-w-[220px]">{settings?.storyServiceUrl || '—'}</span>
                 </div>
               </div>
             </Card>

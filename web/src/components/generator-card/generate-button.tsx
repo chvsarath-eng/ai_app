@@ -13,15 +13,20 @@ export function GenerateButton ({
 }) {
   const isDisabled = !hasPhoto || isLoading || disabled
   return (
-    <Button
-      type="submit"
-      className="h-12 w-full bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white shadow-md transition hover:brightness-105"
-      variant={hasPhoto ? 'default' : 'secondary'}
-      disabled={isDisabled}
-      aria-disabled={isDisabled ? 'true' : 'false'}
-    >
-      {isLoading ? 'Generating…' : 'Generate'}
-    </Button>
+    <div className="space-y-1.5">
+      <Button
+        type="submit"
+        className="h-12 w-full bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 text-white shadow-md transition hover:brightness-105"
+        variant={hasPhoto ? 'default' : 'secondary'}
+        disabled={isDisabled}
+        aria-disabled={isDisabled ? 'true' : 'false'}
+      >
+        {isLoading ? 'Creating your storybook…' : 'Generate'}
+      </Button>
+      {!hasPhoto && !isLoading ? (
+        <p className="text-center text-[11px] text-zinc-400">Add a photo to continue</p>
+      ) : null}
+    </div>
   )
 }
 

@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card'
 import { useAuthStore } from '@/lib/auth-store'
 
 const REASONS: Record<string, string> = {
-  projects: 'Sign in to see your books.',
+  projects: 'Sign in to see your storybooks.',
   admin: 'Admin access requires sign-in.',
   checkout: 'Sign in to place your order.'
 }
@@ -33,7 +33,7 @@ export function LoginClient ({ next, reason }: { next: string; reason?: string }
             <BookOpen className="h-6 w-6" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-800">Welcome back</h1>
-          <p className="mt-1 text-sm text-zinc-500">Sign in to see your books and orders.</p>
+          <p className="mt-1 text-sm text-zinc-500">Sign in to see your storybooks and orders.</p>
         </div>
         <SignInCard reason={reason ? REASONS[reason] ?? null : null} />
       </Card>

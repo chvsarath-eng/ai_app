@@ -96,7 +96,7 @@ export default function AccountPage () {
                 <BookOpen className="h-5 w-5 text-violet-600" />
                 <div>
                   <p className="text-sm font-semibold text-zinc-900">My Storybooks</p>
-                  <p className="text-xs text-zinc-500">View and download all your books</p>
+                  <p className="text-xs text-zinc-500">View and download your storybooks</p>
                 </div>
               </div>
               <ArrowRight className="h-4 w-4 text-zinc-400" />
@@ -132,7 +132,7 @@ export default function AccountPage () {
             <Button asChild size="sm" className="text-xs font-semibold">
               <Link href="/create">
                 <Sparkles className="mr-1 h-3.5 w-3.5" />
-                Create new book
+                Create a storybook
               </Link>
             </Button>
           </div>
