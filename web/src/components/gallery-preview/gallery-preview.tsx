@@ -13,14 +13,14 @@ type GalleryBook = {
 
 // One entry per unique book (no repeats). Newest GPT-Image-2.5 books lead the first row.
 const books: GalleryBook[] = [
-  { coverSrc: '/gallery/cover_6.jpg', bookNumber: 6 }, // Aarav and the Giant Forest Cake
-  { coverSrc: '/gallery/cover_7.jpg', bookNumber: 7 }, // Aarav and the Cardboard Rocket
-  { coverSrc: '/gallery/cover_8.jpg', bookNumber: 8 }, // Aarav and the Star Whale
-  { coverSrc: '/gallery/cover_1.jpg', bookNumber: 1 },
-  { coverSrc: '/gallery/cover_2.jpg', bookNumber: 2 },
-  { coverSrc: '/gallery/cover_3.jpg', bookNumber: 3 },
-  { coverSrc: '/gallery/cover_4.jpg', bookNumber: 4 },
-  { coverSrc: '/gallery/cover_5.jpg', bookNumber: 5 }
+  { coverSrc: '/gallery/cover_9.jpg', bookNumber: 9 }, // Aarav and the Moon Garden
+  { coverSrc: '/gallery/cover_10.jpg', bookNumber: 10 }, // The Lantern by the River
+  { coverSrc: '/gallery/cover_11.jpg', bookNumber: 11 }, // The Lighthouse Lamp
+  { coverSrc: '/gallery/cover_12.jpg', bookNumber: 12 }, // The River Pebble Hunt
+  { coverSrc: '/gallery/cover_6.jpg', bookNumber: 6 },
+  { coverSrc: '/gallery/cover_7.jpg', bookNumber: 7 },
+  { coverSrc: '/gallery/cover_8.jpg', bookNumber: 8 },
+  { coverSrc: '/gallery/cover_1.jpg', bookNumber: 1 }
 ]
 
 const getBookUrl = (bookNumber: number): string => {

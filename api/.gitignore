@@ -39,6 +39,7 @@ uploads/
 story_data*.json
 story_data.json
 last_story_raw.txt
+quality_jobs/
 
 # OS
 Thumbs.db

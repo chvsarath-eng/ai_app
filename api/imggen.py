@@ -243,8 +243,9 @@ _SAFETY_REWRITE_SYSTEM = (
     "You rewrite image-generation prompts for a children's picture book so they pass strict "
     "image-safety filters while keeping the same characters, outfits, setting and story beat.\n"
     "Rules:\n"
-    "- Keep every instruction about using the reference image for the child's exact face, build, "
-    "outfit and identity, and about facing the camera with both eyes visible.\n"
+    "- Keep every instruction about photographing the same child inside the scene, "
+    "relighting them to match the environment, and preserving identity from the reference.\n"
+    "- Do not add a frontal passport stare or a pasted-face / collage look.\n"
     "- Remove anything that shows a child in danger, distress, fear, injury, cold, drowning, "
     "falling, being chased, or near hazards (deep/rushing water, cliffs, fire, storms, collapsing things).\n"
     "- Replace it with a calm, joyful, clearly safe version of the same moment: the child stands on "
@@ -919,14 +920,15 @@ def image_generator(
     ASPECT_RATIO = "1:1"
 
     SYSTEM_INSTRUCTION = (
-        "You are a photoreal image generator specializing in character-consistent storybook illustrations. "
-        "Follow the prompt instructions exactly. "
-        "CRITICAL: Preserve facial identity from reference images with 100% accuracy - "
-        "same bone structure, facial features, skin tone, and age appearance. "
-        "Output ultra-realistic 8K photographic images with natural skin texture, "
-        "visible pores in focus areas, cinematic lighting, and dramatic depth of field. "
-        "Hair should look natural with flyaways, not wig-like. "
-        "Always maintain the exact face angle, expression, and identity specified in the prompt."
+        "You are a photoreal image generator for character-consistent storybook scenes. "
+        "Follow the prompt exactly. "
+        "The reference is WHO the person is, not a face to paste. "
+        "Photograph that same person inside the new scene: same age, bone structure, "
+        "skin tone, and hair, but relight face, skin, hair, and clothes to match the "
+        "scene's key light, weather, and color. "
+        "Natural head angles and story-matched expressions. "
+        "Forbidden: face swap, cutout, collage, studio-lit face on a location plate. "
+        "Output one real photograph with shared grain and texture across face and background."
     )
 
     client = _make_genai_client()
@@ -952,11 +954,11 @@ def image_generator(
         for i, (p, pil_image) in enumerate(reference_images):
             char_name = p.stem.replace("_", " ").replace("-", " ").title()
             if i == 0:
-                label = f"Reference Face Photo (use this exact face):"
+                label = "Identity reference: photograph this same person inside the new scene; relight them, do not paste the face."
             elif i == 1:
-                label = f"Character Costume ({char_name} - copy this outfit and hair):"
+                label = f"Costume reference for {char_name}: same outfit and body, newly photographed in the scene."
             else:
-                label = f"Supporting Character ({char_name}):"
+                label = f"Companion reference ({char_name}): keep this exact look, photographed in the scene."
             contents.append(label)
             contents.append(pil_image)
             logger.info(f"Added: '{label}' -> {p.name}")

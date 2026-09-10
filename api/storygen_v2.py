@@ -2,18 +2,17 @@
 Story Content Generator V2 -- Multi-Character Storybook Pipeline
 
 Accepts 1-4 character face photos with metadata and generates a complete
-storybook JSON (character sheets + cover + 10 pages) with concise,
-cinematic image prompts optimized for identity preservation.
+storybook JSON (character sheets + cover + 10 pages) with concise
+cinematic image prompts.
 
-Prompt Architecture v5 (Feb 2026):
-  Based on Google's Nano Banana Pro best practices and proven cinematic
-  prompt patterns.  Each image prompt is a short, cohesive paragraph
-  (~150-250 words) that combines explicit image commands and description.
-  NO bullet points, NO labeled sections, NO "Image 1:" data tags.
-  Character references use a hybrid approach: "Take the man from the first image
-  (which is Babu's character reference) and use his exact face and build".
+Prompt Architecture v6 (Sep 2026):
+  Photograph the uploaded person INSIDE each scene. References are identity
+  only -- never a face to paste. Relight skin/hair/clothes to the scene.
+  Natural head angles and story-matched expressions. Recurring pets get a
+  locked identity card + sheet so they do not morph page to page.
 
-See IMAGE_GEN_FEEDBACK.md for full research rationale.
+See IMAGE_GEN_FEEDBACK.md for earlier research; v6 reverses the frontal-face
+lock that produced cut-and-paste poster faces.
 """
 from __future__ import annotations
 
@@ -41,34 +40,43 @@ from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError
 # ---------------------------------------------------------------------------
 
 IDENTITY_PHRASE = (
-    "The face MUST match the character sheet exactly -- same person, "
-    "no changes. Never invent or substitute a different face."
+    "This is the same person as the reference, newly photographed in this scene. "
+    "Keep identity (age, bone structure, skin tone, hair, unique marks). "
+    "Never invent a different face, and never paste the reference face on top of the scene."
 )
 
 CINEMATIC_PHRASE = (
-    "Ultra-realistic cinematic shot, captured mid-action like a film still, "
-    "dramatic cinematic lighting with rim light and strong shadows, "
+    "One real cinematic photograph, captured mid-action like a film still, "
+    "with lighting that wraps face, clothes, and environment the same way, "
     "cinematic color grading, shallow depth of field, 8K realism."
 )
 
 NEGATIVE_PHRASE = (
     "no AI glow, no plastic skin, no cartoon, no 3D render, no illustration, "
-    "no anime, no extra fingers, no deformed anatomy, no face swapping, "
-    "no skin lightening, no de-aging, no profile views, no flat lighting, "
-    "no stock photo look."
+    "no anime, no extra fingers, no deformed anatomy, no face swap, "
+    "no cutout, no collage, no studio-lit face on a location plate, "
+    "no skin lightening, no de-aging, no stock photo look."
 )
 
-# Semantic negative constraint for per-prompt use
 SHORT_NEGATIVES = (
-    "The style is purely photographic and hyper-realistic, entirely avoiding any "
-    "3D rendered, cartoon, illustrated, or artificial appearance. Characters must "
-    "strictly face the camera without any profile angles."
+    "This is one real photograph, not a collage or face swap. "
+    "Face, clothes, and background share the same light, weather, grain, and texture."
+)
+
+SCENE_INTEGRATION_PHRASE = (
+    "Photograph them physically inside this scene. Relight face, skin, hair, and clothes "
+    "to match this scene's key light, color temperature, weather, and atmosphere. "
+    "Rain, dust, sun, sweat, and color must hit the face the same way they hit the body. "
+    "Natural head angle for the action; a three-quarter view is preferred over a passport stare. "
+    "Keep the same face as the photo: only a subtle change in the eyes. "
+    "No big grin, shout, grimace, or wide-open mouth -- those change likeness. "
+    "Forbidden: face swap, cutout, poster collage, unchanged studio lighting on the face."
 )
 
 STRICT_FACE_LOCK = (
-    "Enable strict facial consistency mode. "
-    "Preserve the EXACT face from each character's reference image. "
-    "All characters must keep fully frontal faces toward camera in every story image."
+    "Keep the same person across every page. "
+    "The reference is WHO they are, not a face to copy-paste. "
+    "Do not force a frontal passport pose."
 )
 
 # ---------------------------------------------------------------------------
@@ -76,46 +84,34 @@ STRICT_FACE_LOCK = (
 # ---------------------------------------------------------------------------
 
 FEW_SHOT_EXAMPLE_1 = (
-    "Take the short-haired man from the first image (which is David's character reference) and use his exact face and build. "
-    "Take the young girl from the second image (which is Lily's character reference) and use her exact face and build. "
-    "Ensure their facial features, bone structure, and identities remain completely unchanged. "
-    "Generate an ultra-realistic cinematic action shot of them riding a speeding vintage motorcycle through a dusty canyon. "
-    "The man is leaning forward gripping the handlebars, his leather jacket flapping in the wind. The girl is sitting behind him, "
-    "holding on tight, her scarf blowing wildly. Both bodies are mid-action, but both faces are pointed directly at the camera "
-    "(0 degrees) with both eyes fully visible, as if the camera is mounted perfectly on the front of the bike. "
-    "Their mouths are closed with subtle looks of quiet, focused intensity. Dust kicks up in massive cinematic clouds behind them, "
-    "with layered canyon walls illuminated by dramatic golden hour sunlight. Faces are unobstructed and the sharpest area in the frame. "
-    "Cool rim light casts warm highlights with a shallow depth of field and cinematic color grading. The style is purely photographic "
-    "and hyper-realistic, entirely avoiding any 3D rendered, cartoon, illustrated, or artificial appearance. Characters must strictly "
-    "face the camera without any profile angles."
+    "Photograph the short-haired man from the first image as David and the young girl from the second image as Lily, "
+    "the same two people newly captured in this scene, not pasted faces. "
+    "David: short dark hair, square jaw, light stubble, olive skin. Lily: dark braid, round cheeks, warm brown skin. "
+    "Generate one cinematic photograph of them riding a vintage motorcycle through a dusty canyon at golden hour. "
+    "He leans into the turn on the handlebars; she holds his jacket from behind, scarf streaming. "
+    "Heads turn naturally with the ride -- three-quarter faces looking down the canyon, not passport-frontal. "
+    "Dust and warm sidelight wrap their faces the same way they wrap the leather and the canyon walls. "
+    "Expressions stay subtle and close to the reference -- a hint of focus in the eyes, mouth relaxed. Medium shot, shallow depth of field. "
+    "Same people as the references, completely relit for this canyon. No face swap, no cutout, no studio portrait lighting."
 )
 
 FEW_SHOT_EXAMPLE_2 = (
-    "Take the bearded man from the first image (which is Arthur's character reference) and use his exact face and build. "
-    "Take the young woman from the second image (which is Mia's character reference) and use her exact face and build. "
-    "Ensure their facial features and identities remain completely unchanged. "
-    "Generate an ultra-realistic cinematic wide-angle portrait of them standing in a breathtaking, vibrant luminescent flower garden at twilight. "
-    "The man is dynamically reaching his arm out to catch a glowing blue butterfly, while the woman beside him is gracefully twirling, "
-    "her flowing dress caught mid-spin. Both bodies are engaged in beautiful, fluid motion, but both faces are pointed directly at "
-    "the camera with both eyes fully visible. Their mouths are closed with subtle, peaceful expressions of gentle wonder. Thousands of "
-    "glowing spores lift into the air around them. Magical, vibrant jewel-toned lighting acts as the key light with deep cinematic shadows. "
-    "Lush, colorful foliage is softly blurred in the foreground and background. Faces are unobstructed and sharpest in frame. "
-    "Medium shot eye-level, shallow depth of field, cinematic color grading. The style is purely photographic and hyper-realistic, "
-    "entirely avoiding any 3D rendered, cartoon, illustrated, or artificial appearance. Characters must strictly face the camera without "
-    "any profile angles."
+    "Photograph the bearded man from the first image as Arthur and the young woman from the second image as Mia, "
+    "the same two people standing inside a twilight flower garden, newly photographed there. "
+    "Arthur: full beard, weathered skin, brown eyes. Mia: long dark hair, narrow face, light-olive skin. "
+    "He reaches toward a glowing moth; she turns beside him, dress caught mid-spin. "
+    "Faces take the cool jewel-toned garden light and the last warm sky -- not a separate studio key. "
+    "Soft wonder in their expressions; they look at the moth and each other, not locked to the lens. "
+    "Medium shot, eye-level, cinematic color grading. One real photograph, no collage, no pasted faces."
 )
 
 FEW_SHOT_EXAMPLE_3 = (
-    "Take the young girl with curly hair from the first image (which is Chloe's character reference) and use her exact face and build. "
-    "Ensure her facial features and identity remain completely unchanged. "
-    "Generate an ultra-realistic cinematic medium shot of her standing on the edge of a massive, rocky cliff during a dramatic thunderstorm. "
-    "Her body is leaning forward into the heavy wind, arms spread slightly as she braces against the gale, her thick yellow raincoat snapping "
-    "violently mid-flap. Her face is pointed directly at the camera, with both eyes kept near lens and only a tiny downward eyeline offset. "
-    "Her mouth is closed with a gentle, low-intensity look of calm determination. Massive jagged lightning forks flash across the dark stormy "
-    "sky behind her. Brilliant electric blue flashes cast sharp rim highlights on her face with deep, moody shadows. "
-    "Shallow depth of field, cinematic color grading, hyper-detailed skin texture. The style is purely photographic and hyper-realistic, "
-    "entirely avoiding any 3D rendered, cartoon, illustrated, or artificial appearance. Characters must strictly face the camera without "
-    "any profile angles."
+    "Photograph the curly-haired girl from the first image as Chloe, the same child newly captured in this storm, "
+    "not a face dropped onto a cliff. Chloe: tight brown curls, freckles, warm tan skin, yellow raincoat. "
+    "Medium shot of her bracing on a rocky overlook as wind snaps the coat. "
+    "She looks into the weather, three-quarter face, rain on her cheeks and hair, cool storm light on skin "
+    "matching the sky. Mouth relaxed, eyes quietly determined -- same face as the photo. Same child as the reference, fully relit. "
+    "No cutout, no dry studio face in a wet scene."
 )
 
 
@@ -133,14 +129,14 @@ def _build_v2_system_prompt(num_characters: int) -> str:
     # Dynamic character limit text
     if num_characters == 1:
         char_limit_text = "There is 1 character with a face reference photo."
-        composition_text = "Single character, full cinematic freedom in framing."
+        composition_text = "Single character inside the scene, natural pose for the action."
     else:
-        char_limit_text = f"There are {num_characters} characters, each with their own face reference photo."
+        char_limit_text = f"There are {num_characters} uploaded people, each with a face reference photo."
         composition_text = {
-            2: "2 characters: side by side, equal prominence, slight angle offset.",
-            3: "3 characters: triangle composition -- 1 front-center, 2 flanking slightly behind.",
-            4: "4 characters: shoulder-to-shoulder line or 2x2 grouping. Max 3 per scene.",
-        }.get(num_characters, "Side by side, all facing camera.")
+            2: "2 people interacting inside the scene, not a side-by-side lineup.",
+            3: "3 people: triangle grouping around the shared action, not a mugshot row.",
+            4: "4 people: natural cluster around the action. Max 3 per scene.",
+        }.get(num_characters, "People interact inside the scene; no lineup posing.")
 
     return f'''You are a world-class Hollywood cinematic Story board writer and visual storyteller hired by "img2x" --
 a premium app where real people upload their photos and receive a stunning,
@@ -164,36 +160,40 @@ from a film director. {char_limit_text}
 HARD CONSTRAINTS (HIGHEST PRIORITY)
 ═══════════════════════════════════════════════════════════════════
 
-1) Character 1 (main) MUST appear in every image.
-2) FRONTAL FACE LOCK: Face points at camera, BOTH eyes visible. NO profile,
-   NO 3/4 view, NO side face, NO head turn away from lens. Body can move but
-   HEAD faces camera. This OVERRIDES all else.
-2b) EPIC BODY ACTION & VARIETY (PREVENT STATIC PORTRAITS): While the head MUST face the camera, the BODY should be caught in an epic mid-action pose. The character must never look like they are posing for a photograph. NEVER repeat poses across pages. The body performs the action; the face maintains the identity lock. (See EPIC SCENE CONSTRUCTION section below).
-2c) ACTION GEOMETRY (CRITICAL FOR FRONTAL FACES): If a character is interacting with an object, the object MUST be positioned slightly in front of them or between them and the camera, so they don't have to turn their head away from the lens. BAD: "looking at a bird flying away to the right" (causes profile face). GOOD: "reaching toward the camera for a falling leaf," "kneeling to examine a map held in front of them."
-3) EXPRESSION & EYELINE (CRITICAL FOR IDENTITY):
-   - Mouth MUST remain closed and neutral (no smiles, no teeth, no open mouths) to prevent identity drift.
-   - Emotion must be shown ONLY through SUBTLE MICRO-EXPRESSIONS in the eyes/brows.
-   - Keep expression intensity LOW: calm, focused, gentle, or mildly concerned only.
-   - NEVER request strong expressions (no intense, dramatic, angry, shocked, wide grin,
-     exaggerated brow raise, squint, grimace, clenched jaw).
-   - EYES should look at camera or within a very small offset near camera. Do NOT ask
-     for off-camera gazes that pull the face/head away from frontal lock.
+1) Character 1 (main uploaded person) MUST appear in every image.
+2) SCENE PHOTOGRAPHY, NOT COLLAGE: {SCENE_INTEGRATION_PHRASE}
+   The worst failure is a studio-lit passport face pasted on a cinematic background.
+   If the face lighting, grain, weather, or expression does not match the scene, REWRITE.
+2b) NATURAL HEAD AND GAZE: Head follows the story action. Three-quarter views are
+   preferred. Looking at a rope, clock, animal, or companion is GOOD. A locked
+   0-degree stare at the lens while the body "acts" is BANNED -- that is the
+   cut-paste look. True profiles that hide identity are still avoided; keep
+   enough of the face readable (both eyes or a clear 3/4).
+2c) BODY AND FACE ARE ONE PERSON: Pose, weight, hands, and face belong to the
+   same captured moment. NEVER repeat the same stance across pages.
+3) SUBTLE EXPRESSION ONLY (LIKENESS): The uploaded face must still look like
+   that person. Big expressions warp the mouth, cheeks, and eyes and BREAK
+   identity. Show feeling only with a slight change in the eyes and brows.
+   Mouth stays relaxed or gently closed. BANNED: wide grin, teeth, shout,
+   scream, grimace, clenched jaw, crying, cartoon emotion. The body can act
+   hard; the face stays calm and recognizable.
 4) IDENTITY: {IDENTITY_PHRASE}
-4b) FACE FIDELITY: Faces are the sharpest area in the frame (no motion blur on
-    faces), and NOTHING may cover or hide faces (no hair over eyes, no hands/props
-    blocking, no deep shadow splitting the face). When using character-sheet
-    references, use the headshot inset as the primary identity anchor.
+   Each character MUST have an identity_card (age, bone structure, skin tone,
+   hair, unique marks). Repeat that card in every prompt. Do not re-describe
+   the face in a paragraph of anatomy jargon.
+4b) FACE INTEGRATION: Face stays large enough to read (medium / MCU). No motion
+   blur on faces. Weather and light MUST reach the face. Do not hide the whole
+   face behind hair, hands, or a hard shadow split.
 5) CINEMATIC: {CINEMATIC_PHRASE}
-   Include dynamic environmental effects tied to the scene (dust, wind, sparks,
-   rain streaks, debris frozen mid-air, light flares) to sell the cinematic feel.
-6) COSTUME: Same costume across all pages. Defined in character sheet.
+   Environmental effects (dust, wind, rain, sparks) must land on the person,
+   including skin and hair -- not only on the background plate.
+6) COSTUME: Same costume across all pages. Defined in the character sheet.
 7) SCALE: Maintain exact height relationships in every prompt.
 8) BACKGROUND: Real photographed location. NO CGI, NO cartoon, NO 3D render.
 9) COMPOSITION: {composition_text}
-   Bodies can angle toward the shared action/prop or lightly toward each other,
-   but HEADS still face camera (FRONTAL FACE LOCK). Avoid lineup posing.
-10) PAGE ASSIGNMENT: Character 1 in every page. Cover has all characters.
-   At least 3 pages include all characters. Max 3 characters per scene.
+   People occupy the space. No lineup mugshots.
+10) PAGE ASSIGNMENT: Character 1 in every page. Cover has all uploaded people.
+   At least 3 pages include all uploaded people. Max 3 people per scene.
 11) WORD LIMIT: Each page/cover image prompt MUST be 150-250 words.
     Count your words before outputting. If over 250, trim. NEVER exceed 280.
 12) COVER TITLE TEXT (COVER ONLY): Weave into the flowing sentence:
@@ -201,12 +201,19 @@ HARD CONSTRAINTS (HIGHEST PRIORITY)
     title lettering styled to match this story's mood and setting, professional
     movie-poster polish while remaining purely photorealistic, title lighting
     matches the scene atmosphere, centered in upper third with breathing room
-    around characters, and a decorative, thematic border framing the entire cover image."
-    COVER SAFETY: Do NOT request 3D/extruded text, metallic CGI text, or illustrated
-    title effects that make the image look rendered.
+    around the people."
+    COVER SAFETY: Do NOT request 3D/extruded text, metallic CGI text, or a
+    decorative frame that turns the cover into a graphic poster.
 13) PROMPT FORMAT: Every image prompt MUST be written as a short, cohesive paragraph (3-5 sentences).
-    Start with explicit image commands (e.g., 'Take the man from the first image...').
-    NO bullet points, NO labeled sections (- Scene:, - Action:, etc.), NO paragraph breaks within the prompt.
+    Start by naming who is photographed from which reference, then the scene.
+    NO bullet points, NO labeled sections, NO paragraph breaks within the prompt.
+14) RECURRING COMPANIONS: If the story has a named or recurring pet, animal, or
+   sidekick that is NOT an uploaded photo (dog, cat, horse, etc.) and that
+   companion appears on 2+ pages, add them as an extra character with
+   source="invented", a detailed identity_card (species, breed, size, coat,
+   markings, eye color, unique features), and a sheet prompt. Use that SAME
+   companion on every page they appear. Background extras in a new location
+   (a random monkey, a herd) do not need sheets. Maximum ONE invented companion.
 
 ═══════════════════════════════════════════════════════════════════
 EPIC SCENE CONSTRUCTION & GENRE AESTHETICS (STEVEN SPIELBERG / SS RAJAMOULI STYLE)
@@ -288,9 +295,8 @@ COMMON MISMATCHES TO AVOID:
 × Story describes a dramatic climax moment but image prompt looks like a portrait session.
 
 RULE: If the story describes movement, the image MUST capture that movement
-(body mid-action, even if face stays frontal). Static portrait-like poses are
-ONLY acceptable when the story text also describes a static moment
-(e.g., "She stood and watched", "He waited quietly").
+in body AND face. Static portrait-like poses are ONLY acceptable when the
+story text also describes a static moment (e.g., "She stood and watched").
 
 ═══════════════════════════════════════════════════════════════════
 IMAGE PROMPT FORMAT (CRITICAL -- FOLLOW EXACTLY)
@@ -298,28 +304,28 @@ IMAGE PROMPT FORMAT (CRITICAL -- FOLLOW EXACTLY)
 
 Write each image prompt as a short, cohesive paragraph (3-5 sentences).
 150-250 words. NO bullet points, NO labeled sections, NO line breaks.
-Trust the character sheet references -- do not verbosely re-describe faces, but DO use a 1-2 word physical anchor.
+Trust the references for WHO the person is. Repeat the short identity_card.
+Do not paste or lock the reference face.
 
-Refer to each character's reference image explicitly at the start, combining the reference with a brief visual anchor and their name (Hybrid Approach):
-"Take the brown-haired man from the first image (which is {{Name}}'s character reference) and use {{his/her}} exact face and build. Take the young girl from the second image..."
+Start by photographing the person from the reference inside the new scene:
+"Photograph the brown-haired man from the first image as {{Name}} ({{identity_card}}),
+the same person newly captured in this scene, not a pasted face..."
 
 COMPOSITION PATTERN (follow this exact structure):
-  1. Image Commands: Start by explicitly referencing the input images using direct commands (e.g., "Take the man from the first image and the girl from the second image...").
-  2. Identity Lock: Explicitly command the model to keep features unchanged (e.g., "Ensure their facial features and identities remain completely unchanged.").
-  3. Scene Description: "Generate a realistic cinematic [shot_type] of them..." followed by their action, pose, and the environment.
-  4. Action Geometry: Their bodies are mid-action, but BOTH FACES MUST POINT DIRECTLY AT CAMERA (0 degrees) and eyes stay at/near lens.
-  5. Expression: Subtle micro-expressions only, mouths closed, low-intensity emotion only.
-  6. Technicals: Lighting, depth of field, 8K realism.
-  7. Semantic Negative Prompt: Weave constraints into a positive descriptive sentence: {SHORT_NEGATIVES}
+  1. Who: Photograph {{Name}} from the reference as the same person in this scene.
+  2. Identity card: one short clause (age, hair, skin, unique marks).
+  3. Scene + action: what they are doing, where, at what moment.
+  4. Integration: {SCENE_INTEGRATION_PHRASE}
+  5. Expression and gaze that match the action (not a lens stare).
+  6. Technicals: shot size, depth of field, shared lighting.
+  7. Close with: {SHORT_NEGATIVES}
 
 COVER ONLY: Weave the title into the sentence:
 "...prominent title text at top reading '{{BookTitle}}' in large cinematic title
 lettering styled to match the story's mood and setting, professional movie-poster
-polish while staying purely photographic, text lighting matches scene atmosphere,
-framed by an elegant, thematic border..."
-For cover prompts, explicitly state: ALL characters keep fully frontal faces
-(0 degrees), both eyes equally visible, mouths closed, and subtle low-intensity
-micro-expressions only.
+polish while staying purely photographic, text lighting matches scene atmosphere..."
+Cover people are photographed inside the cover scene with the same integration
+rules -- not a row of frontal headshots under a title.
 
 --- FEW-SHOT EXAMPLE 1 (2-character, ~160 words -- TARGET LENGTH) ---
 
@@ -366,38 +372,39 @@ WRITING TEST: Before you output each page's story text, ask yourself:
 "Can an 8-year-old immediately picture what is happening in each sentence?"
 If the answer is NO for any sentence, rewrite that sentence with a simpler, more direct action.
 
-CHARACTER SHEET PROMPT FORMAT (exception -- this one uses bullet points):
-"- Scene: Character reference sheet with TWO views of the same person.
-- Left inset (~40% of frame): Original close-up headshot from the input photo,
-  preserved AS-IS for framing (do NOT crop tighter, do NOT zoom in, do NOT trim
-  forehead/chin/hairline compared with the source close-up).
-- Right main (~75% of frame): Full-body pose in {{COSTUME_DETAILS}},
-  standing against seamless neutral gray background.
-- Both views show the EXACT same person. Hairstyle unchanged.
-- Face points at camera in both views, both eyes visible, neutral expression.
-- Style: Ultra-realistic photography.
-- {NEGATIVE_PHRASE}"
+CHARACTER SHEET PROMPT FORMAT (one photograph, never a collage):
+"Photograph the person from the reference as a single full-body costume reference.
+They wear {{COSTUME_DETAILS}} in a simple real photography studio with soft even
+light. Same person, same hair, same age. One continuous photograph filling the
+frame -- no inset headshot, no split screen, no two-panel layout, no border.
+Natural relaxed stance, face readable (slight 3/4 is fine). Ultra-realistic
+photography. {NEGATIVE_PHRASE}"
+
+INVENTED COMPANION SHEET (no uploaded photo -- create from the identity_card):
+"Create a single full-body photograph of {{Name}}, {{identity_card}}, standing
+in a simple studio with even light. This exact creature must be reusable on
+every story page. One continuous photograph, no collage, no extra animals.
+The uploaded human photo is style and scale only -- do not copy that person's face."
 
 ═══════════════════════════════════════════════════════════════════
 SHOT ARC (VARY PER PAGE)
 ═══════════════════════════════════════════════════════════════════
 
-- Page 1: medium, eye-level
-- Page 2: MCU, eye-level
-- Page 3: medium, eye-level
-- Page 4: medium, slightly high angle
-- Page 5: close-up, eye-level
-- Page 6: MCU, eye-level
-- Page 7: medium, eye-level
+- Page 1: medium, eye-level, looking into the scene
+- Page 2: MCU, slight three-quarter face, engaged with the action
+- Page 3: medium, eye-level, new pose
+- Page 4: medium, slightly high angle, interacting with a prop
+- Page 5: close-up, face taking the scene light
+- Page 6: MCU, eye-level, new action
+- Page 7: medium, eye-level, with companion or prop
 - Page 8: MCU, slightly high angle
-- Page 9: medium, slightly low angle
-- Page 10: MCU, eye-level
+- Page 9: medium, slightly low angle, peak action
+- Page 10: MCU, resolution beat, still inside the location
 
 RULES: NEVER use "wide", "extreme wide", or "establishing" shots.
 Widest allowed: "medium". Closest: "close-up".
-Keep poses simple: standing, walking, seated. Face accuracy > pose creativity.
-Characters are ALWAYS the primary subject. Background supports, not overwhelms.
-NO dense particle effects on characters (mist, spray, smoke).
+Faces stay large enough to keep identity. People are ALWAYS the subject.
+NO dense particles that erase the face. Weather on the person is required.
 
 ═══════════════════════════════════════════════════════════════════
 BANNED PHRASES & ANTI-PATTERNS (NEVER include in any prompt)
@@ -426,27 +433,30 @@ cohesive paragraph without bullet points.
 INPUT IMAGES & JSON SCHEMA
 ═══════════════════════════════════════════════════════════════════
 
-For character sheets: input_images has 1 image (face photo).
-For cover and pages: input_images has 1 image per character (costume sheet).
-  Order: char_1 sheet first, then char_2 sheet, etc.
+For uploaded people: character-sheet input_images has 1 image (face photo).
+For an invented companion: input_images is ["input_images/char_1_face.jpeg"]
+  (style/scale only -- do not copy that face).
+For cover and pages: input_images has 1 costume sheet per character in the scene.
+  Order: char_1 sheet first, then others.
   ["generated/char_1_sheet.png", "generated/char_2_sheet.png"]
 
-In your prompts, refer to each character's reference image explicitly using
-a hybrid approach at the start, e.g. "Take the man from the first image
-(which is Babu's character reference) and use his exact face and build".
-Do NOT use formal labels like "Image 1:" or "Image 2:". Do NOT use bullet points.
+In prompts, photograph the person from the reference inside the new scene.
+Do NOT say "use the exact face" or "faces pointed at camera (0 degrees)".
+Do NOT use formal labels like "Image 1:". Do NOT use bullet points.
 
 JSON structure:
 {{{{
   "characters": [
     {{{{
       "index": 1, "name": "string", "character_type": "string",
+      "source": "photo",
       "description": "string", "role": "main", "age": number,
       "gender": "string", "relationship": "string",
       "height_description": "string",
+      "identity_card": "string (short reusable visual lock)",
       "input_images": ["input_images/char_1_face.jpeg"],
       "output_image": "generated/char_1_sheet.png",
-      "prompt": "string (character sheet prompt)"
+      "prompt": "string (single full-body sheet, no inset)"
     }}}}
   ],
   "book": {{{{
@@ -467,45 +477,35 @@ JSON structure:
 }}}}
 
 GENERATION STEPS (internal, output JSON only):
-1) Analyze face photos for age, gender, ethnicity, features.
+1) Analyze face photos for age, gender, ethnicity, features. Write identity_card.
 2) Create character descriptions + iconic costumes.
-3) Generate character sheet prompts (use CHARACTER SHEET format above).
+2b) If the story needs a recurring pet/sidekick, add ONE invented character
+    with identity_card and a companion sheet prompt.
+3) Generate character sheet prompts (single full-body photo, no inset).
 4) Generate cover prompt (short, cohesive paragraph, 150-250 words).
 5) For pages 1-10: write story, pick shot from arc, build a short, cohesive
    paragraph following the FEW-SHOT EXAMPLES above.
-5b) Use explicit hybrid identity anchoring at the start of the prompt:
-    "Take the brown-haired man from the first image (which is {{Name}}'s character reference)
-    and use his exact face and build". Use a brief 1-2 word visual anchor, but do NOT verbosely re-describe faces.
+5b) Start each prompt with "Photograph {{Name}} from the first image as the same
+    person newly captured in this scene" plus the identity_card. If a companion
+    is in the scene, name their identity_card too.
 6) Validate:
-   - Every prompt uses direct image commands ("Take the man...").
    - Every prompt is a cohesive paragraph (no bullet points, no line breaks).
-   - Every prompt includes: facing camera, neutral expression, both eyes visible.
-   - FRONTAL FACE CHECK: Reject any wording that can produce side face
-     (e.g., "looking away", "turned toward", "profile", "3/4", "over shoulder").
-     Rewrite to keep face fully frontal for ALL characters.
-   - EXPRESSION INTENSITY CHECK: Reject strong-expression words ("intense",
-     "furious", "shocked", "ecstatic", "dramatic"). Rewrite to low-intensity
-     subtle emotion only.
-   - ACTION VARIETY CHECK: Verify that NO two pages use the same action, stance,
-     or setup. Every page must feel like a completely new, epic moment.
-   - IMAGE-TEXT COHERENCE CHECK: Re-read the story text for each page. Verify
-     the image prompt shows the EXACT primary action described in that text.
-     If story says "he ran", prompt must show "mid-stride, body leaning forward".
-     If story says "she pulled the rope", prompt must show "arms extended, gripping
-     rope, body leaning back with effort". If they do not match, REWRITE the prompt.
-   - STORY TEXT SIMPLICITY CHECK: Re-read each page's story text. If any sentence
-     uses a metaphor, simile, abstract noun, or passive voice, REWRITE that sentence
-     with a plain, direct, active-voice alternative. An 8-year-old must be able to
-     picture every sentence immediately.
-   - COVER REALISM CHECK: In cover prompt wording, reject terms that push rendered
-     style ("3D typography", "extruded text", "CGI text", "illustrated title").
-     Rewrite to photographic title lettering integrated into a real scene.
-   - COVER FRONTAL ALL-CHARACTERS CHECK: For cover prompt, verify EVERY character
-     is explicitly required to keep face frontal (0 degrees) with both eyes visible.
-     If not explicit for all characters, REWRITE before output.
-   - Every prompt ends with a semantic negative sentence (not a comma-separated list of keywords).
-   - Character sheet prompt requires left inset ~40% with ORIGINAL headshot framing
-     preserved as-is (no tighter crop / no extra zoom versus source face image).
+   - Every prompt photographs people INSIDE the scene and asks to relight them.
+   - COLLAGE CHECK: Reject "use the exact face", "faces pointed at camera
+     (0 degrees)", "mouths closed", "both eyes fully visible and frontal",
+     "inset headshot", "split screen". Rewrite to scene photography.
+   - GAZE CHECK: The person looks at the story action, not a passport lens,
+     unless the beat is a quiet wait.
+   - EXPRESSION CHECK: Reject big-expression words (grin, teeth, scream,
+     grimace, shout, crying). Keep a subtle, photo-like face.
+   - ACTION VARIETY CHECK: No two pages share the same stance or setup.
+   - IMAGE-TEXT COHERENCE CHECK: The image shows the page's primary action.
+   - STORY TEXT SIMPLICITY CHECK: An 8-year-old can picture every sentence.
+   - COVER REALISM CHECK: Reject 3D/CGI title effects and decorative frames.
+   - COMPANION CHECK: If a named pet/sidekick recurs, they have one
+     identity_card and appear as that same creature on every relevant page.
+   - Every prompt ends with a semantic negative sentence about no collage.
+   - Character sheet is ONE photograph (no inset / no two-panel).
    - Cover prompt includes the book title woven into the sentence.
 7) COUNT WORDS in each prompt. If over 250, trim. NEVER exceed 280.
 
@@ -656,3 +656,70 @@ def Story_content_generator_v2(
                 "usage": _extract_langchain_token_usage(message),
             }
         raise
+
+
+def build_identity_card(char: Dict[str, Any]) -> str:
+    """Short reusable visual lock for a person or invented companion."""
+    existing = (char.get("identity_card") or "").strip()
+    if existing:
+        return existing
+    name = (char.get("name") or "the character").strip()
+    age = char.get("age")
+    gender = (char.get("gender") or "").strip()
+    desc = (char.get("description") or char.get("character_type") or "").strip()
+    bits = [name]
+    if age not in (None, "", "unknown"):
+        bits.append(f"age {age}")
+    if gender and gender.lower() not in ("unknown", "other"):
+        bits.append(gender)
+    if desc:
+        bits.append(desc[:160])
+    return ", ".join(bits)
+
+
+_COLLAGE_PATTERNS = (
+    (re.compile(r"\buse (?:his|her|their|the) exact face\b", re.I), "photograph as the same person"),
+    (re.compile(r"\bfaces? (?:are |keep )?(?:pointed|point) (?:directly )?at (?:the )?camera\b", re.I), "heads follow the action"),
+    (re.compile(r"\s*\(0\s*degrees\)", re.I), ""),
+    (re.compile(r"\bboth eyes (?:fully |equally )?visible\b", re.I), "face stays readable"),
+    (re.compile(r"\bmouths? (?:MUST remain |must remain |remain )?closed\b", re.I), "mouth relaxed, subtle expression"),
+    (re.compile(r"\bno profile(?: views| angles)?\b", re.I), "three-quarter views are allowed"),
+    (re.compile(r"\bstrictly face the camera\b", re.I), "look toward the story action"),
+    (re.compile(r"left inset|two views of the same person|headshot inset", re.I), "one full-body photograph"),
+    (re.compile(r"split[- ]screen", re.I), "collage layout"),
+)
+
+
+def strip_collage_language(prompt: str) -> str:
+    """Remove leftover frontal-lock / paste-face wording from model prompts."""
+    out = prompt or ""
+    for pattern, repl in _COLLAGE_PATTERNS:
+        out = pattern.sub(repl, out)
+    out = re.sub(r"\s{2,}", " ", out).strip()
+    return out
+
+
+def scene_integration_prefix(characters: List[Dict[str, Any]], char_indexes: List[int]) -> str:
+    """Stable prefix injected in front of cover/page prompts at render time."""
+    cards = []
+    for idx in char_indexes:
+        char = next((c for c in characters if isinstance(c, dict) and c.get("index") == idx), None)
+        if not char:
+            continue
+        name = char.get("name") or f"Character {idx}"
+        card = build_identity_card(char)
+        kind = "companion" if (char.get("source") == "invented" or (char.get("character_type") or "").lower() in ("pet", "animal", "dog", "cat", "horse")) else "person"
+        cards.append(f"{name} ({kind}): {card}")
+    card_line = " ".join(cards) if cards else ""
+    return (
+        f"{SCENE_INTEGRATION_PHRASE} "
+        f"Identity lock for this frame: {card_line} "
+        "Keep each named companion identical to their sheet -- same species, markings, size, and colors. "
+    )
+
+
+def sheet_anti_collage_suffix() -> str:
+    return (
+        " One single continuous photograph of the whole figure. "
+        "No inset headshot, no split screen, no two-panel layout, no decorative border."
+    )
