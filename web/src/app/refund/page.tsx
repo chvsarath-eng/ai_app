@@ -124,7 +124,7 @@ export default function RefundPage () {
         </p>
       </section>
 
-      <section className="mt-10 rounded-2xl border border-violet-100 bg-violet-50/70 p-6">
+      <section className="mt-10 rounded-2xl border border-zinc-200/70 bg-zinc-50 p-6">
         <p className="text-sm text-zinc-700">
           <strong>Note:</strong> This refund policy is part of our{' '}
           <a className="text-violet-600 hover:text-violet-700 underline" href="/terms">Terms of Service</a>. 

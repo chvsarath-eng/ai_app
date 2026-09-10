@@ -90,7 +90,7 @@ export default function AccountPage () {
             <h3 className="text-xs font-medium uppercase tracking-widest text-zinc-400">Quick links</h3>
             <Link
               href="/projects"
-              className="flex items-center justify-between rounded-2xl border border-zinc-200/70 p-3.5 transition hover:border-violet-200 hover:bg-violet-50/40"
+              className="flex items-center justify-between rounded-2xl border border-zinc-200/70 p-3.5 transition hover:border-zinc-300 hover:bg-zinc-50"
             >
               <div className="flex items-center gap-3">
                 <BookOpen className="h-5 w-5 text-violet-600" />

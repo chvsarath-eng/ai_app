@@ -99,14 +99,14 @@ export function PaymentSuccess ({
             </div>
 
             {/* What happens next */}
-            <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/50 p-4">
+            <div className="mt-4 rounded-2xl border border-zinc-200/70 bg-zinc-50 p-4">
               <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-100">
-                  <Clock className="h-4 w-4 text-violet-600" />
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 via-fuchsia-500 to-pink-500 text-white shadow-sm">
+                  <Clock className="h-4 w-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-medium text-violet-900">What happens next?</h3>
-                  <p className="mt-1 text-sm text-violet-700">
+                  <h3 className="text-sm font-semibold text-zinc-900">What happens next?</h3>
+                  <p className="mt-1 text-sm text-zinc-600">
                     {isDigital
                       ? 'Your storybook will be ready in 10-15 minutes. Check your email!'
                       : 'Your book will ship in 5-7 business days. Check your email for tracking.'

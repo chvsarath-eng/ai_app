@@ -489,7 +489,7 @@ export default function AdminPage () {
                                 </span>
                               )}
                               {isGenerating && (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-2.5 py-0.5 text-[11px] font-semibold text-violet-700 ring-1 ring-violet-200/70 animate-pulse">
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-pink-500 px-2.5 py-0.5 text-[11px] font-semibold text-white shadow-sm animate-pulse">
                                   <Clock className="h-3 w-3 animate-spin" /> {job.stage || 'Rendering'}
                                 </span>
                               )}
@@ -707,7 +707,7 @@ export default function AdminPage () {
                   onClick={handleTestConnection}
                   disabled={isTesting}
                   variant="outline"
-                  className="text-xs font-semibold h-9 border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100"
+                  className="text-xs font-semibold h-9"
                 >
                   {isTesting ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
                   Test API Connection

@@ -26,7 +26,7 @@ export function SignInDialog () {
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) closeSignIn() }}>
       <DialogContent className="max-w-md p-6 sm:p-7">
         <DialogHeader className="mb-4 pr-10">
-          <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-100 text-violet-700">
+          <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 via-fuchsia-500 to-pink-500 text-white shadow-md">
             <Sparkles className="h-5 w-5" />
           </div>
           <DialogTitle>Save your book to your account</DialogTitle>
