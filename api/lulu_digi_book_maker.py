@@ -38,6 +38,39 @@ try:
 except Exception:
     HAS_PYMUPDF = False
 
+_API_DIR = Path(__file__).resolve().parent
+_BUNDLED_FONTS_DIR = _API_DIR / 'fonts'
+_BUNDLED_QR_PATH = _API_DIR / 'qr-code.png'
+IMG2X_URL = 'https://img2x.com'
+
+
+def ensure_img2x_qr_png() -> Path:
+    """Return the img2x.com QR image, generating it if the file is missing."""
+    if _BUNDLED_QR_PATH.exists() and _BUNDLED_QR_PATH.stat().st_size > 1000:
+        return _BUNDLED_QR_PATH
+    _BUNDLED_QR_PATH.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        import qrcode
+        qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=12, border=2)
+        qr.add_data(IMG2X_URL)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color='black', back_color='white').convert('RGB')
+        img.save(_BUNDLED_QR_PATH, format='PNG')
+        return _BUNDLED_QR_PATH
+    except Exception:
+        pass
+    try:
+        import urllib.request
+        url = 'https://api.qrserver.com/v1/create-qr-code/?size=512x512&ecc=M&data=https%3A%2F%2Fimg2x.com'
+        with urllib.request.urlopen(url, timeout=20) as resp:
+            data = resp.read()
+        if data and data[:8] == b'\x89PNG\r\n\x1a\n':
+            _BUNDLED_QR_PATH.write_bytes(data)
+            return _BUNDLED_QR_PATH
+    except Exception:
+        pass
+    return _BUNDLED_QR_PATH
+
 # =============================================================================
 # OPTIONAL: GCS upload (uses GOOGLE_APPLICATION_CREDENTIALS from .env)
 # =============================================================================
@@ -915,6 +948,8 @@ class FastLuluBookGenerator:
                     self._font_italic_file = env_regular
             else:
                 font_dirs = []
+                if _BUNDLED_FONTS_DIR.is_dir():
+                    font_dirs.append(str(_BUNDLED_FONTS_DIR))
                 custom_dir = os.getenv('BOOK_FONTS_DIR')
                 if custom_dir:
                     font_dirs.append(custom_dir)
@@ -985,6 +1020,14 @@ class FastLuluBookGenerator:
             self._font_body = None
             self._font_bold = None
             self._font_italic = None
+
+    def _body_fontname(self) -> str:
+        return self._font_body_name if self._font_body_file else 'helv'
+
+    def _bold_fontname(self) -> str:
+        if self._font_bold_file:
+            return self._font_bold_name
+        return self._font_body_name if self._font_body_file else 'helvb'
 
     def _register_fonts_on_page(self, page):
         """Ensure our embedded fonts are registered on the given page."""
@@ -1373,7 +1416,7 @@ class FastLuluBookGenerator:
             title_rect,
             self.book_title,
             fontsize=TITLE_FONT_SIZE,
-            fontname=self._font_bold_name if self._font_bold_file else 'helvb',
+            fontname=self._bold_fontname(),
             color=to_rgb(TEXT_COLOR),
             align=fitz.TEXT_ALIGN_CENTER
         )
@@ -1511,7 +1554,7 @@ class FastLuluBookGenerator:
             title_rect,
             title_text,
             fontsize=24,
-            fontname=self._font_bold_name if self._font_bold_file else 'helvb',
+            fontname=self._bold_fontname(),
             color=to_rgb(TEXT_COLOR),
             align=fitz.TEXT_ALIGN_CENTER
         )
@@ -1731,7 +1774,7 @@ class FastLuluBookGenerator:
                     cell_rect.x0 + ir.x0,
                     cell_rect.y0 + ir.y0,
                     cell_rect.x0 + ir.x1,
-                    cell_rect.y1 - ir.y1
+                    cell_rect.y0 + ir.y1
                 )
                 self._draw_image_with_frame(page, img_path, placed)
             else:
@@ -1746,6 +1789,8 @@ class FastLuluBookGenerator:
 
     def _draw_image_with_frame(self, page, img_path, placed_rect):
         """Draw image with subtle frame border."""
+        if placed_rect is None or placed_rect.is_empty or placed_rect.is_infinite or placed_rect.width <= 1 or placed_rect.height <= 1:
+            return
         frame_pad = 4
         frame_rect = fitz.Rect(
             placed_rect.x0 - frame_pad,
@@ -1803,10 +1848,13 @@ class FastLuluBookGenerator:
         # Position each element from top to bottom
         y_cursor = content_top
 
-        # 1. Headline: "The End" - prominent, centered, black bold
-        # Use insert_text for more reliable rendering at large font sizes
+        # 1. Headline: "The End" — same family as story pages
         the_end_fontsize = 28
-        the_end_font = self._font_bold_name if self._font_bold_file else 'helvb'
+        the_end_font = self._font_bold_name if self._font_bold_file else (
+            self._font_body_name if self._font_body_file else 'helvb'
+        )
+        body_font = self._font_body_name if self._font_body_file else 'helv'
+        bold_font = the_end_font
         the_end_text = 'The End'
         
         # Measure text width to center it
@@ -1885,7 +1933,7 @@ class FastLuluBookGenerator:
             thank_rect,
             'Thank you for creating this story with us.',
             fontsize=13,
-            fontname=self._font_bold_name if self._font_bold_file else 'helvb',
+            fontname=self._bold_fontname(),
             color=to_rgb(Color(0, 0, 0)),
             align=fitz.TEXT_ALIGN_CENTER
         )
@@ -1898,7 +1946,7 @@ class FastLuluBookGenerator:
             cta_rect,
             'Create more stories at img2x.com',
             fontsize=13,
-            fontname=self._font_bold_name if self._font_bold_file else 'helvb',
+            fontname=self._bold_fontname(),
             color=to_rgb(cta_color),
             align=fitz.TEXT_ALIGN_CENTER
         )
@@ -1935,11 +1983,12 @@ class FastLuluBookGenerator:
 
         # QR code
         qr_path_candidates = [
+            ensure_img2x_qr_png(),
             Path(__file__).resolve().parent / 'qr-code.png',
             self.story_data_path.parent / 'qr-code.png',
             self.output_dir.parent / 'qr-code.png'
         ]
-        qr_path = next((p for p in qr_path_candidates if p.exists()), None)
+        qr_path = next((p for p in qr_path_candidates if p and Path(p).exists()), None)
 
         if qr_path:
             from io import BytesIO
@@ -1973,7 +2022,7 @@ class FastLuluBookGenerator:
                 qr_rect,
                 'QR\n(Missing)',
                 fontsize=14,
-                fontname=self._font_bold_name if self._font_bold_file else 'helvb',
+                fontname=self._bold_fontname(),
                 color=to_rgb(Color(0.45, 0.45, 0.45)),
                 align=fitz.TEXT_ALIGN_CENTER
             )
@@ -1997,7 +2046,7 @@ class FastLuluBookGenerator:
             ),
             'The End',
             fontsize=36,
-            fontname=self._font_bold_name if self._font_bold_file else 'helvb',
+            fontname=self._bold_fontname(),
             color=to_rgb(ACCENT_COLOR),
             align=fitz.TEXT_ALIGN_CENTER
         )

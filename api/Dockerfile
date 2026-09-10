@@ -26,10 +26,10 @@ COPY . /app
 # Default book font settings (can be overridden in Cloud Run)
 # Set font environment variables to use the reliable, static Liberation fonts 
 # (already installed via fonts-liberation apt package)
-ENV BOOK_FONT_REGULAR=/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf \
-    BOOK_FONT_BOLD=/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf \
-    BOOK_FONT_ITALIC=/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf \
-    BOOK_FONTS_DIR=/usr/share/fonts/truetype/liberation
+ENV BOOK_FONT_REGULAR=/app/fonts/DejaVuSerif.ttf \
+    BOOK_FONT_BOLD=/app/fonts/DejaVuSerif-Bold.ttf \
+    BOOK_FONT_ITALIC=/app/fonts/DejaVuSerif-Italic.ttf \
+    BOOK_FONTS_DIR=/app/fonts
 
 # Run as non-root (recommended for Cloud Run)
 RUN useradd --create-home --shell /usr/sbin/nologin appuser \

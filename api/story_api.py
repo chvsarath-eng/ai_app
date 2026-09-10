@@ -11,7 +11,13 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from strgen import Story_content_generator_with_usage, Story_content_generator
-from storygen_v2 import Story_content_generator_v2
+from storygen_v2 import (
+    Story_content_generator_v2,
+    build_identity_card,
+    scene_integration_prefix,
+    sheet_anti_collage_suffix,
+    strip_collage_language,
+)
 
 import time
 
@@ -851,55 +857,160 @@ def generate_ebook_html_bundle(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+_RECURRING_PET_LOCKS = {
+    "dog": "the same medium dog every page: warm tan coat, darker ears, white chest blaze, brown eyes, black nose, slightly floppy ears",
+    "puppy": "the same small puppy every page: warm tan coat, darker ears, white chest blaze, brown eyes, black nose",
+    "cat": "the same cat every page: short orange tabby coat, white paws, green eyes, pink nose",
+    "kitten": "the same kitten every page: short orange tabby coat, white paws, green eyes",
+    "horse": "the same horse every page: chestnut coat, black mane and tail, white star on the forehead",
+    "pony": "the same pony every page: chestnut coat, black mane, white star on the forehead",
+}
+
+
+def _maybe_add_recurring_companion(story: Dict[str, Any], num_uploaded: int) -> None:
+    """If the story keeps naming a pet but the model skipped a sheet, add one."""
+    characters = story.get("characters")
+    if not isinstance(characters, list):
+        return
+    if any(isinstance(c, dict) and (c.get("source") == "invented") for c in characters):
+        return
+    if len([c for c in characters if isinstance(c, dict)]) > num_uploaded:
+        return
+    pages = story.get("pages") if isinstance(story.get("pages"), list) else []
+    blob = " ".join(
+        str(p.get("story") or "") + " " + str(p.get("prompt") or "")
+        for p in pages if isinstance(p, dict)
+    ).lower()
+    book = story.get("book") if isinstance(story.get("book"), dict) else {}
+    blob += " " + str(book.get("prompt") or "").lower()
+    if not blob:
+        return
+    counts = {word: len(re.findall(rf"\b{word}s?\b", blob)) for word in _RECURRING_PET_LOCKS}
+    best = max(counts, key=counts.get)
+    if counts[best] < 3:
+        return
+    lock = _RECURRING_PET_LOCKS[best]
+    name = best.title()
+    idx = len(characters) + 1
+    characters.append({
+        "index": idx,
+        "name": name,
+        "character_type": best,
+        "source": "invented",
+        "role": "companion",
+        "description": lock,
+        "identity_card": lock,
+        "prompt": (
+            f"Create a single full-body photograph of {name}, {lock}, standing in a simple studio "
+            "with even light. One continuous photograph, no collage, no extra animals. "
+            "The uploaded human photo is style and scale only -- do not copy that person's face."
+        ),
+    })
+    logger.info("added invented companion from story text: %s mentions=%d", best, counts[best])
+
+
 def _ensure_story_paths_consistent_v2(
     story: Dict[str, Any],
     num_characters: int,
 ) -> Dict[str, Any]:
     """
     Enforce V2 path conventions:
-      - Face photos at: input_images/char_N_face.jpeg (for character sheet gen)
+      - Uploaded face photos at: input_images/char_N_face.jpeg
+      - Invented companions (pets) reuse char_1_face.jpeg as style/scale only
       - Character sheets at: generated/char_N_sheet.png
-      - Cover/page input_images contain costume sheets ONLY (not face+sheet pairs)
-        because sheets already embed the character's face, reducing image count
-        and cross-attention dilution.
+      - Cover/page input_images use costume sheets (one per character in scene)
     """
+    _maybe_add_recurring_companion(story, num_characters)
     # Fix character paths
     characters = story.get("characters")
     if isinstance(characters, list):
+        # Drop extra invented companions beyond one so payloads stay small.
+        uploaded: List[Dict[str, Any]] = []
+        invented: List[Dict[str, Any]] = []
+        _animal_tokens = ("pet", "animal", "dog", "cat", "horse", "puppy", "kitten", "bird")
+        for char in characters:
+            if not isinstance(char, dict):
+                continue
+            source = (char.get("source") or "").strip().lower()
+            kind = " ".join(
+                str(char.get(k) or "") for k in ("character_type", "relationship", "role", "description")
+            ).lower()
+            looks_animal = any(tok in kind for tok in _animal_tokens)
+            if source == "invented" or looks_animal or len(uploaded) >= num_characters:
+                invented.append(char)
+            else:
+                uploaded.append(char)
+        characters[:] = uploaded + invented[:1]
         for i, char in enumerate(characters, 1):
             if not isinstance(char, dict):
                 continue
-            char["input_images"] = [f"input_images/char_{i}_face.jpeg"]
+            char["index"] = i
+            is_invented = i > num_characters or (char.get("source") or "").lower() == "invented"
+            if is_invented:
+                char["source"] = "invented"
+                char["role"] = char.get("role") or "companion"
+                char["input_images"] = ["input_images/char_1_face.jpeg"]
+            else:
+                char["source"] = "photo"
+                char["input_images"] = [f"input_images/char_{i}_face.jpeg"]
+                if "role" not in char:
+                    char["role"] = "main" if i == 1 else "supporting"
             char["output_image"] = f"generated/char_{i}_sheet.png"
-            if "index" not in char:
-                char["index"] = i
-            if "role" not in char:
-                char["role"] = "main" if i == 1 else "supporting"
+            char["identity_card"] = build_identity_card(char)
+            char["prompt"] = strip_collage_language(str(char.get("prompt") or "")) + sheet_anti_collage_suffix()
+
+    char_list = characters if isinstance(characters, list) else []
+    total_chars = len(char_list) or num_characters
+    valid_idxs = {c.get("index") for c in char_list if isinstance(c, dict)}
+    companion_idxs = [
+        c.get("index")
+        for c in char_list
+        if isinstance(c, dict) and (c.get("source") == "invented")
+    ]
+
+    def _clean_cis(raw: List[Any]) -> List[int]:
+        cleaned = [int(x) for x in raw if isinstance(x, (int, float)) and int(x) in valid_idxs]
+        return cleaned or [1]
 
     def _build_input_images_for_scene(chars_in_scene: List[int]) -> List[str]:
-        """Build costume-sheet-only image list for a scene.
-
-        Per research on cross-attention dilution (Jan 2026), we pass only
-        costume sheets (which already contain the character's face) instead
-        of separate face+costume pairs.  This reduces images from 4 to 2
-        for a 2-character scene, cutting model confusion in half.
-        """
         imgs: List[str] = []
         for idx in chars_in_scene:
             imgs.append(f"generated/char_{idx}_sheet.png")
         return imgs
 
+    def _include_companion_if_mentioned(cis: List[int], text: str) -> List[int]:
+        out = [int(x) for x in cis if isinstance(x, (int, float))]
+        blob = (text or "").lower()
+        for char in char_list:
+            if not isinstance(char, dict) or char.get("source") != "invented":
+                continue
+            idx = char.get("index")
+            name = str(char.get("name") or "").strip().lower()
+            kind = str(char.get("character_type") or "").strip().lower()
+            tokens = [t for t in (name, kind) if t and t not in ("pet", "animal", "companion")]
+            if idx and idx not in out and any(t in blob for t in tokens):
+                out.append(idx)
+        return out or [1]
+
+    def _finalize_scene_prompt(raw: str, cis: List[int]) -> str:
+        cleaned = strip_collage_language(str(raw or ""))
+        prefix = scene_integration_prefix(char_list, cis)
+        return f"{prefix}{cleaned}"
+
     # Fix book paths
     book = story.get("book")
     if isinstance(book, dict):
         cis = book.get("characters_in_scene")
-        if isinstance(cis, list) and cis:
-            book["input_images"] = _build_input_images_for_scene(cis)
-        elif not book.get("input_images"):
-            # Default: all characters
-            all_idxs = list(range(1, num_characters + 1))
-            book["characters_in_scene"] = all_idxs
-            book["input_images"] = _build_input_images_for_scene(all_idxs)
+        if not (isinstance(cis, list) and cis):
+            cis = list(range(1, total_chars + 1))
+        cis = _clean_cis(cis)
+        if companion_idxs:
+            for idx in companion_idxs:
+                if idx not in cis:
+                    cis.append(idx)
+        book["characters_in_scene"] = cis
+        book["input_images"] = _build_input_images_for_scene(cis)
+        book["prompt"] = _finalize_scene_prompt(book.get("prompt", ""), cis)
         if not book.get("output_image"):
             book["output_image"] = "generated/book_cover.png"
 
@@ -912,12 +1023,15 @@ def _ensure_story_paths_consistent_v2(
             if page.get("page_number") is None:
                 page["page_number"] = i
             cis = page.get("characters_in_scene")
-            if isinstance(cis, list) and cis:
-                page["input_images"] = _build_input_images_for_scene(cis)
-            elif not page.get("input_images"):
-                # Default: just the main character
-                page["characters_in_scene"] = [1]
-                page["input_images"] = _build_input_images_for_scene([1])
+            if not (isinstance(cis, list) and cis):
+                cis = [1]
+            cis = _include_companion_if_mentioned(
+                _clean_cis(cis),
+                str(page.get("story") or "") + " " + str(page.get("prompt") or ""),
+            )
+            page["characters_in_scene"] = cis
+            page["input_images"] = _build_input_images_for_scene(cis)
+            page["prompt"] = _finalize_scene_prompt(page.get("prompt", ""), cis)
             if not page.get("output_image"):
                 page["output_image"] = f"generated/page_{page['page_number']}.png"
 
@@ -990,6 +1104,22 @@ def generate_ebook_html_bundle_v2(
     base_dir.mkdir(parents=True, exist_ok=True)
     (base_dir / "input_images").mkdir(parents=True, exist_ok=True)
     (base_dir / "generated").mkdir(parents=True, exist_ok=True)
+
+    normalized_faces: List[str] = []
+    for i, face_path in enumerate(face_image_paths, 1):
+        dest = base_dir / "input_images" / f"char_{i}_face.jpeg"
+        src = Path(face_path)
+        if not src.exists():
+            raise FileNotFoundError(f"Face photo not found: {src}")
+        if src.resolve() != dest.resolve():
+            from PIL import Image as _PILImage, ImageOps as _PILOps
+            with _PILImage.open(src) as im:
+                im = _PILOps.exif_transpose(im)
+                if im.mode != "RGB":
+                    im = im.convert("RGB")
+                im.save(dest, format="JPEG", quality=95, optimize=True)
+        normalized_faces.append(str(dest))
+    face_image_paths = normalized_faces
 
     # Build character_inputs for storygen_v2
     character_inputs: List[Dict[str, Any]] = []
@@ -1212,13 +1342,25 @@ def generate_ebook_html_bundle_v2(
             continue
         idx = char.get("index", 1)
         name = char.get("name", f"Character {idx}")
+        is_invented = (char.get("source") or "") == "invented"
+        if is_invented:
+            sheet_label = (
+                f"Style and scale reference only. Do not copy this person's face. "
+                f"Create {name} as a new companion: {char.get('identity_card') or name}."
+            )
+        else:
+            sheet_label = (
+                f"{name}'s real photograph — identity only. Photograph this same person "
+                f"as a single full-body costume reference. Relight them for the studio. "
+                f"No inset, no collage. Identity: {char.get('identity_card') or name}."
+            )
         phase1_tasks.append({
             "type": "character",
             "name": f"Character {idx} ({name})",
             "prompt": char.get("prompt", ""),
             "input_images": char.get("input_images", []),
             "output_image": char.get("output_image", f"generated/char_{idx}_sheet.png"),
-            "image_labels": [f"{name}'s face reference (use this exact face):"],
+            "image_labels": [sheet_label],
         })
 
     # Phase 2: Cover + pages (multi-character with interleaved labeling)
@@ -1239,7 +1381,10 @@ def generate_ebook_html_bundle_v2(
         cover_labels: List[str] = []
         for i, char_idx in enumerate(cis, 1):
             cname = char_name_map.get(char_idx, f"Character {char_idx}")
-            cover_labels.append(f"{cname}'s character reference (use this exact face, build, and outfit):")
+            cover_labels.append(
+                f"{cname}'s costume and identity reference. Photograph {cname} inside the new scene; "
+                f"relight face and clothes to match the scene. Do not paste this image on top."
+            )
 
         phase2_tasks.append({
             "type": "cover",
@@ -1259,7 +1404,10 @@ def generate_ebook_html_bundle_v2(
         page_labels: List[str] = []
         for i, char_idx in enumerate(cis, 1):
             cname = char_name_map.get(char_idx, f"Character {char_idx}")
-            page_labels.append(f"{cname}'s character reference (use this exact face, build, and outfit):")
+            page_labels.append(
+                f"{cname}'s costume and identity reference. Photograph {cname} inside this page's scene; "
+                f"relight face and clothes to match. Same person or companion, not a cutout."
+            )
 
         phase2_tasks.append({
             "type": "page",
