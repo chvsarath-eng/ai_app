@@ -98,12 +98,31 @@ function imageKey (name: string, image: JobImage): string | null {
   return null
 }
 
-/** Route story-service relative URLs through the Next.js proxy so the browser can load them. */
+/** Route story-service / GCS paths through the Next.js proxy so phones can load them. */
 function toWebUrl (url: string | null | undefined, jobId: string) {
   if (!url) return null
-  if (/^https?:\/\//i.test(url)) return url
   if (url.startsWith(`/jobs/${jobId}/`)) return `/api/storybook${url}`
+  if (url.startsWith('/jobs/')) return `/api/storybook${url}`
+  if (/^https?:\/\/img2x\.com\/api\/storybook\//i.test(url)) {
+    return url.replace(/^https?:\/\/img2x\.com/i, '')
+  }
   return url
+}
+
+function publicImageUrl (jobId: string | null | undefined, image: JobImage, key: string): string | null {
+  const proxied = toWebUrl(image.url, jobId || '')
+  if (proxied && (proxied.startsWith('/api/storybook/') || proxied.startsWith('https://'))) return proxied
+  if (jobId) {
+    const fromPath = (image.gcs_uri || '').split('/').pop()
+    const fromKey = key.startsWith('page_')
+      ? `page_${key.slice(5)}.png`
+      : key === 'cover'
+        ? 'book_cover.png'
+        : `${key}.png`
+    const name = fromPath || fromKey
+    return `/api/storybook/jobs/${jobId}/images/${name}`
+  }
+  return proxied
 }
 
 function mapJobToProjectPatch (job: JobPayload, jobId: string): Record<string, unknown> {
@@ -136,7 +155,7 @@ function mapJobToProjectPatch (job: JobPayload, jobId: string): Record<string, u
   for (const [name, image] of Object.entries(job.images || {})) {
     const key = imageKey(name, image)
     if (!key) continue
-    const url = toWebUrl(image.url, jobId)
+    const url = publicImageUrl(jobId, image, key)
     images[key] = {
       url,
       gcsPath: image.gcs_uri ?? null,
@@ -205,22 +224,36 @@ async function markJobLost (project: Project): Promise<Project> {
  * Refresh a project from the story service when it has a job and is not terminal.
  * Persists the merged state so admin/analytics stay accurate.
  */
+export function normalizeProjectMedia (project: Project): Project {
+  const jobId = project.jobId
+  if (!jobId) return project
+  const images: Record<string, ProjectImage> = {}
+  for (const [key, image] of Object.entries(project.images || {})) {
+    images[key] = {
+      ...image,
+      url: publicImageUrl(jobId, { url: image.url, gcs_uri: image.gcsPath || undefined }, key)
+    }
+  }
+  const coverUrl = images.cover?.url || toWebUrl(project.coverUrl, jobId)
+  return { ...project, images, coverUrl }
+}
+
 export async function refreshProjectFromJob (project: Project): Promise<Project> {
   if (!project.jobId) return project
   const needsRefresh =
     LIVE_STATUSES.has(project.status) ||
     (project.status === 'ready' && (!project.images || Object.keys(project.images).length === 0))
-  if (!needsRefresh) return project
+  if (!needsRefresh) return normalizeProjectMedia(project)
 
   const job = await fetchJob(project.jobId)
   if (job === JOB_MISSING) {
-    return LIVE_STATUSES.has(project.status) ? markJobLost(project) : project
+    return LIVE_STATUSES.has(project.status) ? markJobLost(project) : normalizeProjectMedia(project)
   }
-  if (!job) return project
+  if (!job) return normalizeProjectMedia(project)
 
   const patch = mapJobToProjectPatch(job, project.jobId)
   const merged = await upsertProject(project.id, patch)
-  return merged as unknown as Project
+  return normalizeProjectMedia(merged as unknown as Project)
 }
 
 export async function refreshProjects (projects: Project[]): Promise<Project[]> {
