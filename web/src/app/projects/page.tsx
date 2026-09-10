@@ -255,6 +255,11 @@ export default function ProjectsPage () {
                         Pending Pay
                       </span>
                     )}
+                    {project.status === 'paid' && !project.jobId && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/90 backdrop-blur px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm">
+                        Paid — start book
+                      </span>
+                    )}
                     {project.status === 'failed' && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-red-500/90 backdrop-blur px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm">
                         <AlertCircle className="h-3 w-3" /> Failed
@@ -365,6 +370,18 @@ export default function ProjectsPage () {
                         className="h-8 w-full bg-none bg-amber-500 text-xs font-semibold text-white hover:bg-amber-600"
                       >
                         <Link href={`/checkout`}>Complete payment</Link>
+                      </Button>
+                    )}
+
+                    {project.status === 'paid' && !project.jobId && (
+                      <Button
+                        asChild
+                        size="sm"
+                        className="h-8 w-full text-xs font-semibold"
+                      >
+                        <Link href={`/projects/${project.id}`}>
+                          Finish starting this book
+                        </Link>
                       </Button>
                     )}
                   </div>

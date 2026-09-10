@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyRazorpayWebhookSignature } from '@/lib/razorpay'
 import { getProject, upsertProject } from '@/lib/projects-server'
 import { sendCustomerOrderConfirmation, sendOrderNotification } from '@/lib/order-emails'
+import { startProjectGeneration } from '@/lib/start-generation'
 
 export const runtime = 'nodejs'
 
@@ -58,6 +59,10 @@ export async function POST (request: NextRequest) {
             },
             createdAt: existing?.createdAt || Date.now()
           })
+          const generation = await startProjectGeneration(docId)
+          if (!generation.ok) {
+            console.warn('Webhook could not start generation', docId, generation.error)
+          }
         } catch (err) {
           console.error('Webhook project update error:', err)
         }

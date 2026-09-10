@@ -7,7 +7,6 @@ import { Mail, ShieldCheck, Truck, BookOpen } from 'lucide-react'
 import { useCheckoutStore } from '@/lib/checkout-store'
 import { useAuthStore } from '@/lib/auth-store'
 import { clearCheckoutFiles, loadCheckoutFiles, saveCheckoutFiles } from '@/lib/checkout-files'
-import { createStorybookJob } from '@/lib/storybookApi'
 import { openRazorpayCheckout } from '@/lib/razorpay-client'
 import { trackEvent } from '@/lib/analytics'
 import type { OutputType } from '@/types/storybook'
@@ -264,40 +263,26 @@ export default function CheckoutPage () {
 
   const handleCheckoutSuccess = useCallback(async (
     paymentId: string,
-    customerEmail?: string | null,
-    projectId?: string | null
+    _customerEmail?: string | null,
+    projectId?: string | null,
+    alreadyStarted?: boolean
   ) => {
     setPaymentProcessing(true)
     setCheckoutError(null)
 
     try {
-      if (store.imageFiles.length === 0) {
-        throw new Error('Your uploaded photos could not be restored after payment. Please try again.')
-      }
-
       const outputType = store.outputType as OutputType
-      const shippingAddress = outputType === 'LULU_BOOK'
-        ? {
-            fullName: store.shippingName,
-            phone: store.shippingPhone || undefined,
-            line1: store.shippingAddress1,
-            line2: store.shippingAddress2 || undefined,
-            city: store.shippingCity,
-            region: store.shippingRegion,
-            postalCode: store.shippingPostalCode,
-            countryCode: store.shippingCountry
-          }
-        : undefined
 
-      const res = await createStorybookJob({
-        imageFiles: store.imageFiles,
-        characters: store.characters,
-        storyline: store.storyline,
-        email: customerEmail || store.email || '',
-        outputType,
-        shippingAddress,
-        projectId: projectId || undefined
-      })
+      if (projectId && !alreadyStarted) {
+        const startRes = await fetch(`/api/user/projects/${encodeURIComponent(projectId)}/start`, {
+          method: 'POST'
+        })
+        const startData = await startRes.json().catch(() => ({}))
+        if (!startRes.ok && !startData?.alreadyStarted) {
+          // Payment is captured; send them to the project page so they can re-upload photos.
+          console.error('Failed to start generation after payment:', startData?.error)
+        }
+      }
 
       trackEvent('checkout_completed', {
         payment_id: paymentId,
@@ -308,12 +293,11 @@ export default function CheckoutPage () {
       store.clearPendingCheckout()
       await clearCheckoutFiles()
       store.reset()
-      // Land on the live project page so the book fills in page-by-page as it is generated.
       if (projectId) {
         router.push(`/projects/${projectId}?new=1&payment=${paymentId}`)
-      } else {
-        router.push(`/order/${res.jobId}?type=${outputType}&payment=${paymentId}`)
+        return
       }
+      router.push(`/projects?paid=${paymentId}`)
     } catch (error) {
       console.error('Failed to create job after payment:', error)
       setPaymentProcessing(false)
@@ -466,6 +450,21 @@ export default function CheckoutPage () {
       }
       const projectId: string | null = orderData.projectId || null
 
+      // Persist photos on the server BEFORE payment. After Razorpay the browser
+      // often loses File objects (especially on mobile), which used to skip generation.
+      if (projectId && store.imageFiles.length > 0) {
+        const uploadForm = new FormData()
+        store.imageFiles.forEach((file) => uploadForm.append('images', file))
+        const uploadRes = await fetch(`/api/user/projects/${encodeURIComponent(projectId)}/uploads`, {
+          method: 'POST',
+          body: uploadForm
+        })
+        const uploadData = await uploadRes.json().catch(() => ({}))
+        if (!uploadRes.ok) {
+          throw new Error(uploadData?.error || 'Could not save your photos. Please try again.')
+        }
+      }
+
       // 2. Open Razorpay Checkout Modal
       await openRazorpayCheckout({
         key: orderData.keyId,
@@ -521,7 +520,8 @@ export default function CheckoutPage () {
             await handleCheckoutSuccess(
               paymentResponse.razorpay_payment_id,
               effectiveEmail,
-              verifyData.projectId || projectId
+              verifyData.projectId || projectId,
+              Boolean(verifyData.generationStarted)
             )
           } catch (verifyErr) {
             console.error('Payment verification error:', verifyErr)

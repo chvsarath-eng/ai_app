@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, use } from 'react'
+import { useEffect, useState, useCallback, use, useRef } from 'react'
 import Link from 'next/link'
 import {
   BookOpen,
@@ -40,6 +40,10 @@ export default function ProjectDetailsPage ({
   const [error, setError] = useState<string | null>(null)
   const [selectedPage, setSelectedPage] = useState<number>(1)
   const [copied, setCopied] = useState(false)
+  const [isStarting, setIsStarting] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
+  const [needsPhotos, setNeedsPhotos] = useState(false)
+  const autoStartRef = useRef(false)
 
   const fetchProject = useCallback(async () => {
     try {
@@ -103,6 +107,38 @@ export default function ProjectDetailsPage ({
     void fetchProject()
   }, [fetchProject])
 
+  const startGeneration = useCallback(async (files?: FileList | null) => {
+    setIsStarting(true)
+    setStartError(null)
+    try {
+      if (files && files.length > 0) {
+        const form = new FormData()
+        Array.from(files).slice(0, 4).forEach((file) => form.append('images', file))
+        const uploadRes = await fetch(`/api/user/projects/${encodeURIComponent(projectId)}/uploads`, {
+          method: 'POST',
+          body: form
+        })
+        const uploadData = await uploadRes.json().catch(() => ({}))
+        if (!uploadRes.ok) throw new Error(uploadData?.error || 'Could not save photos')
+      }
+
+      const startRes = await fetch(`/api/user/projects/${encodeURIComponent(projectId)}/start`, {
+        method: 'POST'
+      })
+      const startData = await startRes.json().catch(() => ({}))
+      if (!startRes.ok) {
+        setNeedsPhotos(Boolean(startData?.needsPhotos))
+        throw new Error(startData?.error || 'Could not start generation')
+      }
+      setNeedsPhotos(false)
+      await fetchProject()
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : 'Could not start generation')
+    } finally {
+      setIsStarting(false)
+    }
+  }, [fetchProject, projectId])
+
   // Polling while generating
   useEffect(() => {
     if (!project) return
@@ -114,6 +150,13 @@ export default function ProjectDetailsPage ({
     }, 3000)
     return () => clearInterval(interval)
   }, [project, fetchProject])
+
+  useEffect(() => {
+    if (!project || isStarting || autoStartRef.current) return
+    if (project.status !== 'paid' || project.jobId) return
+    autoStartRef.current = true
+    void startGeneration()
+  }, [isStarting, project, startGeneration])
 
   const handleShare = () => {
     if (typeof window !== 'undefined') {
@@ -163,6 +206,7 @@ export default function ProjectDetailsPage ({
   const isGenerating = project.status === 'generating' || project.status === 'starting'
   const isReady = project.status === 'ready'
   const isFailed = project.status === 'failed'
+  const isPaidStuck = project.status === 'paid' && !project.jobId
   const isHardcover = project.outputType === 'LULU_BOOK'
 
   const pages = project.story?.pages || []
@@ -227,6 +271,11 @@ export default function ProjectDetailsPage ({
                     <AlertCircle className="h-3.5 w-3.5" /> Generation failed
                   </span>
                 )}
+                {isPaidStuck && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-200/70">
+                    <Clock className="h-3.5 w-3.5" /> Payment received
+                  </span>
+                )}
                 <span className="inline-flex items-center rounded-full bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200/70">
                   {isHardcover ? 'Hardcover edition' : 'Digital edition'}
                 </span>
@@ -244,6 +293,29 @@ export default function ProjectDetailsPage ({
                   <Button asChild size="sm" variant="outline" className="h-8 border-rose-300 bg-white text-rose-800 hover:bg-rose-100">
                     <Link href="/#create">Create again</Link>
                   </Button>
+                </div>
+              )}
+              {isPaidStuck && (
+                <div className="mt-3 space-y-3 rounded-2xl border border-zinc-200/70 bg-zinc-50 px-4 py-4 text-sm text-zinc-700">
+                  <p>
+                    Payment succeeded, but the book did not start because the photos were lost after checkout.
+                    Re-upload the same photos and we will start generation immediately.
+                  </p>
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-semibold text-zinc-500">Photos (1–4)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      disabled={isStarting}
+                      onChange={(event) => {
+                        void startGeneration(event.target.files)
+                      }}
+                      className="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-full file:border-0 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
+                    />
+                  </label>
+                  {startError && <p className="text-sm text-red-600">{startError}</p>}
+                  {isStarting && <p className="text-xs text-zinc-500">Saving photos and starting your book…</p>}
                 </div>
               )}
             </div>
