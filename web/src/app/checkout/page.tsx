@@ -386,7 +386,7 @@ export default function CheckoutPage () {
     // Guests can explore and fill in everything; an account is required only at pay time so
     // the book lands in "My Books" and can be re-downloaded later.
     if (!user) {
-      openSignIn('Sign in to save this storybook to your account and complete payment.')
+      openSignIn('Sign in to save this storybook and complete payment.')
       return
     }
 
@@ -470,7 +470,7 @@ export default function CheckoutPage () {
         key: orderData.keyId,
         amount: orderData.amount,
         currency: orderData.currency || 'INR',
-        name: 'img2x Storybooks',
+        name: 'img2x',
         description: isHardcover ? 'Personalized Hardcover Storybook' : 'Personalized Digital Storybook',
         order_id: orderData.orderId,
         prefill: {
@@ -549,7 +549,7 @@ export default function CheckoutPage () {
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center">
           <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-pink-500" />
-          <p className="text-sm text-zinc-500">Loading checkoutâ€¦</p>
+          <p className="text-sm text-zinc-500">Loading checkout…</p>
         </div>
       </div>
     )
@@ -559,7 +559,7 @@ export default function CheckoutPage () {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 text-center">
         <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-pink-500" />
-        <h2 className="text-xl font-bold tracking-tight text-zinc-800">Processing your orderâ€¦</h2>
+        <h2 className="text-xl font-bold tracking-tight text-zinc-800">Processing your order…</h2>
         <p className="mt-2 text-sm text-zinc-500">Please wait while we verify your payment and create your storybook.</p>
       </div>
     )

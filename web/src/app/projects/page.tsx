@@ -73,7 +73,7 @@ export default function ProjectsPage () {
       <div className="flex min-h-[70vh] items-center justify-center">
         <div className="text-center">
           <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-pink-500" />
-          <p className="text-sm text-zinc-500">Checking your accountâ€¦</p>
+          <p className="text-sm text-zinc-500">Checking your account…</p>
         </div>
       </div>
     )
@@ -88,17 +88,17 @@ export default function ProjectsPage () {
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-800">My Storybooks</h1>
           <p className="mt-2 text-sm text-zinc-500">
-            Sign in to access your generated storybooks, download high-res PDFs, and order printed hardcovers.
+            Sign in to view your storybooks, download PDFs, and order printed hardcovers.
           </p>
           <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
             <Button
               className="font-semibold"
-              onClick={() => openSignIn('Sign in to view your saved books')}
+              onClick={() => openSignIn('Sign in to view your storybooks')}
             >
               Sign in
             </Button>
             <Button asChild variant="outline">
-              <Link href="/create">Create a book</Link>
+              <Link href="/create">Create a storybook</Link>
             </Button>
           </div>
         </Card>
@@ -118,7 +118,7 @@ export default function ProjectsPage () {
         <PageHeader
           align="left"
           size="md"
-          eyebrow="My books"
+          eyebrow="Library"
           title={
             <span className="inline-flex flex-wrap items-center gap-3">
               My Storybooks
@@ -127,7 +127,7 @@ export default function ProjectsPage () {
               </span>
             </span>
           }
-          subtitle="Manage your personal storybooks, interactive flipbooks, and print orders."
+          subtitle="Open your flipbooks, download PDFs, and track print orders."
           actions={
             <>
               <Button
@@ -143,7 +143,7 @@ export default function ProjectsPage () {
               <Button asChild size="sm" className="gap-1.5 text-xs font-semibold">
                 <Link href="/create">
                   <Plus className="h-4 w-4" />
-                  Create new book
+                  Create a storybook
                 </Link>
               </Button>
             </>
@@ -152,7 +152,7 @@ export default function ProjectsPage () {
         />
 
         {/* Filter pills */}
-        <div className="flex items-center gap-2 pb-4 pt-6">
+        <div className="flex items-center gap-2 overflow-x-auto pb-4 pt-6">
           {([
             { key: 'all', label: 'All', count: projects.length },
             { key: 'ready', label: 'Ready', count: projects.filter((p) => p.status === 'ready').length },
@@ -257,7 +257,7 @@ export default function ProjectsPage () {
                     )}
                     {project.status === 'paid' && !project.jobId && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/90 backdrop-blur px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm">
-                        Paid — start book
+                        Paid — add photos
                       </span>
                     )}
                     {project.status === 'failed' && (
@@ -271,7 +271,7 @@ export default function ProjectsPage () {
                   <div className="absolute bottom-3 left-3">
                     <span className="inline-flex items-center gap-1 rounded-full bg-black/60 backdrop-blur px-2.5 py-0.5 text-[10px] font-medium text-white">
                       {isHardcover ? <Truck className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
-                      {isHardcover ? 'Lulu Hardcover' : 'Digital Edition'}
+                      {isHardcover ? 'Hardcover' : 'Digital'}
                     </span>
                   </div>
                 </div>
@@ -380,7 +380,7 @@ export default function ProjectsPage () {
                         className="h-8 w-full text-xs font-semibold"
                       >
                         <Link href={`/projects/${project.id}`}>
-                          Finish starting this book
+                          Add photos to start
                         </Link>
                       </Button>
                     )}

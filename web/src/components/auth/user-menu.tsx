@@ -43,7 +43,7 @@ export function UserMenu ({ onNavigate }: { onNavigate?: () => void }) {
         variant="outline"
         className="h-8 px-3 text-xs font-semibold"
         disabled={isLoading}
-        onClick={() => openSignIn()}
+        onClick={() => { onNavigate?.(); openSignIn() }}
       >
         Sign in
       </Button>
@@ -96,7 +96,7 @@ export function UserMenu ({ onNavigate }: { onNavigate?: () => void }) {
             onClick={() => { setIsOpen(false); onNavigate?.() }}
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-zinc-700 transition hover:bg-zinc-100"
           >
-            <BookOpen className="h-4 w-4 text-violet-600" /> My Books
+            <BookOpen className="h-4 w-4 text-violet-600" /> My Storybooks
           </Link>
           <Link
             role="menuitem"

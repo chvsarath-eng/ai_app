@@ -24,7 +24,7 @@ export default function GalleryPage () {
 
       <div className="mt-14 flex justify-center">
         <Button asChild size="lg" className="px-8 font-semibold">
-          <Link href="/#create">Create your own book</Link>
+            <Link href="/#create">Create your own storybook</Link>
         </Button>
       </div>
     </div>

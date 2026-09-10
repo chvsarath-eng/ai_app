@@ -11,8 +11,6 @@ import { useAuthStore } from '@/lib/auth-store'
 export function SiteHeader ({ className }: { className?: string }) {
   const [isOpen, setIsOpen] = useState(false)
   const user = useAuthStore((s) => s.user)
-  const openSignIn = useAuthStore((s) => s.openSignIn)
-  const isConfigured = useAuthStore((s) => s.isConfigured)
 
   return (
     <header
@@ -43,7 +41,7 @@ export function SiteHeader ({ className }: { className?: string }) {
             <Link className="transition hover:text-zinc-950" href="/#pricing">Pricing</Link>
             <Link className="transition hover:text-zinc-950" href="/#reviews">Reviews</Link>
             {user && (
-              <Link className="transition hover:text-zinc-950" href="/projects">My Books</Link>
+              <Link className="transition hover:text-zinc-950" href="/projects">My Storybooks</Link>
             )}
           </nav>
 
@@ -98,16 +96,8 @@ export function SiteHeader ({ className }: { className?: string }) {
                     href="/projects"
                     onClick={() => setIsOpen(false)}
                   >
-                    My Books
+                    My Storybooks
                   </Link>
-                ) : isConfigured ? (
-                  <button
-                    type="button"
-                    className="rounded-lg px-3 py-2 text-left font-semibold transition hover:bg-zinc-100"
-                    onClick={() => { setIsOpen(false); openSignIn() }}
-                  >
-                    Sign in
-                  </button>
                 ) : null}
               </div>
             </div>

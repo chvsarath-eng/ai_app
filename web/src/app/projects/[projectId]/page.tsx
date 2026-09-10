@@ -235,7 +235,7 @@ export default function ProjectDetailsPage ({
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-500 transition hover:text-zinc-900"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Back to my books
+            Back to my storybooks
           </Link>
 
           <div className="flex items-center gap-2">
@@ -291,15 +291,15 @@ export default function ProjectDetailsPage ({
                 <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-rose-200/80 bg-rose-50/90 px-4 py-3 text-sm text-rose-800">
                   <span>{project.error?.message || 'Something went wrong while generating this book.'}</span>
                   <Button asChild size="sm" variant="outline" className="h-8 border-rose-300 bg-white text-rose-800 hover:bg-rose-100">
-                    <Link href="/#create">Create again</Link>
+                    <Link href="/#create">Create another storybook</Link>
                   </Button>
                 </div>
               )}
               {isPaidStuck && (
                 <div className="mt-3 space-y-3 rounded-2xl border border-zinc-200/70 bg-zinc-50 px-4 py-4 text-sm text-zinc-700">
                   <p>
-                    Payment succeeded, but the book did not start because the photos were lost after checkout.
-                    Re-upload the same photos and we will start generation immediately.
+                    Payment went through, but we still need the photos to create this storybook.
+                    Upload them once and generation starts immediately.
                   </p>
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-semibold text-zinc-500">Photos (1–4)</span>
