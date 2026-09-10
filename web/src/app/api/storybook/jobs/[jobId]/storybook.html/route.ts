@@ -5,14 +5,16 @@ import { getStoryAuthHeaders, getStoryServiceUrl } from '@/lib/storyApiServer'
 export const runtime = 'nodejs'
 
 export async function GET (
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ jobId: string }> }
 ) {
   try {
     const { jobId } = await params
     const headers = await getStoryAuthHeaders()
+    // Forward ?inline=true / ?download=false so the story service picks the right disposition.
+    const search = new URL(request.url).search
 
-    const res = await fetch(`${getStoryServiceUrl()}/jobs/${encodeURIComponent(jobId)}/storybook.html`, {
+    const res = await fetch(`${getStoryServiceUrl()}/jobs/${encodeURIComponent(jobId)}/storybook.html${search}`, {
       method: 'GET',
       headers,
       cache: 'no-store'

@@ -13,18 +13,6 @@ from langchain_openai import ChatOpenAI
 
 DEFAULT_OPENAI_MODEL = "gpt-5.5-2026-04-23"
 
-# #region agent log
-def _log_langchain_callbacks():
-    try:
-        from langchain_core.callbacks.manager import _get_configure_hooks
-        from langchain_core.tracers.context import get_callback_manager_for_config
-        import langchain_core.globals as _g
-        _hooks = list(_get_configure_hooks()) if hasattr(_get_configure_hooks, '__iter__') else str(_get_configure_hooks)
-        open(r'f:\Users\sarat\Documents\ai_api\.cursor\debug.log','a').write(json.dumps({"location":"strgen.py:import","message":"MODULE_IMPORT_CALLBACKS","data":{"hooks_count":len(_hooks) if isinstance(_hooks,list) else _hooks},"hypothesisId":"E","timestamp":__import__('time').time()})+'\n')
-    except Exception as e:
-        open(r'f:\Users\sarat\Documents\ai_api\.cursor\debug.log','a').write(json.dumps({"location":"strgen.py:import","message":"MODULE_IMPORT_CALLBACKS_ERROR","data":{"error":str(e)},"hypothesisId":"E","timestamp":__import__('time').time()})+'\n')
-_log_langchain_callbacks()
-# #endregion
 
 # ---------- Utilities ----------
 
@@ -162,10 +150,6 @@ def _build_llm(
     provider = _normalize_model_provider(model_provider, model)
     model_name = model or _default_model_for_provider(provider)
 
-    # #region agent log
-    import os as _os; _lc_env = {k:v for k,v in _os.environ.items() if 'LANGCHAIN' in k or 'LANGSMITH' in k}
-    import json as _json; open(r'f:\Users\sarat\Documents\ai_api\.cursor\debug.log','a').write(_json.dumps({"location":"strgen.py:150","message":"BUILD_LLM_CALLED","data":{"provider":provider,"model":model_name,"langchain_env":_lc_env},"hypothesisId":"E,F","timestamp":__import__('time').time()})+'\n')
-    # #endregion
 
     if provider == "openai":
         openai_kwargs = {

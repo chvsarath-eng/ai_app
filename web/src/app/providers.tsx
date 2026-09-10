@@ -3,6 +3,9 @@
 import * as React from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
+import { AuthProvider } from '@/components/auth/auth-provider'
+import { SignInDialog } from '@/components/auth/sign-in-dialog'
+
 export function Providers ({ children }: { children: React.ReactNode }) {
   const [queryClient] = React.useState(() => new QueryClient({
     defaultOptions: {
@@ -15,8 +18,10 @@ export function Providers ({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      <AuthProvider>
+        {children}
+        <SignInDialog />
+      </AuthProvider>
     </QueryClientProvider>
   )
 }
-

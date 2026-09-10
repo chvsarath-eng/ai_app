@@ -11,17 +11,17 @@ type GalleryBook = {
   bookNumber: number
 }
 
-const galleryBooks: GalleryBook[] = [
+// One entry per unique book (no repeats). Newest GPT-Image-2.5 books lead the first row.
+const books: GalleryBook[] = [
+  { coverSrc: '/gallery/cover_6.jpg', bookNumber: 6 }, // Aarav and the Giant Forest Cake
+  { coverSrc: '/gallery/cover_7.jpg', bookNumber: 7 }, // Aarav and the Cardboard Rocket
+  { coverSrc: '/gallery/cover_8.jpg', bookNumber: 8 }, // Aarav and the Star Whale
   { coverSrc: '/gallery/cover_1.jpg', bookNumber: 1 },
   { coverSrc: '/gallery/cover_2.jpg', bookNumber: 2 },
   { coverSrc: '/gallery/cover_3.jpg', bookNumber: 3 },
   { coverSrc: '/gallery/cover_4.jpg', bookNumber: 4 },
   { coverSrc: '/gallery/cover_5.jpg', bookNumber: 5 }
 ]
-
-const books: GalleryBook[] = Array.from({ length: 10 }, (_, index) => {
-  return galleryBooks[index % galleryBooks.length]
-})
 
 const getBookUrl = (bookNumber: number): string => {
   return `/Gallery_books/digital_book_${bookNumber}.html`

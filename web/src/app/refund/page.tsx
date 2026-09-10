@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 
+import { LegalPage } from '@/components/legal-page'
+
 export const metadata: Metadata = {
   title: 'Refund Policy',
   description: 'img2x Refund Policy. Learn about our refund and cancellation policy for digital and hardcover personalized storybooks.',
@@ -12,15 +14,8 @@ export const metadata: Metadata = {
 
 export default function RefundPage () {
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 pb-16 pt-12 sm:px-6 lg:px-10">
-      <h1 className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
-        Refund Policy
-      </h1>
-      <p className="mt-3 text-sm text-zinc-600">
-        Last Updated: January 29, 2026
-      </p>
-
-      <section className="mt-8 space-y-4 text-sm text-zinc-700 leading-relaxed">
+    <LegalPage title="Refund Policy" lastUpdated="January 29, 2026">
+      <section className="space-y-4 text-sm text-zinc-700 leading-relaxed">
         <p>
           At img2x, we strive to provide you with high-quality, personalized storybooks that delight you and your loved ones. 
           Because our products are custom-created using AI technology based on your unique inputs, our refund policy reflects 
@@ -129,13 +124,13 @@ export default function RefundPage () {
         </p>
       </section>
 
-      <section className="mt-10 p-6 bg-violet-50 rounded-lg">
+      <section className="mt-10 rounded-2xl border border-violet-100 bg-violet-50/70 p-6">
         <p className="text-sm text-zinc-700">
           <strong>Note:</strong> This refund policy is part of our{' '}
           <a className="text-violet-600 hover:text-violet-700 underline" href="/terms">Terms of Service</a>. 
           By making a purchase, you agree to these terms.
         </p>
       </section>
-    </main>
+    </LegalPage>
   )
 }

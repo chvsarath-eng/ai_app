@@ -618,15 +618,9 @@ def Story_content_generator_v2(
         HumanMessage(content=user_parts),
     ]
 
-    # #region agent log
-    import json as _json; open(r'f:\Users\sarat\Documents\ai_api\.cursor\debug.log','a').write(_json.dumps({"location":"storygen_v2.py:340","message":"LLM_INVOKE_ATTEMPT_1","data":{"provider":provider,"model":model_name,"num_chars":num_chars},"hypothesisId":"A","timestamp":__import__('time').time()})+'\n')
-    # #endregion
 
     try:
         message = llm.invoke(messages)
-        # #region agent log
-        import json as _json; open(r'f:\Users\sarat\Documents\ai_api\.cursor\debug.log','a').write(_json.dumps({"location":"storygen_v2.py:345","message":"LLM_INVOKE_SUCCESS_1","data":{"provider":provider,"model":model_name},"hypothesisId":"A","timestamp":__import__('time').time()})+'\n')
-        # #endregion
         text = _content_to_string(getattr(message, "content", ""))
         return {
             "text": text,
@@ -635,9 +629,6 @@ def Story_content_generator_v2(
             "usage": _extract_langchain_token_usage(message),
         }
     except ChatGoogleGenerativeAIError as e:
-        # #region agent log
-        import json as _json; open(r'f:\Users\sarat\Documents\ai_api\.cursor\debug.log','a').write(_json.dumps({"location":"storygen_v2.py:355","message":"LLM_INVOKE_RETRY_TRIGGERED","data":{"error":str(e)[:200],"provider":provider},"hypothesisId":"A","timestamp":__import__('time').time()})+'\n')
-        # #endregion
         if provider == "gemini" and "exceeds the maximum number of tokens" in str(e):
             # Retry with smaller images
             stricter_parts: List[Dict[str, Any]] = [
@@ -653,16 +644,10 @@ def Story_content_generator_v2(
                 )
                 stricter_parts.append(_image_part_for_provider(provider, data_uri))
 
-            # #region agent log
-            import json as _json; open(r'f:\Users\sarat\Documents\ai_api\.cursor\debug.log','a').write(_json.dumps({"location":"storygen_v2.py:375","message":"LLM_INVOKE_ATTEMPT_2_RETRY","data":{"provider":provider,"model":model_name},"hypothesisId":"A","timestamp":__import__('time').time()})+'\n')
-            # #endregion
             message = llm.invoke([
                 SystemMessage(content=system_template),
                 HumanMessage(content=stricter_parts),
             ])
-            # #region agent log
-            import json as _json; open(r'f:\Users\sarat\Documents\ai_api\.cursor\debug.log','a').write(_json.dumps({"location":"storygen_v2.py:380","message":"LLM_INVOKE_SUCCESS_2_RETRY","data":{"provider":provider},"hypothesisId":"A","timestamp":__import__('time').time()})+'\n')
-            # #endregion
             text = _content_to_string(getattr(message, "content", ""))
             return {
                 "text": text,

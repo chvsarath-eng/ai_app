@@ -13,13 +13,14 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy-Report-Only',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com",
+              // Razorpay Checkout + Firebase Auth (Google sign-in popup/redirect) are allowed explicitly.
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://checkout.razorpay.com https://*.razorpay.com https://apis.google.com https://www.gstatic.com",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com data:",
               "img-src 'self' data: blob: https: http:",
-              "frame-src 'self'",
-              "connect-src 'self' blob: data: https://www.google-analytics.com https://*.googleapis.com https://*.run.app https://raw.githack.com https://raw.githubusercontent.com",
+              "frame-src 'self' https://api.razorpay.com https://*.razorpay.com https://*.firebaseapp.com https://accounts.google.com",
+              "connect-src 'self' blob: data: https://www.google-analytics.com https://*.googleapis.com https://*.run.app https://raw.githack.com https://raw.githubusercontent.com https://*.razorpay.com https://lumberjack.razorpay.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com",
               "worker-src 'self' blob:",
             ].join('; ')
           }

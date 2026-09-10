@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import logging
@@ -30,6 +31,70 @@ _JOBS: Dict[str, Dict[str, Any]] = {}
 
 _GCS_CLIENT = None
 
+_JOB_STATE_FILE = "job_state.json"
+
+
+def _jobs_root() -> Path:
+    """Local root for per-job workspaces (Cloud Run safe: defaults to the temp dir)."""
+    return Path(os.getenv("STORY_JOBS_DIR") or tempfile.gettempdir()) / "story_jobs"
+
+
+def _persist_job_state(job_id: str) -> None:
+    """
+    Snapshot the in-memory job record to ``<job_dir>/job_state.json``.
+
+    Without a GCS bucket the process memory is the only job index; a restart would
+    otherwise turn every finished book into "Job not found" although its files are
+    still on disk. Best-effort: never raises.
+    """
+    job = _JOBS.get(job_id)
+    if not job:
+        return
+    job_dir = job.get("job_dir")
+    if not job_dir:
+        return
+    try:
+        path = Path(str(job_dir)) / _JOB_STATE_FILE
+        if not path.parent.exists():
+            return
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(job, default=str, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, path)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Could not persist job state for %s: %s", job_id, e)
+
+
+def _load_jobs_from_disk() -> int:
+    """Rehydrate ``_JOBS`` from ``job_state.json`` files left by a previous process."""
+    root = _jobs_root()
+    if not root.exists():
+        return 0
+    loaded = 0
+    for state_path in root.glob(f"*/{_JOB_STATE_FILE}"):
+        try:
+            job = json.loads(state_path.read_text(encoding="utf-8"))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Skipping unreadable job state %s: %s", state_path, e)
+            continue
+        job_id = str(job.get("job_id") or state_path.parent.name)
+        if job_id in _JOBS:
+            continue
+        job["job_dir"] = str(state_path.parent)
+        if job.get("status") in ("queued", "running"):
+            # The worker thread died with the old process; the job cannot resume.
+            job["status"] = "failed"
+            job["error"] = {
+                "type": "Interrupted",
+                "message": "Generation was interrupted by a story service restart.",
+                "stage": job.get("stage"),
+            }
+            job["finished_at"] = job.get("finished_at") or time.time()
+        _JOBS[job_id] = job
+        loaded += 1
+    if loaded:
+        logger.info("Rehydrated %d job(s) from %s", loaded, root)
+    return loaded
+
 
 app = FastAPI(
     title="Story Generator API",
@@ -37,16 +102,133 @@ app = FastAPI(
 )
 
 
+@app.on_event("startup")
+def _startup_rehydrate_jobs() -> None:
+    try:
+        _load_jobs_from_disk()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Job rehydration failed: %s", e)
+
+
 @app.get("/health")
 def health() -> Dict[str, str]:
     return {"status": "ok"}
+
+
+def _image_endpoint_summary() -> List[Dict[str, Any]]:
+    """Failover chain for the Images API (labels + bases + model aliases, never keys)."""
+    import imggen as _imggen
+
+    try:
+        endpoints = _imggen._image_endpoints()
+    except Exception as e:  # noqa: BLE001  (missing key etc.)
+        return [{"label": "primary", "error": str(e)}]
+    cover_model = _imggen.resolve_image_model("cover")
+    return [
+        {
+            "label": label,
+            "apiBase": base,
+            "models": _imggen._get_model_candidates(cover_model, base),
+        }
+        for label, base, _key in endpoints
+    ]
+
+
+@app.get("/admin/config")
+def admin_config() -> Dict[str, Any]:
+    """
+    Effective runtime configuration for the web Admin panel (no secrets, only presence flags).
+    """
+    import imggen as _imggen  # local import keeps startup light
+
+    provider = _imggen._resolve_image_provider(None)
+    running = sum(1 for j in _JOBS.values() if j.get("status") in ("queued", "running"))
+    return {
+        "status": "ok",
+        "image": {
+            "provider": provider,
+            "model": _imggen.resolve_image_model("cover"),
+            "modelPages": _imggen.resolve_image_model("page"),
+            "apiBase": os.getenv("IMAGE_API_BASE") or _imggen.DEFAULT_IMAGE_API_BASE,
+            # Ordered failover chain (e.g. LaoZhang -> api.openai.com) without exposing keys.
+            "endpoints": _image_endpoint_summary(),
+            "quality": os.getenv("IMAGE_QUALITY") or _imggen.DEFAULT_IMAGE_QUALITY,
+            "sizeDigital": _imggen.resolve_image_size("DIGI_BOOK"),
+            "sizePrint": _imggen.resolve_image_size("LULU_BOOK"),
+            "resolution": os.getenv("IMAGE_RESOLUTION") or None,
+            "aspectRatio": os.getenv("IMAGE_ASPECT_RATIO") or None,
+            "concurrency": os.getenv("IMAGE_CONCURRENCY") or None,
+        },
+        "story": {
+            "provider": os.getenv("STORY_MODEL_PROVIDER") or os.getenv("MODEL_PROVIDER") or "gemini",
+            "model": os.getenv("STORY_MODEL") or os.getenv("MODEL") or None,
+        },
+        "keys": {
+            "laozhang": bool(os.getenv("LAOZHANG_API_KEY") or os.getenv("API_KEY_LAOZHANG")),
+            "openai": bool(os.getenv("OPENAI_API_KEY")),
+            "gemini": bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")),
+            "smtp": bool(os.getenv("SMTP_HOST")),
+        },
+        "storage": {
+            "jobsBucket": _jobs_bucket_name(),
+            "firestoreEnabled": (os.getenv("FIRESTORE_ENABLED") or "true").strip().lower() not in ("0", "false", "no", "off"),
+        },
+        "jobs": {
+            "inMemory": len(_JOBS),
+            "active": running,
+        },
+    }
+
+
+@app.post("/admin/test-image-api")
+def admin_test_image_api(model: Optional[str] = Form(None)) -> Dict[str, Any]:
+    """
+    Lightweight connectivity check against the OpenAI-compatible Images endpoint:
+    lists models and reports whether the requested model (or an alias) is available.
+    """
+    import imggen as _imggen
+    import requests as _requests
+
+    base = (os.getenv("IMAGE_API_BASE") or _imggen.DEFAULT_IMAGE_API_BASE).rstrip("/")
+    wanted = (model or _imggen.resolve_image_model("cover")).strip()
+    try:
+        key = _imggen._image_api_key()
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e), "apiBase": base, "model": wanted}
+
+    t0 = time.time()
+    try:
+        r = _requests.get(f"{base}/models", headers={"Authorization": f"Bearer {key}"}, timeout=15)
+        elapsed_ms = int((time.time() - t0) * 1000)
+        if r.status_code != 200:
+            return {"ok": False, "status": r.status_code, "error": r.text[:300], "apiBase": base, "model": wanted, "elapsedMs": elapsed_ms}
+        data = r.json() if r.content else {}
+        ids = [str(m.get("id")) for m in (data.get("data") or []) if isinstance(m, dict)]
+        candidates = _imggen._get_model_candidates(wanted, base)
+        matched = next((c for c in candidates if c in ids), None)
+        return {
+            "ok": True,
+            "apiBase": base,
+            "model": wanted,
+            "matchedModel": matched,
+            "modelListed": matched is not None,
+            "candidates": candidates,
+            "failover": _image_endpoint_summary(),
+            "imageModelsAvailable": sorted(i for i in ids if "image" in i.lower())[:40],
+            "elapsedMs": elapsed_ms,
+        }
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e), "apiBase": base, "model": wanted}
 
 
 def _jobs_bucket_name() -> Optional[str]:
     """
     If set, job status + outputs are persisted to GCS for Cloud Run scalability.
     """
-    return os.getenv("JOBS_BUCKET") or os.getenv("STORY_JOBS_BUCKET")
+    # Set JOBS_GCS_DISABLED=true to run fully local (no bucket uploads / signed URLs).
+    if (os.getenv("JOBS_GCS_DISABLED") or "").strip().lower() in ("1", "true", "yes", "on"):
+        return None
+    return (os.getenv("JOBS_BUCKET") or os.getenv("STORY_JOBS_BUCKET") or "").strip() or None
 
 
 def _gcs_client():
@@ -331,6 +513,7 @@ def _run_story_job(
     finally:
         _JOBS[job_id]["finished_at"] = time.time()
         _JOBS[job_id]["duration_s"] = _JOBS[job_id]["finished_at"] - started_at
+        _persist_job_state(job_id)
 
         if not keep_uploads:
             try:
@@ -354,7 +537,13 @@ def _run_ebook_job(
     model_provider: Optional[str] = None,
     model: Optional[str] = None,
     use_v2: bool = False,
+    project_id: Optional[str] = None,
+    image_params: Optional[Dict[str, Any]] = None,
 ) -> None:
+    from firestore_state import ProjectStateWriter
+
+    state = ProjectStateWriter(project_id, job_id)
+
     def _render_links_email_html(*, title: str, subtitle: str, items: List[Dict[str, str]], footer: str) -> str:
         # Inline-styles for maximum compatibility (Gmail, iOS Mail, etc.)
         cards = []
@@ -666,7 +855,75 @@ def _run_ebook_job(
             _gcs_write_json(job_id=job_id, name="status.json", payload=payload)
         except Exception:
             logger.exception("Failed to write status.json for job_id=%s", job_id)
-        logger.info("job_id=%s stage=%s extra=%s", job_id, stage, extra or {})
+        _persist_job_state(job_id)
+        # Skip logging the full story/image payloads.
+        if stage in ("story_ready", "image_ready"):
+            logger.info("job_id=%s stage=%s keys=%s", job_id, stage, sorted((extra or {}).keys()))
+        else:
+            logger.info("job_id=%s stage=%s extra=%s", job_id, stage, extra or {})
+
+    def _publish_image(extra: Dict[str, Any]) -> None:
+        """Upload a freshly generated image to GCS and expose a signed URL for live preview."""
+        saved = str(extra.get("saved_path") or "")
+        if not saved or not Path(saved).exists():
+            return
+        rel = str(extra.get("output_image") or Path(saved).name).replace("\\", "/")
+        name = f"images/{Path(rel).name}"
+        url: Optional[str] = None
+        gcs_uri: Optional[str] = None
+        try:
+            if _jobs_bucket_name():
+                gcs_uri = _gcs_upload_file(
+                    job_id=job_id,
+                    name=name,
+                    local_path=saved,
+                    content_type="image/png" if saved.lower().endswith(".png") else "image/jpeg",
+                )
+                try:
+                    url = _gcs_generate_signed_url(
+                        job_id=job_id,
+                        name=name,
+                        expires_days=_signed_url_expires_days(),
+                        filename=Path(rel).name,
+                    ).replace("attachment%3B", "inline%3B")
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("Failed to sign preview URL for %s: %s", name, e)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Failed to upload preview image %s: %s", name, e)
+        # Local fallback: serve the file straight from the job dir so the web app can
+        # render live previews without GCS (dev / single-instance deployments).
+        if not url:
+            url = f"/jobs/{job_id}/images/{Path(rel).name}"
+        _JOBS[job_id].setdefault("images", {})[Path(rel).name] = {
+            "url": url,
+            "gcs_uri": gcs_uri,
+            "local_path": saved,
+            "type": extra.get("type"),
+            "page_number": extra.get("page_number"),
+        }
+        _JOBS[job_id]["images_done"] = extra.get("done")
+        _JOBS[job_id]["images_total"] = extra.get("total")
+        state.image_ready(extra, url=url, gcs_path=gcs_uri)
+
+    def _on_progress(stage: str, extra: Optional[Dict[str, Any]] = None) -> None:
+        """Progress hook: legacy stage tracking + live Firestore mirroring."""
+        extra = extra or {}
+        if stage == "story_ready":
+            _JOBS[job_id]["story"] = extra
+            state.story_ready(extra)
+            _update_stage(stage, {"pages": len(extra.get("pages") or []), "title": extra.get("title")})
+            return
+        if stage == "image_ready":
+            _publish_image(extra)
+            _update_stage(stage, {"done": extra.get("done"), "total": extra.get("total"), "name": extra.get("name")})
+            return
+        _update_stage(stage, extra)
+        if stage in (
+            "story_generation_start", "images_start", "images_phase_start", "images_phase_done",
+            "images_done", "pdf_generation_start", "pdf_generation_done", "upload_start",
+            "upload_done", "email_done", "email_failed",
+        ):
+            state.append_stage(stage, extra)
 
     started_at = time.time()
     _JOBS[job_id]["status"] = "running"
@@ -680,6 +937,7 @@ def _run_ebook_job(
             "model": model,
         },
     )
+    state.job_started(output_type=output_type, num_characters=len(face_image_paths or [face_image_path]))
 
     try:
         if use_v2 and face_image_paths:
@@ -693,7 +951,8 @@ def _run_ebook_job(
                 output_type=output_type,
                 model_provider=model_provider,
                 model=model,
-                progress_cb=_update_stage,
+                progress_cb=_on_progress,
+                image_params=image_params,
             )
         else:
             result = story_api.generate_ebook_html_bundle(
@@ -704,7 +963,7 @@ def _run_ebook_job(
                 output_type=output_type,
                 model_provider=model_provider,
                 model=model,
-                progress_cb=_update_stage,
+                progress_cb=_on_progress,
             )
         result["job_id"] = job_id
         result["email"] = email
@@ -839,7 +1098,14 @@ def _run_ebook_job(
                     result["signed_urls"] = signed_urls
                 if signed_url_errors:
                     result["signed_url_errors"] = signed_url_errors
-                _update_stage("upload_done", {"artifact_count": len(gcs_artifacts)})
+                _on_progress("upload_done", {"artifact_count": len(gcs_artifacts)})
+                _fs_artifacts: Dict[str, Dict[str, Optional[str]]] = {}
+                _key_map = {"html": "html", "pdf": "pdf", "interior_pdf": "interiorPdf", "cover_pdf": "coverPdf"}
+                for k, fs_key in _key_map.items():
+                    if k in gcs_artifacts:
+                        _fs_artifacts[fs_key] = {"gcsPath": gcs_artifacts.get(k), "url": signed_urls.get(k)}
+                if _fs_artifacts:
+                    state.artifacts_ready(artifacts=_fs_artifacts, expires_days=expires_days)
             else:
                 _update_stage("upload_skipped_no_bucket")
         except Exception as e:
@@ -867,6 +1133,11 @@ def _run_ebook_job(
         _JOBS[job_id]["status"] = "succeeded"
         _JOBS[job_id]["result"] = result
         _gcs_write_json(job_id=job_id, name="status.json", payload={"job_id": job_id, "status": "succeeded", "result": result})
+        state.succeeded(
+            timing=result.get("timing"),
+            cost=result.get("cost"),
+            email_status=result.get("email_status"),
+        )
     except Exception as e:
         logger.exception("ebook job_id=%s failed: %s", job_id, e)
         _JOBS[job_id]["status"] = "failed"
@@ -875,6 +1146,7 @@ def _run_ebook_job(
             "message": str(e),
             "stage": _JOBS[job_id].get("stage"),
         }
+        state.failed(error=_JOBS[job_id]["error"])
         # Best-effort: upload raw story output if present (helps debug JSON parsing failures).
         try:
             if _jobs_bucket_name():
@@ -897,8 +1169,11 @@ def _run_ebook_job(
     finally:
         _JOBS[job_id]["finished_at"] = time.time()
         _JOBS[job_id]["duration_s"] = _JOBS[job_id]["finished_at"] - started_at
+        _persist_job_state(job_id)
 
-        if not keep_job_dir and _JOBS[job_id].get("status") != "running":
+        # Without a GCS bucket the job dir is the only copy of the finished book
+        # (served by /jobs/{id}/storybook.html + /storybook.pdf), so never delete it.
+        if not keep_job_dir and _jobs_bucket_name() and _JOBS[job_id].get("status") != "running":
             try:
                 shutil.rmtree(job_dir, ignore_errors=True)
             except Exception:
@@ -1098,7 +1373,7 @@ def get_job(job_id: str) -> JSONResponse:
             result["status"] = "succeeded"
             return JSONResponse(result)
         if status == "failed":
-            return JSONResponse(status_code=500, content={"job_id": job_id, "status": "failed", "error": gcs.get("error")})
+            return JSONResponse({"job_id": job_id, "status": "failed", "error": gcs.get("error")})
         return JSONResponse(
             {
                 "job_id": job_id,
@@ -1114,14 +1389,41 @@ def get_job(job_id: str) -> JSONResponse:
         result = dict(job.get("result") or {})
         result.setdefault("job_id", job_id)
         result["status"] = "succeeded"
+        # Keep the live-preview fields available after completion so the web
+        # "My Books" / project pages can render the finished book from one payload.
+        result.setdefault("story", job.get("story"))
+        result.setdefault("images", job.get("images") or {})
+        result.setdefault("images_done", job.get("images_done"))
+        result.setdefault("images_total", job.get("images_total"))
+        result.setdefault("created_at", job.get("created_at"))
+        result.setdefault("project_id", job.get("project_id"))
+        local_urls: Dict[str, str] = {}
+        if result.get("html_path") and Path(str(result["html_path"])).exists():
+            local_urls["html"] = f"/jobs/{job_id}/storybook.html?inline=true"
+        if result.get("pdf_path") and Path(str(result["pdf_path"])).exists():
+            local_urls["pdf"] = f"/jobs/{job_id}/storybook.pdf"
+        result.setdefault("local_urls", local_urls)
         return JSONResponse(result)
     if status == "failed":
+        # 200 (not 500): the request itself succeeded; the job outcome is in ``status``.
+        # Include whatever was rendered so the UI can show partial progress alongside the error.
         return JSONResponse(
-            status_code=500,
-            content={"job_id": job_id, "status": "failed", "error": job.get("error")},
+            {
+                "job_id": job_id,
+                "status": "failed",
+                "error": job.get("error"),
+                "stage": job.get("stage"),
+                "created_at": job.get("created_at"),
+                "finished_at": job.get("finished_at"),
+                "project_id": job.get("project_id"),
+                "story": job.get("story"),
+                "images": job.get("images") or {},
+                "images_done": job.get("images_done"),
+                "images_total": job.get("images_total"),
+            }
         )
 
-    # queued/running
+    # queued/running -- include live progress so clients can render the book as it fills in
     return JSONResponse(
         {
             "job_id": job_id,
@@ -1133,8 +1435,41 @@ def get_job(job_id: str) -> JSONResponse:
             "job_dir": job.get("job_dir"),
             "keep_job_dir": job.get("keep_job_dir"),
             "email": job.get("email"),
+            "project_id": job.get("project_id"),
+            "story": job.get("story"),
+            "images": job.get("images") or {},
+            "images_done": job.get("images_done"),
+            "images_total": job.get("images_total"),
         }
     )
+
+
+@app.get("/jobs/{job_id}/images/{name}")
+def get_job_image(job_id: str, name: str) -> FileResponse:
+    """Serve a generated preview image from the local job dir (no-GCS fallback)."""
+    job = _JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    safe_name = Path(name).name
+    entry = (job.get("images") or {}).get(safe_name) or {}
+    local_path = entry.get("local_path")
+    if not local_path or not Path(local_path).exists():
+        raise HTTPException(status_code=404, detail="Image not found")
+    media_type = "image/png" if str(local_path).lower().endswith(".png") else "image/jpeg"
+    return FileResponse(path=local_path, media_type=media_type, headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/jobs/{job_id}/storybook.pdf")
+def get_job_pdf(job_id: str) -> FileResponse:
+    """Serve the finished PDF from the local job dir (no-GCS fallback)."""
+    job = _JOBS.get(job_id)
+    if not job or job.get("status") != "succeeded":
+        raise HTTPException(status_code=404, detail="PDF not ready")
+    result = job.get("result") or {}
+    pdf_path = result.get("pdf_path") or result.get("interior_pdf_path")
+    if not pdf_path or not Path(str(pdf_path)).exists():
+        raise HTTPException(status_code=404, detail="PDF not found")
+    return FileResponse(path=str(pdf_path), media_type="application/pdf", filename="storybook.pdf")
 
 
 @app.delete("/jobs/{job_id}")
@@ -1176,6 +1511,41 @@ def _save_face_uploads_v2(files: List[UploadFile], job_dir: Path) -> List[str]:
     return paths
 
 
+def _download_face_refs_from_gcs(gcs_uris: List[str], job_dir: Path) -> List[str]:
+    """
+    Fetch 1-4 pre-uploaded face photos (``gs://bucket/path``) and normalize them to
+    char_N_face.jpeg, mirroring `_save_face_uploads_v2`.
+    """
+    from io import BytesIO as _BIO
+    from PIL import Image as _PILImage, ImageOps as _PILOps
+
+    input_dir = job_dir / "input_images"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    client = _gcs_client()
+    paths: List[str] = []
+    allowed_bucket = os.getenv("UPLOADS_BUCKET") or None
+
+    for i, uri in enumerate(gcs_uris, 1):
+        if not uri.startswith("gs://"):
+            raise ValueError(f"Invalid GCS URI (expected gs://): {uri}")
+        bucket_name, _, blob_name = uri[len("gs://"):].partition("/")
+        if not bucket_name or not blob_name:
+            raise ValueError(f"Invalid GCS URI: {uri}")
+        if allowed_bucket and bucket_name not in (allowed_bucket, _jobs_bucket_name()):
+            raise ValueError(f"GCS bucket not allowed: {bucket_name}")
+        blob = client.bucket(bucket_name).blob(blob_name)
+        raw = blob.download_as_bytes()
+        out_path = input_dir / f"char_{i}_face.jpeg"
+        with _PILImage.open(_BIO(raw)) as im:
+            im = _PILOps.exif_transpose(im)
+            if im.mode != "RGB":
+                im = im.convert("RGB")
+            im.save(out_path, format="JPEG", quality=95, optimize=True)
+        paths.append(str(out_path))
+
+    return paths
+
+
 @app.post("/generate-ebook-async")
 async def generate_ebook_async(
     story_prompt: str = Form(...),
@@ -1192,6 +1562,13 @@ async def generate_ebook_async(
     model: Optional[str] = Form(None),
     input_usd_per_1m: Optional[float] = Form(None),
     output_usd_per_1m: Optional[float] = Form(None),
+    project_id: Optional[str] = Form(None),
+    image_gcs_uris: Optional[List[str]] = Form(None),
+    image_provider: Optional[str] = Form(None),
+    image_model: Optional[str] = Form(None),
+    image_model_pages: Optional[str] = Form(None),
+    image_quality: Optional[str] = Form(None),
+    image_size: Optional[str] = Form(None),
 ) -> JSONResponse:
     """
     Production-friendly pipeline supporting 1-4 character face photos.
@@ -1204,16 +1581,20 @@ async def generate_ebook_async(
       - story_prompt: required
       - image: single face photo (V1 backward compat)
       - images: 1-4 face photos (V2 multi-character)
+      - image_gcs_uris: alternative to uploads: 1-4 `gs://bucket/path` URIs (pre-uploaded by the web app)
       - character_metadata: optional JSON string with character info:
         [{"name": "Rahul", "age": 35, "gender": "male", "relationship": "father"}, ...]
       - email: optional (email the results)
       - output_type: "DIGI_BOOK" (default) or "LULU_BOOK"
       - keep_job_dir: optional (debug)
-      - model_provider: optional ("openai" or "gemini")
-      - model: optional model name
+      - model_provider: optional ("openai" or "gemini") for the story LLM
+      - model: optional story model name
+      - project_id: optional Firestore `projects/{id}` doc to mirror live progress into
+      - image_provider / image_model / image_model_pages / image_quality / image_size:
+        optional per-job image generation overrides (see imggen.py)
 
     Returns immediately with job_id. Poll:
-      - GET /jobs/{job_id} for status
+      - GET /jobs/{job_id} for status (includes live `story`, `images`, `images_done/total`)
       - GET /jobs/{job_id}/storybook.html for the final HTML (when succeeded)
     """
     # Determine which upload path was used
@@ -1223,10 +1604,21 @@ async def generate_ebook_async(
     if not upload_files and image:
         upload_files = [image]
 
-    if not upload_files:
-        raise HTTPException(status_code=400, detail="At least one face image is required (use 'image' or 'images' field)")
+    gcs_refs: List[str] = []
+    if image_gcs_uris:
+        for u in image_gcs_uris:
+            for part in str(u).split(","):
+                part = part.strip()
+                if part:
+                    gcs_refs.append(part)
 
-    if len(upload_files) > 4:
+    if not upload_files and not gcs_refs:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one face image is required (use 'image', 'images' or 'image_gcs_uris')",
+        )
+
+    if len(upload_files) > 4 or len(gcs_refs) > 4:
         raise HTTPException(status_code=400, detail="Maximum 4 face images allowed")
 
     # Parse character_metadata if provided
@@ -1243,8 +1635,8 @@ async def generate_ebook_async(
                 detail=f"Invalid character_metadata JSON: {e}",
             )
 
-    # Detect pipeline version: V2 if >1 image OR metadata provided, else V1
-    use_v2 = len(upload_files) > 1 or parsed_metadata is not None
+    # Detect pipeline version: V2 if >1 image OR metadata provided OR GCS refs, else V1
+    use_v2 = len(upload_files) > 1 or parsed_metadata is not None or bool(gcs_refs)
 
     job_id = uuid4().hex
 
@@ -1321,7 +1713,13 @@ async def generate_ebook_async(
     job_dir.mkdir(parents=True, exist_ok=True)
 
     # Save face images
-    if use_v2:
+    if gcs_refs:
+        try:
+            face_paths = await run_in_threadpool(_download_face_refs_from_gcs, gcs_refs, job_dir)
+        except Exception as e:
+            shutil.rmtree(job_dir, ignore_errors=True)
+            raise HTTPException(status_code=400, detail=f"Failed to fetch image_gcs_uris: {e}")
+    elif use_v2:
         face_paths = _save_face_uploads_v2(upload_files, job_dir)
     else:
         face_path = _save_face_upload_as_standard_name(upload_files[0], job_dir)
@@ -1331,6 +1729,19 @@ async def generate_ebook_async(
     output_type_normalized = (output_type or "DIGI_BOOK").upper().strip()
     if output_type_normalized not in ("DIGI_BOOK", "LULU_BOOK"):
         output_type_normalized = "DIGI_BOOK"
+
+    image_params: Dict[str, Any] = {
+        k: v.strip()
+        for k, v in {
+            "provider": image_provider,
+            "model": image_model,
+            "model_pages": image_model_pages,
+            "quality": image_quality,
+            "size": image_size,
+        }.items()
+        if isinstance(v, str) and v.strip()
+    }
+    project_id_clean = (project_id or "").strip() or None
 
     _JOBS[job_id] = {
         "job_id": job_id,
@@ -1342,7 +1753,10 @@ async def generate_ebook_async(
         "output_type": output_type_normalized,
         "pipeline_version": "v2" if use_v2 else "v1",
         "num_characters": len(face_paths),
+        "project_id": project_id_clean,
+        "image_params": image_params,
     }
+    _persist_job_state(job_id)
     _gcs_write_json(
         job_id=job_id,
         name="status.json",
@@ -1365,6 +1779,8 @@ async def generate_ebook_async(
             model_provider=normalized_provider,
             model=model,
             use_v2=use_v2,
+            project_id=project_id_clean,
+            image_params=image_params or None,
         ),
         daemon=True,
     )
@@ -1378,6 +1794,7 @@ async def generate_ebook_async(
             "html_url": f"/jobs/{job_id}/storybook.html",
             "pipeline_version": "v2" if use_v2 else "v1",
             "num_characters": len(face_paths),
+            "project_id": project_id_clean,
         }
     )
 

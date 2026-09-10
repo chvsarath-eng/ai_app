@@ -2,15 +2,21 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Mail, ShieldCheck, Truck } from 'lucide-react'
+import Link from 'next/link'
+import { Mail, ShieldCheck, Truck, BookOpen } from 'lucide-react'
 import { useCheckoutStore } from '@/lib/checkout-store'
+import { useAuthStore } from '@/lib/auth-store'
 import { clearCheckoutFiles, loadCheckoutFiles, saveCheckoutFiles } from '@/lib/checkout-files'
 import { createStorybookJob } from '@/lib/storybookApi'
+import { openRazorpayCheckout } from '@/lib/razorpay-client'
 import { trackEvent } from '@/lib/analytics'
 import type { OutputType } from '@/types/storybook'
 
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { PageHeader, Accent } from '@/components/page-header'
 import { ShippingForm } from '@/components/checkout/shipping-form'
 import { DeliveryOptions } from '@/components/checkout/delivery-options'
 import { OrderSummary } from '@/components/checkout/order-summary'
@@ -54,6 +60,7 @@ export default function CheckoutPage () {
     async function restoreFiles () {
       if (store.imageFiles.length > 0) {
         setFilesReady(true)
+        setIsLoading(false)
         return
       }
 
@@ -70,6 +77,7 @@ export default function CheckoutPage () {
       } finally {
         if (!isCancelled) {
           setFilesReady(true)
+          setIsLoading(false)
         }
       }
     }
@@ -91,12 +99,12 @@ export default function CheckoutPage () {
       }
 
       if (!store.characters?.[0]?.name || !store.outputType) {
-        router.push('/')
+        setIsLoading(false)
         return
       }
 
       if (store.imageFiles.length === 0 && !store.pendingCheckoutSessionId) {
-        router.push('/')
+        setIsLoading(false)
         return
       }
 
@@ -254,7 +262,11 @@ export default function CheckoutPage () {
     (isHardcover ? isAddressComplete && selectedShipping : true)
   )
 
-  const handleCheckoutSuccess = useCallback(async (paymentId: string, customerEmail?: string | null) => {
+  const handleCheckoutSuccess = useCallback(async (
+    paymentId: string,
+    customerEmail?: string | null,
+    projectId?: string | null
+  ) => {
     setPaymentProcessing(true)
     setCheckoutError(null)
 
@@ -283,19 +295,25 @@ export default function CheckoutPage () {
         storyline: store.storyline,
         email: customerEmail || store.email || '',
         outputType,
-        shippingAddress
+        shippingAddress,
+        projectId: projectId || undefined
       })
 
       trackEvent('checkout_completed', {
         payment_id: paymentId,
         output_type: outputType,
-        checkout_provider: 'stripe'
+        checkout_provider: 'razorpay'
       })
 
       store.clearPendingCheckout()
       await clearCheckoutFiles()
       store.reset()
-      router.push(`/order/${res.jobId}?type=${outputType}&payment=${paymentId}`)
+      // Land on the live project page so the book fills in page-by-page as it is generated.
+      if (projectId) {
+        router.push(`/projects/${projectId}?new=1&payment=${paymentId}`)
+      } else {
+        router.push(`/order/${res.jobId}?type=${outputType}&payment=${paymentId}`)
+      }
     } catch (error) {
       console.error('Failed to create job after payment:', error)
       setPaymentProcessing(false)
@@ -369,15 +387,32 @@ export default function CheckoutPage () {
     void verifyReturnedCheckout(sessionId)
   }, [filesReady, store, verifyReturnedCheckout])
 
+  const user = useAuthStore((s) => s.user)
+  const openSignIn = useAuthStore((s) => s.openSignIn)
+
+  // Once signed in, prefill the delivery email from the account.
+  useEffect(() => {
+    if (user?.email && !store.email) store.setEmail(user.email)
+  }, [user?.email, store])
+
   const handlePlaceOrder = async () => {
     if (!store.outputType || store.imageFiles.length === 0 || isSubmitting) return
     if (isHardcover && (!selectedShipping || !isAddressComplete)) return
-    if (!hasCustomerEmail) {
+    
+    // Guests can explore and fill in everything; an account is required only at pay time so
+    // the book lands in "My Books" and can be re-downloaded later.
+    if (!user) {
+      openSignIn('Sign in to save this storybook to your account and complete payment.')
+      return
+    }
+
+    const effectiveEmail = store.email || user?.email || ''
+    if (!effectiveEmail || !/\S+@\S+\.\S+/.test(effectiveEmail)) {
       setCheckoutError('Enter a valid email address so we can send the finished storybook.')
       return
     }
     if (!hasConsents) {
-      setCheckoutError('Please confirm age, photo permission, and Terms before paying.')
+      setCheckoutError('Please tick the confirmation box before paying.')
       return
     }
 
@@ -387,18 +422,20 @@ export default function CheckoutPage () {
     try {
       await saveCheckoutFiles(store.imageFiles)
 
-      const response = await fetch('/api/checkout', {
+      trackEvent('checkout_started', {
+        output_type: store.outputType,
+        checkout_provider: 'razorpay'
+      })
+
+      // 1. Create order on server via Razorpay API
+      const orderRes = await fetch('/api/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: store.email,
+          email: effectiveEmail,
           outputType: store.outputType,
-          discountCode: store.discountCode || undefined,
-          consents: {
-            ageConfirmed,
-            likenessPermission,
-            termsAccepted
-          },
+          currency: 'INR',
+          shippingCost: store.shippingCost || 0,
           formData: {
             characters: store.characters,
             storyline: store.storyline,
@@ -418,18 +455,87 @@ export default function CheckoutPage () {
         })
       })
 
-      const data = await response.json()
-      if (!response.ok || !data?.checkout?.checkoutUrl || !data?.checkout?.sessionId) {
-        throw new Error(data?.error || 'Failed to start Stripe checkout')
+      const orderData = await orderRes.json()
+      if (orderRes.status === 401) {
+        setIsSubmitting(false)
+        openSignIn('Your session expired. Sign in again to complete payment.')
+        return
       }
+      if (!orderRes.ok || !orderData?.orderId) {
+        throw new Error(orderData?.error || 'Failed to initialize payment order')
+      }
+      const projectId: string | null = orderData.projectId || null
 
-      store.setPendingCheckout(data.checkout.sessionId)
-      trackEvent('checkout_started', {
-        output_type: store.outputType,
-        checkout_provider: 'stripe'
+      // 2. Open Razorpay Checkout Modal
+      await openRazorpayCheckout({
+        key: orderData.keyId,
+        amount: orderData.amount,
+        currency: orderData.currency || 'INR',
+        name: 'img2x Storybooks',
+        description: isHardcover ? 'Personalized Hardcover Storybook' : 'Personalized Digital Storybook',
+        order_id: orderData.orderId,
+        prefill: {
+          name: store.shippingName || user?.name || store.characters?.[0]?.name || '',
+          email: effectiveEmail,
+          contact: store.shippingPhone || ''
+        },
+        handler: async (paymentResponse) => {
+          setPaymentProcessing(true)
+          try {
+            // 3. Verify signature on server
+            const verifyRes = await fetch('/api/razorpay/verify-payment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                orderId: paymentResponse.razorpay_order_id,
+                paymentId: paymentResponse.razorpay_payment_id,
+                signature: paymentResponse.razorpay_signature,
+                projectId,
+                email: effectiveEmail,
+                outputType: store.outputType,
+                formData: {
+                  characters: store.characters,
+                  storyline: store.storyline,
+                  numCharacters: store.characters.length,
+                  shippingName: store.shippingName,
+                  shippingPhone: store.shippingPhone,
+                  shippingAddress1: store.shippingAddress1,
+                  shippingAddress2: store.shippingAddress2,
+                  shippingCity: store.shippingCity,
+                  shippingRegion: store.shippingRegion,
+                  shippingPostalCode: store.shippingPostalCode,
+                  shippingCountry: store.shippingCountry,
+                  shippingLevel: store.selectedShippingLevel || undefined,
+                  shippingCost: store.shippingCost,
+                  orderTotal: selectedShipping?.total
+                }
+              })
+            })
+
+            const verifyData = await verifyRes.json()
+            if (!verifyRes.ok || !verifyData?.success) {
+              throw new Error(verifyData?.error || 'Payment verification failed')
+            }
+
+            // 4. Launch Story Generation job (linked to the paid project)
+            await handleCheckoutSuccess(
+              paymentResponse.razorpay_payment_id,
+              effectiveEmail,
+              verifyData.projectId || projectId
+            )
+          } catch (verifyErr) {
+            console.error('Payment verification error:', verifyErr)
+            setCheckoutError(verifyErr instanceof Error ? verifyErr.message : 'Payment verification failed')
+            setPaymentProcessing(false)
+            setIsSubmitting(false)
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setIsSubmitting(false)
+          }
+        }
       })
-
-      window.location.href = data.checkout.checkoutUrl
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to start checkout'
       console.error(message, error)
@@ -440,10 +546,10 @@ export default function CheckoutPage () {
 
   if (isLoading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-2 border-emerald-500 border-t-transparent mx-auto mb-4" />
-          <p className="text-zinc-500">Loading checkout...</p>
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-pink-500" />
+          <p className="text-sm text-zinc-500">Loading checkoutâ€¦</p>
         </div>
       </div>
     )
@@ -451,37 +557,54 @@ export default function CheckoutPage () {
 
   if (paymentProcessing) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-violet-500 border-t-transparent rounded-full mb-4" />
-        <h2 className="text-xl font-semibold text-zinc-900">Processing your order...</h2>
-        <p className="text-zinc-500 mt-2">Please wait while we verify your payment and create your storybook.</p>
+      <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 text-center">
+        <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-pink-500" />
+        <h2 className="text-xl font-bold tracking-tight text-zinc-800">Processing your orderâ€¦</h2>
+        <p className="mt-2 text-sm text-zinc-500">Please wait while we verify your payment and create your storybook.</p>
+      </div>
+    )
+  }
+
+  if (store.imageFiles.length === 0 && !store.characters?.[0]?.name) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center px-4 py-12">
+        <Card className="w-full max-w-md p-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-pink-500 text-white">
+            <BookOpen className="h-7 w-7" />
+          </div>
+          <h2 className="text-2xl font-bold tracking-tight text-zinc-800">No storybook selected yet</h2>
+          <p className="mt-2 text-sm text-zinc-500">
+            Upload a photo and write your storyline on the home page before heading to checkout.
+          </p>
+          <Button asChild className="mt-6 w-full font-semibold">
+            <Link href="/#create">Create your storybook</Link>
+          </Button>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="py-6 sm:py-8">
-      <div className={`mx-auto px-4 sm:px-6 ${isHardcover ? 'max-w-6xl' : 'max-w-4xl'}`}>
-        <div className="mx-auto mb-6 max-w-3xl text-center sm:mb-8">
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
-            Checkout
-          </h1>
-          <p className="mx-auto mt-3 max-w-2xl text-sm text-zinc-600 sm:text-base">
-            Secure international checkout powered by Stripe. Tax is calculated for your country at payment.
-          </p>
+    <div className="py-10 sm:py-14">
+      <div className={`mx-auto ${isHardcover ? 'max-w-6xl' : 'max-w-4xl'}`}>
+        <PageHeader
+          eyebrow="Checkout"
+          title={<>Almost <Accent>there</Accent></>}
+          subtitle="Secure checkout powered by Razorpay. Cards, UPI, Netbanking, and Wallets supported."
+          className="mb-6"
+        />
 
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 text-xs text-zinc-600 sm:gap-3">
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5">
-              <ShieldCheck className="h-3.5 w-3.5 text-violet-500" />
-              <span>Stripe secure pay</span>
-            </div>
-            {isHardcover && (
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5">
-                <Truck className="h-3.5 w-3.5 text-violet-500" />
-                <span>Worldwide shipping</span>
-              </div>
-            )}
+        <div className="mb-8 flex flex-wrap items-center justify-center gap-2.5 text-xs text-zinc-600 sm:gap-3">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/70 bg-white/80 px-3 py-1.5 shadow-sm backdrop-blur">
+            <ShieldCheck className="h-3.5 w-3.5 text-violet-500" />
+            <span>256-bit secure payment</span>
           </div>
+          {isHardcover && (
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/70 bg-white/80 px-3 py-1.5 shadow-sm backdrop-blur">
+              <Truck className="h-3.5 w-3.5 text-violet-500" />
+              <span>Worldwide shipping</span>
+            </div>
+          )}
         </div>
 
         {checkoutError && (
@@ -519,7 +642,7 @@ export default function CheckoutPage () {
               />
 
               {!selectedShipping && !shippingLoading && isAddressComplete && (
-                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-5 text-center">
+                <div className="rounded-3xl border border-dashed border-zinc-300 bg-white/60 p-5 text-center">
                   <Truck className="mx-auto mb-2 h-8 w-8 text-violet-500" />
                   <p className="text-sm font-medium text-zinc-900">
                     Select a delivery option to continue
@@ -552,8 +675,9 @@ export default function CheckoutPage () {
                 isSubmitting={isSubmitting}
                 isCheckoutOpen={false}
                 canPlaceOrder={canPlaceOrder}
-                ctaLabel="Pay with Stripe"
-                submittingLabel="Redirecting to Stripe..."
+                currency="INR"
+                ctaLabel="Pay with Razorpay"
+                submittingLabel="Opening Razorpay..."
                 onPlaceOrder={handlePlaceOrder}
               />
             </div>
@@ -586,11 +710,11 @@ function ContactAndConsentForm ({
   onTermsAcceptedChange: (value: boolean) => void
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+    <Card className="p-5 sm:p-6">
       <div className="mb-4">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900">
+        <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-zinc-900">
           <Mail className="h-5 w-5 text-violet-600" />
-          Contact &amp; Consent
+          Contact &amp; consent
         </h2>
         <p className="mt-1 text-sm text-zinc-500">
           We&apos;ll send the finished storybook to this email.
@@ -617,43 +741,25 @@ function ContactAndConsentForm ({
         <label className="flex items-start gap-3 text-sm text-zinc-700">
           <input
             type="checkbox"
-            className="mt-1"
-            checked={ageConfirmed}
+            className="mt-1 accent-pink-500"
+            checked={ageConfirmed && likenessPermission && termsAccepted}
             disabled={isSubmitting}
-            onChange={(event) => onAgeConfirmedChange(event.target.checked)}
-          />
-          <span>I confirm I am at least 18 years old.</span>
-        </label>
-
-        <label className="flex items-start gap-3 text-sm text-zinc-700">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={likenessPermission}
-            disabled={isSubmitting}
-            onChange={(event) => onLikenessPermissionChange(event.target.checked)}
+            onChange={(event) => {
+              const checked = event.target.checked
+              onAgeConfirmedChange(checked)
+              onLikenessPermissionChange(checked)
+              onTermsAcceptedChange(checked)
+            }}
           />
           <span>
-            I own these photos or have permission to use them, including parental/guardian permission for any minors shown.
-          </span>
-        </label>
-
-        <label className="flex items-start gap-3 text-sm text-zinc-700">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={termsAccepted}
-            disabled={isSubmitting}
-            onChange={(event) => onTermsAcceptedChange(event.target.checked)}
-          />
-          <span>
-            I agree to the{' '}
-            <a href="/terms" className="text-violet-600 underline" target="_blank" rel="noreferrer">Terms</a>
+            I confirm I am 18+, I own these photos or have permission to use them (including parental/guardian
+            permission for any minors shown), and I agree to the{' '}
+            <a href="/terms" className="font-semibold text-violet-600 underline" target="_blank" rel="noreferrer">Terms</a>
             {' '}and{' '}
-            <a href="/refund" className="text-violet-600 underline" target="_blank" rel="noreferrer">Refund Policy</a>.
+            <a href="/refund" className="font-semibold text-violet-600 underline" target="_blank" rel="noreferrer">Refund Policy</a>.
           </span>
         </label>
       </div>
-    </div>
+    </Card>
   )
 }

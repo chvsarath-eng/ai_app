@@ -17,6 +17,7 @@ import type { OutputType, CharacterInfo } from '@/types/storybook'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import { PageHeader, Accent } from '@/components/page-header'
 import { cn } from '@/lib/utils'
 import { trackEvent } from '@/lib/analytics'
 import { StorylineInput } from '@/components/generator-card/storyline-input'
@@ -173,7 +174,7 @@ export function CreatePageContent () {
 
   if (successData) {
     return (
-      <div className="container mx-auto max-w-7xl px-4 py-8">
+      <div className="mx-auto max-w-3xl py-10 sm:py-14">
         <PaymentSuccess
           transactionId={successData.transactionId}
           jobId={successData.jobId}
@@ -190,20 +191,16 @@ export function CreatePageContent () {
   const hasAnyPhoto = form.watch('characters')?.some((c) => c?.imageFile)
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white via-violet-50/30 to-white">
-      <div className="container mx-auto max-w-7xl px-4 py-8">
-        {/* Page Title */}
-        <div className="mb-6 text-center">
-          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-            <span className="ultraGlowText">
-              Create Your Storybook
-            </span>
-          </h1>
-          <p className="mt-2 text-zinc-600">
-            Add up to 4 characters and create an amazing story together
-          </p>
-        </div>
+    <div className="py-10 sm:py-14">
+      <div className="mx-auto max-w-5xl">
+        <PageHeader
+          eyebrow="Create"
+          title={<>Create your <Accent>storybook</Accent></>}
+          subtitle="Add up to 4 characters and create an amazing story together."
+          className="mb-10"
+        />
 
+        <div className="siriAmbientCard">
         <Card className="relative z-10 overflow-hidden">
           <CardContent className="space-y-4 pt-6">
             <FormProvider {...form}>
@@ -300,7 +297,7 @@ export function CreatePageContent () {
                             <span className="text-sm font-semibold text-zinc-900">Digital Book</span>
                           </div>
                           <p className="mt-0.5 text-xs text-zinc-500">HTML flipbook</p>
-                          <p className="mt-1 text-base font-bold text-violet-600">$14.99</p>
+                          <p className="mt-1 text-base font-bold text-violet-600">₹799</p>
                           {form.watch('outputType') === 'DIGI_BOOK' && (
                             <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-violet-500 text-white">
                               <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">
@@ -331,7 +328,7 @@ export function CreatePageContent () {
                             <span className="text-sm font-semibold text-zinc-900">Hardcover</span>
                           </div>
                           <p className="mt-0.5 text-xs text-zinc-500">8.5×8.5" printed</p>
-                          <p className="mt-1 text-base font-bold text-emerald-600">$39.99</p>
+                          <p className="mt-1 text-base font-bold text-emerald-600">₹2,999</p>
                           {form.watch('outputType') === 'LULU_BOOK' && (
                             <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white">
                               <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">
@@ -368,6 +365,7 @@ export function CreatePageContent () {
             </FormProvider>
           </CardContent>
         </Card>
+        </div>
       </div>
     </div>
   )

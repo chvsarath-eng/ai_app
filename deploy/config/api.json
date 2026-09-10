@@ -11,13 +11,19 @@
   "allowUnauthenticated": false,
   "cpuAlwaysAllocated": true,
   "env": {
-    "IMAGE_PROVIDER": "laozhang",
+    "IMAGE_PROVIDER": "openai_images",
+    "IMAGE_MODEL": "gpt-image-2.5-sunburst-2026-09-08",
+    "IMAGE_MODEL_PAGES": "gpt-image-2.5-flare-2026-09-08",
+    "IMAGE_API_BASE": "https://api.laozhang.ai/v1",
+    "IMAGE_RESOLUTION": "4K",
+    "IMAGE_ASPECT_RATIO": "1:1",
     "JOBS_BUCKET": "imgstr-story-jobs-us-central1",
     "IMAGE_CONCURRENCY": "5"
   },
   "secrets": {
     "GOOGLE_API_KEY": "gemini-api-key:latest",
     "API_KEY_LAOZHANG": "API_KEY_LAOZHANG:latest",
+    "OPENAI_API_KEY": "OPENAI_API_KEY:latest",
     "SMTP_HOST": "smtp-host:latest",
     "SMTP_PORT": "smtp-port:latest",
     "SMTP_USER": "smtp-user:latest",

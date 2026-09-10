@@ -1,44 +1,31 @@
-import styles from './gallery.module.css'
+import type { Metadata } from 'next'
+import Link from 'next/link'
 
-const books = [
-  '/gallery/cover_1.jpg',
-  '/gallery/cover_2.jpg',
-  '/gallery/cover_3.jpg',
-  '/gallery/cover_4.jpg',
-  '/gallery/cover_2.jpg',
-  '/gallery/cover_3.jpg'
-]
+import { GalleryPreview } from '@/components/gallery-preview/gallery-preview'
+import { PageHeader, Accent } from '@/components/page-header'
+import { Button } from '@/components/ui/button'
+
+export const metadata: Metadata = {
+  title: 'Gallery',
+  description: 'Explore sample personalized digital storybooks created with img2x — ultra-photorealistic 4K AI illustrations.'
+}
 
 export default function GalleryPage () {
   return (
-    <section className={styles.page}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>Gallery</h1>
-        <p className={styles.subtitle}>AI-generated covers inspired by your samples.</p>
-      </header>
+    <div className="py-10 sm:py-14">
+      <PageHeader
+        eyebrow="Gallery"
+        title={<>Explore our <Accent>Digital Books</Accent></>}
+        subtitle="Beautiful stories brought to life with AI-generated 4K illustrations. Click any book to open it."
+        className="mb-12"
+      />
 
-      <div className={styles.gallery}>
-        {books.map(renderBook)}
-      </div>
-    </section>
-  )
-}
+      <GalleryPreview />
 
-function renderBook (coverSrc: string, index: number) {
-  return (
-    <div
-      key={`book-${index}`}
-      className={styles.bookContainer}
-      role="img"
-      aria-label={`Book cover ${index + 1}`}
-    >
-      <div className={styles.book}>
-        <div className={styles.frontFace}>
-          <div className={styles.cover} style={{ backgroundImage: `url(${coverSrc})` }}>
-            <div className={styles.coverOverlay} />
-          </div>
-        </div>
-        <div className={styles.spine} />
+      <div className="mt-14 flex justify-center">
+        <Button asChild size="lg" className="px-8 font-semibold">
+          <Link href="/#create">Create your own book</Link>
+        </Button>
       </div>
     </div>
   )

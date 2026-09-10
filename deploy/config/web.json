@@ -3,7 +3,7 @@
   "region": "us-central1",
   "port": 3000,
   "cpu": "1",
-  "memory": "512Mi",
+  "memory": "1Gi",
   "minInstances": 0,
   "maxInstances": 10,
   "concurrency": 80,
@@ -11,6 +11,10 @@
   "allowUnauthenticated": true,
   "env": {
     "NODE_ENV": "production",
+    "AUTH_MODE": "firebase",
+    "DATA_BACKEND": "firestore",
+    "GCP_PROJECT_ID": "imgstr",
+    "JOBS_BUCKET": "imgstr-story-jobs-us-central1",
     "STRIPE_AMOUNT_DIGITAL_CENTS": "999",
     "STRIPE_AMOUNT_HARDCOVER_CENTS": "3999",
     "STRIPE_AUTOMATIC_TAX": "true"
@@ -23,6 +27,12 @@
     "STORY_SERVICE_URL": "story-service-url:latest",
     "STORY_INVOKER_CREDENTIALS_JSON": "story-invoker-credentials:latest",
     "STRIPE_SECRET_KEY": "stripe-secret-key:latest",
-    "STRIPE_WEBHOOK_SECRET": "stripe-webhook-secret:latest"
+    "STRIPE_WEBHOOK_SECRET": "stripe-webhook-secret:latest",
+    "RAZORPAY_KEY_ID": "razorpay-key-id:latest",
+    "RAZORPAY_KEY_SECRET": "razorpay-key-secret:latest",
+    "RAZORPAY_WEBHOOK_SECRET": "razorpay-webhook-secret:latest",
+    "SESSION_SECRET": "session-secret:latest",
+    "ADMIN_SECRET_KEY": "admin-secret-key:latest",
+    "ADMIN_EMAILS": "admin-emails:latest"
   }
 }

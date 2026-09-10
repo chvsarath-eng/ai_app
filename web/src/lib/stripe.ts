@@ -22,7 +22,7 @@ export function getStripe () {
 
   if (!stripeClient) {
     stripeClient = new Stripe(secretKey, {
-      apiVersion: '2026-07-29.dahlia',
+      apiVersion: '2026-08-26.dahlia',
       typescript: true
     })
   }

@@ -1,32 +1,59 @@
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import { Images, Clapperboard } from 'lucide-react'
+
+import { PageHeader, Accent } from '@/components/page-header'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+
+export const metadata: Metadata = {
+  title: 'Coming Soon',
+  description: 'Albums and personalized story videos are coming to img2x.'
+}
+
+const upcoming = [
+  {
+    icon: Images,
+    label: 'Albums',
+    title: 'Beautiful collections',
+    description: 'Curate pages into shareable albums with themes and highlights.'
+  },
+  {
+    icon: Clapperboard,
+    label: 'Story videos',
+    title: 'Short personalized clips',
+    description: 'Turn your book into a cinematic, narrated story video.'
+  }
+]
+
 export default function ComingSoonPage () {
   return (
-    <main className="mx-auto flex w-full max-w-screen-lg flex-col items-center gap-6 px-4 py-16 text-center sm:py-20">
-      <span className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-50 to-pink-50 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-violet-600">
-        Coming Soon
-      </span>
-      <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 sm:text-4xl">
-        Albums and personalized story videos
-      </h1>
-      <p className="max-w-xl text-sm text-zinc-600 sm:text-base">
-        We are building a new experience for curated albums and short story videos.
-        This page is a placeholder for now.
-      </p>
-      <div className="mt-2 grid w-full max-w-3xl gap-4 sm:grid-cols-2">
-        <div className="rounded-3xl border border-zinc-200/80 bg-white/80 p-6 text-left shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-widest text-violet-600">Albums</p>
-          <h2 className="mt-2 text-lg font-semibold text-zinc-900">Beautiful collections</h2>
-          <p className="mt-2 text-sm text-zinc-600">
-            Curate pages into shareable albums with themes and highlights.
-          </p>
-        </div>
-        <div className="rounded-3xl border border-zinc-200/80 bg-white/80 p-6 text-left shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-widest text-rose-600">Story videos</p>
-          <h2 className="mt-2 text-lg font-semibold text-zinc-900">Short personalized clips</h2>
-          <p className="mt-2 text-sm text-zinc-600">
-            Turn your book into a cinematic, narrated story video.
-          </p>
-        </div>
+    <div className="flex flex-col items-center py-16 sm:py-24">
+      <PageHeader
+        eyebrow="Coming soon"
+        title={<>Albums and <Accent>personalized story videos</Accent></>}
+        subtitle="We are building a new experience for curated albums and short story videos. Stay tuned."
+      />
+
+      <div className="mt-12 grid w-full max-w-3xl gap-5 sm:grid-cols-2">
+        {upcoming.map((item) => {
+          const Icon = item.icon
+          return (
+            <Card key={item.label} className="p-6 text-left">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-pink-500 text-white">
+                <Icon className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <p className="mt-4 text-xs font-medium uppercase tracking-widest text-violet-600">{item.label}</p>
+              <h2 className="mt-1.5 text-lg font-semibold tracking-tight text-zinc-900">{item.title}</h2>
+              <p className="mt-2 text-sm text-zinc-500">{item.description}</p>
+            </Card>
+          )
+        })}
       </div>
-    </main>
+
+      <Button asChild variant="outline" className="mt-10 bg-white/80 font-semibold">
+        <Link href="/#contact">Tell us what you'd love to see</Link>
+      </Button>
+    </div>
   )
 }

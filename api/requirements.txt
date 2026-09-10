@@ -4,8 +4,10 @@ python-multipart>=0.0.9
 python-dotenv>=1.0.1
 
 pillow
+requests
 google-genai
 google-cloud-storage
+google-cloud-firestore
 langchain-core
 langchain-google-genai
 langchain-openai
