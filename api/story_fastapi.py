@@ -30,6 +30,8 @@ load_dotenv()
 _JOBS: Dict[str, Dict[str, Any]] = {}
 
 _GCS_CLIENT = None
+_GCS_SIGNING: Optional[Dict[str, str]] = None
+_GCS_SIGNING_AT = 0.0
 
 _JOB_STATE_FILE = "job_state.json"
 
@@ -360,6 +362,31 @@ def _gcs_upload_file(*, job_id: str, name: str, local_path: str, content_type: s
     return f"gs://{bucket_name}/{blob.name}"
 
 
+def _gcs_signing_kwargs() -> Dict[str, str]:
+    """Cloud Run ADC is a token, not a private key. Sign via IAM signBlob instead."""
+    global _GCS_SIGNING, _GCS_SIGNING_AT
+    if _GCS_SIGNING and (time.time() - _GCS_SIGNING_AT) < 45 * 60:
+        return _GCS_SIGNING
+
+    import google.auth
+    from google.auth.transport.requests import Request as GoogleAuthRequest
+
+    credentials, _project = google.auth.default()
+    sa_email = getattr(credentials, "service_account_email", None) or (
+        os.getenv("GCS_SIGNING_SERVICE_ACCOUNT") or ""
+    ).strip()
+    if not sa_email or sa_email == "default":
+        return {}
+    if not getattr(credentials, "token", None) or not getattr(credentials, "valid", True):
+        credentials.refresh(GoogleAuthRequest())
+    token = getattr(credentials, "token", None)
+    if not token:
+        return {}
+    _GCS_SIGNING = {"service_account_email": sa_email, "access_token": token}
+    _GCS_SIGNING_AT = time.time()
+    return _GCS_SIGNING
+
+
 def _gcs_generate_signed_url(
     *,
     job_id: str,
@@ -374,11 +401,13 @@ def _gcs_generate_signed_url(
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(f"{_gcs_job_prefix(job_id)}/{name}")
     response_disposition = f'attachment; filename="{filename or Path(name).name}"'
+    kwargs: Dict[str, Any] = _gcs_signing_kwargs()
     return blob.generate_signed_url(
         version="v4",
         expiration=timedelta(days=expires_days),
         method="GET",
         response_disposition=response_disposition,
+        **kwargs,
     )
 
 
@@ -660,12 +689,12 @@ def _run_ebook_job(
             logger.warning("Email requested but no signed URLs available; skipping send.")
             return "skipped_no_links"
 
-        host = os.getenv("SMTP_HOST")
-        port = int(os.getenv("SMTP_PORT") or "587")
-        user = os.getenv("SMTP_USER")
-        password = os.getenv("SMTP_PASSWORD")
-        from_email = os.getenv("SMTP_FROM") or user
-        from_name = os.getenv("SMTP_FROM_NAME") or "IMG2X"
+        host = (os.getenv("SMTP_HOST") or "").strip()
+        port = int((os.getenv("SMTP_PORT") or "587").strip() or "587")
+        user = (os.getenv("SMTP_USER") or "").strip()
+        password = (os.getenv("SMTP_PASSWORD") or os.getenv("SMTP_PASS") or "").strip()
+        from_email = (os.getenv("SMTP_FROM") or user or "").strip()
+        from_name = (os.getenv("SMTP_FROM_NAME") or "IMG2X").strip()
         use_tls = _env_bool("SMTP_TLS", True)
         use_ssl = _env_bool("SMTP_SSL", False)
         smtp_debug = _env_bool("SMTP_DEBUG", False)
@@ -1114,12 +1143,27 @@ def _run_ebook_job(
             _update_stage("upload_failed", {"error_type": e.__class__.__name__})
 
         # Optional email delivery (only if SMTP is configured)
-        if email:
+        to_email = (email or "").strip()
+        if to_email:
             try:
-                _update_stage("email_start", {"has_links": bool(signed_items)})
+                site_base = (os.getenv("PUBLIC_SITE_URL") or "https://img2x.com").rstrip("/")
+                email_items = list(signed_items)
+                if project_id:
+                    email_items.append({
+                        "label": "Open your storybook on img2x",
+                        "url": f"{site_base}/projects/{project_id}",
+                        "kind": "flipbook",
+                    })
+                elif not email_items:
+                    email_items.append({
+                        "label": "Open My Books on img2x",
+                        "url": f"{site_base}/projects",
+                        "kind": "flipbook",
+                    })
+                _update_stage("email_start", {"has_links": bool(email_items), "signed": len(signed_items)})
                 email_result = _maybe_send_email(
-                    to_email=email,
-                    items=signed_items,
+                    to_email=to_email,
+                    items=email_items,
                     expires_days=expires_days,
                 )
                 result["email_status"] = email_result if email_result else "sent"
@@ -1129,6 +1173,9 @@ def _run_ebook_job(
                 result["email_status"] = "failed"
                 result["email_error"] = {"type": e.__class__.__name__, "message": str(e)}
                 _update_stage("email_failed", {"error_type": e.__class__.__name__})
+        else:
+            result["email_status"] = "skipped_no_email"
+            logger.warning("job_id=%s finished but no customer email was provided", job_id)
 
         _JOBS[job_id]["status"] = "succeeded"
         _JOBS[job_id]["result"] = result
@@ -1639,6 +1686,7 @@ async def generate_ebook_async(
     use_v2 = len(upload_files) > 1 or parsed_metadata is not None or bool(gcs_refs)
 
     job_id = uuid4().hex
+    email = (email or "").strip() or None
 
     if credentials_path:
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials_path

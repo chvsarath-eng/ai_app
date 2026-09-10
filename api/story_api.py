@@ -1351,8 +1351,9 @@ def generate_ebook_html_bundle_v2(
         else:
             sheet_label = (
                 f"{name}'s real photograph — identity only. Photograph this same person "
-                f"as a single full-body costume reference. Relight them for the studio. "
-                f"No inset, no collage. Identity: {char.get('identity_card') or name}."
+                f"as a single full-body costume reference, face pointing at the camera, "
+                f"both eyes visible. Relight them for the studio. "
+                f"No inset, no collage, no profile. Identity: {char.get('identity_card') or name}."
             )
         phase1_tasks.append({
             "type": "character",
@@ -1383,7 +1384,8 @@ def generate_ebook_html_bundle_v2(
             cname = char_name_map.get(char_idx, f"Character {char_idx}")
             cover_labels.append(
                 f"{cname}'s costume and identity reference. Photograph {cname} inside the new scene; "
-                f"relight face and clothes to match the scene. Do not paste this image on top."
+                f"face the camera with both eyes visible; relight face and clothes to match the scene. "
+                f"Do not paste this image on top. Do not invent a side of the face."
             )
 
         phase2_tasks.append({
@@ -1406,7 +1408,8 @@ def generate_ebook_html_bundle_v2(
             cname = char_name_map.get(char_idx, f"Character {char_idx}")
             page_labels.append(
                 f"{cname}'s costume and identity reference. Photograph {cname} inside this page's scene; "
-                f"relight face and clothes to match. Same person or companion, not a cutout."
+                f"face the camera with both eyes visible; relight face and clothes to match. "
+                f"Same person or companion, not a cutout. Do not invent a side of the face."
             )
 
         phase2_tasks.append({

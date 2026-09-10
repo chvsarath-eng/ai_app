@@ -245,7 +245,9 @@ _SAFETY_REWRITE_SYSTEM = (
     "Rules:\n"
     "- Keep every instruction about photographing the same child inside the scene, "
     "relighting them to match the environment, and preserving identity from the reference.\n"
-    "- Do not add a frontal passport stare or a pasted-face / collage look.\n"
+    "- Keep faces camera-facing with both eyes visible. Image models only know the "
+    "uploaded front of the face; do not rewrite to profile, 3/4, or looking away.\n"
+    "- Do not add a pasted-face / collage look. Relight the frontal face to the scene.\n"
     "- Remove anything that shows a child in danger, distress, fear, injury, cold, drowning, "
     "falling, being chased, or near hazards (deep/rushing water, cliffs, fire, storms, collapsing things).\n"
     "- Replace it with a calm, joyful, clearly safe version of the same moment: the child stands on "
@@ -926,8 +928,11 @@ def image_generator(
         "Photograph that same person inside the new scene: same age, bone structure, "
         "skin tone, and hair, but relight face, skin, hair, and clothes to match the "
         "scene's key light, weather, and color. "
-        "Natural head angles and story-matched expressions. "
-        "Forbidden: face swap, cutout, collage, studio-lit face on a location plate. "
+        "Every human face points at the camera with both eyes visible -- the model "
+        "only knows the uploaded front of the face. Body does the action; head stays "
+        "frontal. Subtle photo-like expression only. "
+        "Forbidden: face swap, cutout, collage, studio-lit face on a location plate, "
+        "profile, 3/4 face, looking away. "
         "Output one real photograph with shared grain and texture across face and background."
     )
 
@@ -954,7 +959,11 @@ def image_generator(
         for i, (p, pil_image) in enumerate(reference_images):
             char_name = p.stem.replace("_", " ").replace("-", " ").title()
             if i == 0:
-                label = "Identity reference: photograph this same person inside the new scene; relight them, do not paste the face."
+                label = (
+                    "Identity reference: photograph this same person inside the new scene; "
+                    "face the camera with both eyes visible; relight them; do not paste the face; "
+                    "do not invent a side of the face."
+                )
             elif i == 1:
                 label = f"Costume reference for {char_name}: same outfit and body, newly photographed in the scene."
             else:
