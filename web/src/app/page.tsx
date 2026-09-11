@@ -348,7 +348,7 @@ function Section ({
 function HeroLeft () {
   return (
     <div className="min-w-0">
-      <h1 className="break-words text-4xl font-semibold tracking-tight text-zinc-900 sm:text-5xl lg:text-6xl lg:max-w-[52rem]">
+      <h1 className="break-words text-[1.65rem] leading-snug font-semibold tracking-tight text-zinc-900 sm:text-5xl sm:leading-tight lg:text-6xl lg:max-w-[52rem]">
         Turn your photo into an <span className="ultraGlowText font-bold">Ultra‑Photorealistic</span> storybook with{' '}
         <span className="ultraGlowText font-bold">4K</span> images.
       </h1>

@@ -14,7 +14,7 @@ export function HeroSplit ({
   return (
     <section
       className={cn(
-        'flex min-h-[calc(100dvh-14rem)] items-stretch pt-4 pb-0 sm:pt-6 sm:pb-0 lg:pt-8 lg:pb-0',
+        'flex items-stretch pt-3 pb-0 sm:pt-6 sm:pb-0 lg:min-h-[calc(100dvh-14rem)] lg:pt-8 lg:pb-0',
         className
       )}
     >

@@ -574,10 +574,10 @@ export default function CheckoutPage () {
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-zinc-800">No storybook selected yet</h2>
           <p className="mt-2 text-sm text-zinc-500">
-            Upload a photo and write your storyline on the home page before heading to checkout.
+            Add a photo, pick Digital or Hardcover, and write a storyline first.
           </p>
           <Button asChild className="mt-6 w-full font-semibold">
-            <Link href="/#create">Create your storybook</Link>
+            <Link href="/create">Create your storybook</Link>
           </Button>
         </Card>
       </div>

@@ -91,7 +91,7 @@ export function CreatePageContent () {
     defaultValues: {
       characters: [{ ...defaultCharacter }],
       storyline: '',
-      outputType: undefined
+      outputType: 'DIGI_BOOK'
     }
   })
 
@@ -113,14 +113,13 @@ export function CreatePageContent () {
             relationship: c.relationship || ''
           })),
           storyline: draft.storyline,
-          outputType: draft.outputType as any
+          outputType: (draft.outputType as OutputType) || 'DIGI_BOOK'
         })
         clearDraft()
       }
     }
   }, [])
 
-  const storylineValue = form.watch('storyline')
   const characterCount = fields.length
   const showExtendedFields = characterCount > 1
 
@@ -267,15 +266,12 @@ export function CreatePageContent () {
                     : null}
                 </div>
 
-                {/* Book type */}
-                {storylineValue
-                  ? (
-                    <div className="space-y-2">
+                <div className="space-y-2">
                       <Label className="flex items-center gap-2">
                         <Book className="h-4 w-4 text-zinc-500" aria-hidden="true" />
                         Book type
                       </Label>
-                      <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="grid grid-cols-2 gap-2">
                         <label
                           className={cn(
                             'relative flex cursor-pointer flex-col rounded-lg border-2 p-3 transition-all hover:border-violet-300',
@@ -346,8 +342,6 @@ export function CreatePageContent () {
                         )
                         : null}
                     </div>
-                  )
-                  : null}
 
                 {formError
                   ? (
