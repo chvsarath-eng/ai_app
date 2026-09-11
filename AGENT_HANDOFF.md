@@ -1,9 +1,38 @@
-# Agent Handoff — img2x (Aug 27, 2026)
+# Agent Handoff — img2x (Sep 11, 2026)
 
 > **Purpose:** Next agent / developer can continue without re-discovering context.  
 > **Product:** [img2x.com](https://img2x.com) — AI personalized storybooks (digital flipbook + Lulu hardcover).  
 > **Canonical GitHub (private):** https://github.com/chvsarath-eng/ai_app — clone this on any laptop.  
-> **Status:** GitHub Actions CI/CD live (Aug 27, 2026). GCP OIDC bootstrapped. **Web deployed** via Actions. Replace Stripe Secret Manager placeholders before go-live.
+> **Status:** GitHub Actions CI/CD live. **Image pipeline:** official OpenAI 2.5 is temporary primary; LaoZhang 2.5 VIP is down — keep OpenAI as backup. Full rules: [`docs/IMAGE_GENERATION.md`](./docs/IMAGE_GENERATION.md).
+
+---
+
+## 0. Current work (Sep 11, 2026) — read first
+
+### Decisions (do not undo without asking)
+
+1. **Digital vs hardcover cost** — Digital is the cheap SKU (HTML + PDF). Use **1024 + Flare medium** for cover/pages, Sunburst high only for the identity sheet. Hardcover is the expensive SKU: **2048 + Sunburst high** for every image. Never upscale 1024 for print; re-render via `render-print`.
+2. **LaoZhang 2.5 VIP** (`gpt-image-2.5-*-vip`, $0.03/call) was 503ing. Official-forward LaoZhang 2.5 (no `-vip`) needs a **Sora2Official** token group — the current Default-group key cannot use it.
+3. **For now** primary host is `https://api.openai.com/v1` with dated snapshots (`gpt-image-2.5-sunburst-2026-09-08` / `flare-2026-09-08`). **`IMAGE_API_FALLBACK=1`** keeps the other host as backup. Use **`https://api2.laozhang.ai/v1`** (not `api.laozhang.ai`) when switching back.
+4. Bind keys **per host**. A LaoZhang key on OpenAI is 401. Never drop to `gpt-image-2-vip` (older model).
+5. Likeness: frontal faces only; uploaded crop is identity not scale; ban window/hole crops (giant-head bug).
+6. Do not restyle the home page. Do not commit `.env` or `graphify-out/`.
+
+### When LaoZhang VIP is stable
+
+Set Cloud Run / `deploy/config/api.json`:
+
+```
+IMAGE_API_BASE=https://api2.laozhang.ai/v1
+IMAGE_MODEL=gpt-image-2.5-sunburst-vip
+IMAGE_MODEL_PAGES=gpt-image-2.5-flare-vip
+IMAGE_MODEL_PRINT=gpt-image-2.5-sunburst-vip
+IMAGE_API_FALLBACK=1
+```
+
+### Timed local proof (gitignored)
+
+`api/quality_jobs/openai_direct_1789166951/` — digital **128s**, print ~**200s** (page 9 retried). See `docs/IMAGE_GENERATION.md`.
 
 ---
 
@@ -127,9 +156,12 @@ Local: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
 
 ## 5. Story Service (`api/`) quick facts
 
-- `POST /generate-ebook-async` in `story_fastapi.py`
-- Prod images: LaoZhang (`IMAGE_PROVIDER=laozhang`)
-- Jobs: background thread + GCS `JOBS_BUCKET`
+- `POST /generate-ebook-async` in `story_fastapi.py` (v2 multi-character)
+- `POST /jobs/{job_id}/render-print` — hardcover upgrade from a finished digital job
+- Images: `IMAGE_PROVIDER=openai_images` (OpenAI-compatible). See `docs/IMAGE_GENERATION.md`
+- Temporary primary: `api.openai.com`. Backup: LaoZhang `api2`. Keys per host.
+- Digital: 1024 / Flare medium pages. Hardcover: 2048 / Sunburst high
+- Jobs: background thread + GCS `JOBS_BUCKET`; v2 writes `image_manifest.json`
 - Never commit `invoker.json` / `.env`
 
 ---

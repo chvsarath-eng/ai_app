@@ -112,6 +112,8 @@ export type Project = {
   cost?: Record<string, unknown>
   error?: { type?: string; message?: string; stage?: string } | null
   startError?: string | null
+  printStatus?: 'queued' | 'running' | 'succeeded' | 'failed' | null
+  printError?: string | null
   startedAt?: number | null
   finishedAt?: number | null
   emailStatus?: string | null

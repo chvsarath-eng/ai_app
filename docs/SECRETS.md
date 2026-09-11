@@ -33,13 +33,14 @@ Local template: `web/.env.example`
 | Cloud Run env var | Secret Manager ID | Notes |
 |-------------------|-------------------|-------|
 | `GOOGLE_API_KEY` | `gemini-api-key` | Gemini fallback |
-| `API_KEY_LAOZHANG` | `API_KEY_LAOZHANG` | LaoZhang API key (production image provider) |
+| `API_KEY_LAOZHANG` | `API_KEY_LAOZHANG` | LaoZhang Images key (backup; use `api2.laozhang.ai`) |
+| `OPENAI_API_KEY` | `OPENAI_API_KEY` | Official OpenAI (temporary primary + always backup) |
 | `SMTP_HOST` | `smtp-host` | Shared with web |
 | `SMTP_PORT` | `smtp-port` | |
 | `SMTP_USER` | `smtp-user` | |
 | `SMTP_PASSWORD` | `smtp-pass` | Note: API uses `SMTP_PASSWORD`, web uses `SMTP_PASS` |
 
-Non-secret env vars: `JOBS_BUCKET`, `IMAGE_PROVIDER`, tuning vars.
+Non-secret env vars: `JOBS_BUCKET`, `IMAGE_PROVIDER`, `IMAGE_API_BASE`, `IMAGE_API_FALLBACK`, digital vs print model/quality/size. See `docs/IMAGE_GENERATION.md` and `deploy/config/api.json`.
 
 Local template: `api/.env.example`
 

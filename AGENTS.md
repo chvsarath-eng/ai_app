@@ -1,6 +1,7 @@
 # img2x - AI Agent Onboarding Guide
 
-> **Current status & next steps:** see [`AGENT_HANDOFF.md`](./AGENT_HANDOFF.md) (Stripe go-live, monorepo `web/` + `api/`).
+> **Current status & next steps:** see [`AGENT_HANDOFF.md`](./AGENT_HANDOFF.md).  
+> **Image / print SKUs:** see [`docs/IMAGE_GENERATION.md`](./docs/IMAGE_GENERATION.md) (digital cheap vs hardcover 2048; OpenAI primary until LaoZhang 2.5 VIP is stable).
 
 This document provides everything an AI agent needs to understand and work on the img2x project.
 

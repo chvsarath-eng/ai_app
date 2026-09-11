@@ -43,8 +43,19 @@ export async function POST (request: Request) {
           { status: 503 }
         )
       }
+      const outputType = String(incoming.get('output_type') || project?.outputType || 'DIGI_BOOK').toUpperCase()
+      const isHardcover = outputType === 'LULU_BOOK'
       if (settings.images.model && !incoming.has('image_model')) form.append('image_model', settings.images.model)
-      if (settings.images.modelPages && !incoming.has('image_model_pages')) form.append('image_model_pages', settings.images.modelPages)
+      if (!incoming.has('image_model_pages')) {
+        if (isHardcover && settings.images.model) form.append('image_model_pages', settings.images.model)
+        else if (settings.images.modelPages) form.append('image_model_pages', settings.images.modelPages)
+      }
+      if (!incoming.has('image_quality')) form.append('image_quality', isHardcover ? 'high' : 'high')
+      if (!incoming.has('image_quality_pages')) form.append('image_quality_pages', isHardcover ? 'high' : 'medium')
+      if (!incoming.has('image_size')) {
+        const size = isHardcover ? settings.images.sizePrint : settings.images.sizeDigital
+        if (size) form.append('image_size', size)
+      }
     } catch (settingsErr) {
       console.warn('Could not load app settings; using story service defaults:', settingsErr)
     }

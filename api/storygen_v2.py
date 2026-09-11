@@ -68,8 +68,12 @@ SCENE_INTEGRATION_PHRASE = (
     "Every human face points at the camera with both eyes visible -- the model only knows the "
     "uploaded front of the face, so profile or three-quarter heads invent a different person. "
     "Body does the action; head stays camera-facing. Put props between them and the lens "
-    "so they do not have to turn away. Keep a subtle, photo-like expression. "
-    "No big grin, shout, grimace, or wide-open mouth. "
+    "so they do not have to turn away. "
+    "Match this page's feeling with a micro-expression only: a slight change in the eyes "
+    "and brows. Mouth stays closed or barely relaxed. Same face bones -- do not restyle "
+    "the face. No social smile, no laugh, no teeth unless the emotion_beat is warm, "
+    "relieved, or proud, and even then only a faint closed-mouth ease. "
+    "No shout, grimace, or wide-open mouth. "
     "Forbidden: face swap, cutout, collage, studio-lit face on a location plate, side face, 3/4 face."
 )
 
@@ -112,7 +116,7 @@ FEW_SHOT_EXAMPLE_3 = (
     "Medium shot of her bracing on a rocky overlook as wind snaps the coat. "
     "Her body leans into the wind, but her face points at the camera with both eyes visible. "
     "Rain on her cheeks and hair, cool storm light on that frontal face matching the sky. "
-    "Mouth relaxed, eyes quietly determined. Same child as the reference, fully relit. "
+    "Mouth closed, no smile, eyes quietly determined and a little scared. Same child as the reference, fully relit. "
     "No cutout, no dry studio face in a wet scene, no profile, no 3/4 face."
 )
 
@@ -177,19 +181,30 @@ HARD CONSTRAINTS (HIGHEST PRIORITY)
    toward lens, lantern in front of the chest). BAD: "looking at a bird to
    the right." GOOD: "reaching toward a falling leaf in front of them."
    NEVER repeat the same stance across pages.
-3) SUBTLE EXPRESSION ONLY (LIKENESS): The uploaded face must still look like
-   that person. Big expressions warp the mouth, cheeks, and eyes and BREAK
-   identity. Show feeling only with a slight change in the eyes and brows.
-   Mouth stays relaxed or gently closed. BANNED: wide grin, teeth, shout,
-   scream, grimace, clenched jaw, crying, cartoon emotion. The body can act
-   hard; the face stays calm and recognizable.
+3) SITUATION-MATCHED MICRO-EXPRESSION (LIKENESS): The uploaded face must still
+   look like that person. Big expressions warp the mouth, cheeks, and eyes and
+   BREAK identity. Each page has one emotion_beat from:
+   wary, tense, focused, weary, curious, relieved, proud, warm.
+   Show that beat ONLY in the eyes and brows. Mouth stays closed.
+   If the story says scared, worried, tired, or running from danger, the face
+   must NOT smile. A default cheerful smile on a tense page is a FAIL.
+   BANNED: wide grin, teeth, laugh, shout, scream, grimace, clenched jaw,
+   crying, cartoon emotion. The body can act hard; the face stays recognizable.
 4) IDENTITY: {IDENTITY_PHRASE}
    Each character MUST have an identity_card (age, bone structure, skin tone,
    hair, unique marks). Repeat that card in every prompt. Do not re-describe
    the face in a paragraph of anatomy jargon.
-4b) FACE INTEGRATION: Face stays large enough to read (medium / MCU). No motion
-   blur on faces. Weather and light MUST reach the face. Do not hide the whole
-   face behind hair, hands, or a hard shadow split.
+4b) FACE INTEGRATION: Face stays readable (medium / MCU), but NEVER so large
+   that the body shrinks. The uploaded close-up is FACE IDENTITY only, not
+   body scale. Use the costume sheet for height and limb length.
+4c) ADULT BODY SCALE (NON-NEGOTIABLE): An adult head is about 1/7 to 1/8 of
+   standing height. Shoulders are wider than the head. Two full-length arms,
+   two hands, a real torso. Forbidden: giant head, tiny torso, stubby arms,
+   extra limbs, a face filling a window/hole/doorway.
+4d) NO HOLE-CROPS: Never photograph someone peeking through a window, hole,
+   hatch, or tight opening so the head fills the aperture. If the story has
+   a window or climb, shoot from OUTSIDE far enough that chest, both arms,
+   and the window are all visible in one frame.
 5) CINEMATIC: {CINEMATIC_PHRASE}
    Environmental effects (dust, wind, rain, sparks) must land on the person,
    including skin and hair -- not only on the background plate.
@@ -378,13 +393,17 @@ WRITING TEST: Before you output each page's story text, ask yourself:
 "Can an 8-year-old immediately picture what is happening in each sentence?"
 If the answer is NO for any sentence, rewrite that sentence with a simpler, more direct action.
 
-CHARACTER SHEET PROMPT FORMAT (one photograph, never a collage):
-"Photograph the person from the reference as a single full-body costume reference.
-They wear {{COSTUME_DETAILS}} in a simple real photography studio with soft even
-light. Same person, same hair, same age. One continuous photograph filling the
-frame -- no inset headshot, no split screen, no two-panel layout, no border.
-Natural relaxed stance, face pointing at the camera, both eyes visible.
-Ultra-realistic photography. {NEGATIVE_PHRASE}"
+CHARACTER SHEET PROMPT FORMAT (two-panel identity card, front only):
+"Create a professional two-panel identity sheet of the same person as the
+uploaded reference. No text. Thin divider. Even studio light.
+LEFT panel: head-and-shoulders close-up only, face filling most of the panel,
+camera-facing, both eyes visible -- the exact uploaded face, not a new person.
+No hands and no extra limbs in the left panel.
+RIGHT panel: front full-body in {{COSTUME_DETAILS}}, camera-facing, same
+person, same age, same hair, arms relaxed at the sides, exactly two hands.
+Forbidden: extra hands, floating hands, extra arms, extra fingers, profile,
+3/4, back view, extra people.
+{NEGATIVE_PHRASE}"
 
 INVENTED COMPANION SHEET (no uploaded photo -- create from the identity_card):
 "Create a single full-body photograph of {{Name}}, {{identity_card}}, standing
@@ -404,13 +423,14 @@ SHOT ARC (VARY PER PAGE)
 - Page 6: MCU, eye-level, new action, camera-facing
 - Page 7: medium, eye-level, companion or prop in front, camera-facing
 - Page 8: MCU, slightly high angle, camera-facing
-- Page 9: medium, slightly low angle, peak body action, camera-facing
+- Page 9: medium, chest-to-knees, slightly low angle, peak body action, camera-facing. Camera stays outside any window or hole so torso and both arms stay visible.
 - Page 10: MCU, resolution beat, camera-facing, still inside the location
 
 RULES: NEVER use "wide", "extreme wide", or "establishing" shots.
-Widest allowed: "medium". Closest: "close-up".
-Faces stay large enough to keep identity. People are ALWAYS the subject.
-NO dense particles that erase the face. Weather on the person is required.
+Widest allowed: "medium" that still shows chest to hips. Closest: "close-up" only on quiet pages.
+The uploaded face close-up must NOT enlarge the head. Adult proportions stay real.
+People are ALWAYS the subject. NO dense particles that erase the face.
+Weather on the person is required. NO window-peek / hole-crop portraits.
 
 ═══════════════════════════════════════════════════════════════════
 BANNED PHRASES & ANTI-PATTERNS (NEVER include in any prompt)
@@ -444,9 +464,9 @@ INPUT IMAGES & JSON SCHEMA
 For uploaded people: character-sheet input_images has 1 image (face photo).
 For an invented companion: input_images is ["input_images/char_1_face.jpeg"]
   (style/scale only -- do not copy that face).
-For cover and pages: input_images has 1 costume sheet per character in the scene.
-  Order: char_1 sheet first, then others.
-  ["generated/char_1_sheet.png", "generated/char_2_sheet.png"]
+For cover and pages: each uploaded person gets TWO refs, face then sheet.
+  Order per person: original close-up, then costume sheet.
+  ["input_images/char_1_face.jpeg", "generated/char_1_sheet.png"]
 
 In prompts, photograph the person from the reference inside the new scene.
 Every human face stays pointed at the camera with both eyes visible.
@@ -464,20 +484,21 @@ JSON structure:
       "identity_card": "string (short reusable visual lock)",
       "input_images": ["input_images/char_1_face.jpeg"],
       "output_image": "generated/char_1_sheet.png",
-      "prompt": "string (single full-body sheet, no inset)"
+      "prompt": "string (two-panel identity sheet: close-up + full body, front only)"
     }}}}
   ],
   "book": {{{{
     "title": "string", "characters_in_scene": [1, 2],
-    "input_images": ["generated/char_1_sheet.png", "generated/char_2_sheet.png"],
+    "input_images": ["input_images/char_1_face.jpeg", "generated/char_1_sheet.png"],
     "output_image": "generated/book_cover.png",
     "prompt": "string (cover prompt, single flowing sentence, 150-250 words max)"
   }}}},
   "pages": [
     {{{{
       "page_number": 1, "story": "string (145-150 words)",
+      "emotion_beat": "wary|tense|focused|weary|curious|relieved|proud|warm",
       "characters_in_scene": [1, 2],
-      "input_images": ["generated/char_1_sheet.png", "generated/char_2_sheet.png"],
+      "input_images": ["input_images/char_1_face.jpeg", "generated/char_1_sheet.png"],
       "output_image": "generated/page_1.png",
       "prompt": "string (single flowing sentence prompt, 150-250 words max)"
     }}}}
@@ -489,10 +510,12 @@ GENERATION STEPS (internal, output JSON only):
 2) Create character descriptions + iconic costumes.
 2b) If the story needs a recurring pet/sidekick, add ONE invented character
     with identity_card and a companion sheet prompt.
-3) Generate character sheet prompts (single full-body photo, no inset).
+3) Generate character sheet prompts (two-panel: close-up + full body, front only).
 4) Generate cover prompt (short, cohesive paragraph, 150-250 words).
-5) For pages 1-10: write story, pick shot from arc, build a short, cohesive
-   paragraph following the FEW-SHOT EXAMPLES above.
+5) For pages 1-10: write story, pick ONE emotion_beat that matches that page's
+   feeling, pick shot from arc, build a short, cohesive paragraph following
+   the FEW-SHOT EXAMPLES above. The image prompt must name that beat and
+   describe the matching eyes/brows (closed mouth, no default smile).
 5b) Start each prompt with "Photograph {{Name}} from the first image as the same
     person newly captured in this scene" plus the identity_card. If a companion
     is in the scene, name their identity_card too.
@@ -504,16 +527,18 @@ GENERATION STEPS (internal, output JSON only):
    - FRONTAL CHECK: Reject "three-quarter", "3/4", "profile", "looking away",
      "looking down", "over the shoulder", "turned toward". Rewrite so every
      human face points at the camera with both eyes visible.
-   - EXPRESSION CHECK: Reject big-expression words (grin, teeth, scream,
-     grimace, shout, crying). Keep a subtle, photo-like face.
+   - EXPRESSION CHECK: Reject grin, teeth, laugh, scream, grimace, shout,
+     crying. If the story is tense/scared/tired, also reject smile and
+     cheerful. Name the emotion_beat and match it with eyes and brows only.
    - ACTION VARIETY CHECK: No two pages share the same stance or setup.
-   - IMAGE-TEXT COHERENCE CHECK: The image shows the page's primary action.
+   - IMAGE-TEXT COHERENCE CHECK: The image shows the page's primary action
+     AND the same feeling as the story text.
    - STORY TEXT SIMPLICITY CHECK: An 8-year-old can picture every sentence.
    - COVER REALISM CHECK: Reject 3D/CGI title effects and decorative frames.
    - COMPANION CHECK: If a named pet/sidekick recurs, they have one
      identity_card and appear as that same creature on every relevant page.
    - Every prompt ends with a semantic negative sentence about no collage.
-   - Character sheet is ONE photograph (no inset / no two-panel).
+   - Character sheet is a two-panel identity card (close-up + full body, front only).
    - Cover prompt includes the book title woven into the sentence.
 7) COUNT WORDS in each prompt. If over 250, trim. NEVER exceed 280.
 
@@ -687,9 +712,19 @@ def build_identity_card(char: Dict[str, Any]) -> str:
 
 _COLLAGE_PATTERNS = (
     (re.compile(r"\buse (?:his|her|their|the) exact face\b", re.I), "photograph as the same person"),
-    (re.compile(r"left inset|two views of the same person|headshot inset", re.I), "one full-body photograph"),
     (re.compile(r"split[- ]screen", re.I), "collage layout"),
 )
+
+# Window / hole crops hide the body and inflate the uploaded close-up into a giant head.
+_HOLE_CROP_PATTERNS = (
+    (re.compile(r"\bpulling (?:himself|herself|themselves|them) through\b", re.I), "climbing the outside of"),
+    (re.compile(r"\bhangs in the peak moment of\b", re.I), "is seen from outside in the peak moment of"),
+    (re.compile(r"\bthrough the (?:low |broken |small )?(?:stone )?(?:opening|window|hole|hatch)\b", re.I), "up the outside of the window with chest and both arms visible"),
+    (re.compile(r"\b(?:peek(?:ing|s)?|looking|leaning) (?:out |through )(?:a |the )?(?:window|opening|hole|hatch)\b", re.I), "standing outside beside the window"),
+    (re.compile(r"\bface (?:filling|fills) (?:the |a )?(?:window|opening|frame|hole|aperture)\b", re.I), "face at natural adult size with torso visible"),
+    (re.compile(r"\blow stone opening\b", re.I), "stone window"),
+)
+
 
 # Image models invent unseen facial geometry on these poses -- rewrite them away.
 _PROFILE_PATTERNS = (
@@ -707,15 +742,116 @@ _PROFILE_PATTERNS = (
 )
 
 
+_PROTECTED_REWRITE_PHRASES = (
+    "so profile or three-quarter heads invent a different person",
+    "side face, 3/4 face",
+    "No profile",
+    "no profile",
+    "No 3/4",
+    "no 3/4",
+)
+
+
 def strip_collage_language(prompt: str) -> str:
-    """Remove collage wording and rewrite side-face asks into frontal faces."""
+    """Remove collage wording and rewrite side-face / hole-crop asks."""
     out = prompt or ""
+    saved: List[str] = []
+    for i, phrase in enumerate(_PROTECTED_REWRITE_PHRASES):
+        token = f"__KEEP_FACE_LOCK_{i}__"
+        if phrase in out:
+            out = out.replace(phrase, token)
+            saved.append(token)
+        else:
+            saved.append("")
     for pattern, repl in _COLLAGE_PATTERNS:
         out = pattern.sub(repl, out)
     for pattern, repl in _PROFILE_PATTERNS:
         out = pattern.sub(repl, out)
+    for pattern, repl in _HOLE_CROP_PATTERNS:
+        out = pattern.sub(repl, out)
+    for i, phrase in enumerate(_PROTECTED_REWRITE_PHRASES):
+        if saved[i]:
+            out = out.replace(saved[i], phrase)
     out = re.sub(r"\s{2,}", " ", out).strip()
     return out
+
+
+def anatomy_lock_suffix() -> str:
+    """Stop the model from treating the uploaded face close-up as body scale."""
+    return (
+        " Adult body scale: the first reference is FACE IDENTITY only -- do not "
+        "enlarge that close-up. Use the costume sheet for height and limb length. "
+        "Head is about one-seventh of standing height. Shoulders wider than the "
+        "head. Two normal-length arms, two hands, a real torso. Never crop through "
+        "a window or hole so the head fills the opening. If the story has a climb "
+        "or window, photograph from outside so chest, both arms, and the window "
+        "are all visible."
+    )
+
+
+_EMOTION_BEATS = {
+    "wary": (
+        "Emotion beat: wary. Same uploaded face. Closed mouth, no smile. "
+        "Slightly raised inner brows, watchful eyes. Do not restyle the face."
+    ),
+    "tense": (
+        "Emotion beat: tense. Same uploaded face. Closed mouth, no smile, no laugh. "
+        "Slightly lowered brows, alert eyes. Feeling is careful and worried. "
+        "Do not restyle the face."
+    ),
+    "focused": (
+        "Emotion beat: focused. Same uploaded face. Closed mouth, no polite smile. "
+        "Steady eyes, still brows. Do not restyle the face."
+    ),
+    "weary": (
+        "Emotion beat: weary. Same uploaded face. Closed mouth, no smile. "
+        "Tired heavier lids, soft eyes. Do not restyle the face."
+    ),
+    "curious": (
+        "Emotion beat: curious. Same uploaded face. Closed mouth, no grin. "
+        "Slightly raised brows, searching eyes. Do not restyle the face."
+    ),
+    "relieved": (
+        "Emotion beat: relieved. Same uploaded face. Closed mouth. "
+        "A faint ease only in the eyes. No teeth, no laugh. Do not restyle the face."
+    ),
+    "proud": (
+        "Emotion beat: proud. Same uploaded face. Closed mouth. "
+        "Quiet pride in the eyes. No grin. Do not restyle the face."
+    ),
+    "warm": (
+        "Emotion beat: warm. Same uploaded face. Closed mouth. "
+        "A very slight soft ease in the eyes. No teeth, no laugh. Do not restyle the face."
+    ),
+}
+
+_TENSE_WORDS = (
+    "scared", "afraid", "worried", "fear", "tight", "ran hard", "thunder",
+    "angry", "danger", "drain", "storm", "slid", "hurt",
+)
+_WEARY_WORDS = ("tired", "ached", "weary", "exhausted")
+_CURIOUS_WORDS = ("curious", "wonder", "who made")
+_RELIEF_WORDS = ("peaceful", "glad", "proud", "relieved")
+
+
+def infer_emotion_beat(story: str, explicit: Optional[str] = None) -> str:
+    beat = (explicit or "").strip().lower()
+    if beat in _EMOTION_BEATS:
+        return beat
+    text = (story or "").lower()
+    if any(w in text for w in _TENSE_WORDS):
+        return "tense"
+    if any(w in text for w in _WEARY_WORDS):
+        return "weary"
+    if any(w in text for w in _CURIOUS_WORDS):
+        return "curious"
+    if any(w in text for w in _RELIEF_WORDS):
+        return "warm"
+    return "focused"
+
+
+def emotion_lock_suffix(story: str, explicit: Optional[str] = None) -> str:
+    return " " + _EMOTION_BEATS[infer_emotion_beat(story, explicit)]
 
 
 def scene_integration_prefix(characters: List[Dict[str, Any]], char_indexes: List[int]) -> str:
@@ -739,8 +875,9 @@ def scene_integration_prefix(characters: List[Dict[str, Any]], char_indexes: Lis
 
 def sheet_anti_collage_suffix() -> str:
     return (
-        " One single continuous photograph of the whole figure. "
-        "Face points at the camera, both eyes visible. "
-        "No inset headshot, no split screen, no two-panel layout, no decorative border, "
-        "no profile, no 3/4 face."
+        " Two-panel identity sheet only: LEFT a head-and-shoulders camera-facing "
+        "close-up of the uploaded face with no hands in that panel, RIGHT a "
+        "camera-facing full-body in costume with exactly two hands at the sides. "
+        "Same person. No extra limbs. No floating hands. No text. No profile. "
+        "No 3/4. No back view. Thin divider."
     )

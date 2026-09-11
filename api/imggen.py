@@ -86,11 +86,30 @@ def _resolve_image_provider(image_provider: Optional[str]) -> str:
 # OpenAI-compatible Images API (GPT-Image-2.5 flare / sunburst)
 # ---------------------------------------------------------------------------
 
-DEFAULT_IMAGE_API_BASE = "https://api.laozhang.ai/v1"
-# Support gpt-image-2.5-sunburst-2026-09-08 / gpt-image-2.5-sunburst / gpt-image-2.5-flare-2026-09-08
-DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst-2026-09-08"
+# LaoZhang Images gateway. Use api2.laozhang.ai to avoid api.laozhang.ai DNS
+# pollution (timeouts / cannot-connect). Key and request body stay the same.
+# 503 "no channel" is a model-capacity error, not DNS.
+DEFAULT_IMAGE_API_BASE = "https://api2.laozhang.ai/v1"
+# Default-group $0.03/call IDs. Dated snapshots and unsuffixed flare/sunburst are
+# official-forward token billing and 503 on a Default-group token.
+# Prefer 2.5 VIP ($0.03). If VIP is down, official-forward 2.5 relay (token billed).
+# Never drop to gpt-image-2-vip — that is a different, older model.
+DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst-vip"
+LAOZHANG_PER_CALL_USD = 0.03
+# Official-forward / api.openai.com token rates (USD per 1M), Sep 2026 docs.
+_OFFICIAL_IMAGE_TEXT_USD_PER_1M = 5.0
+_OFFICIAL_IMAGE_TEXT_CACHED_USD_PER_1M = 1.25
+_OFFICIAL_IMAGE_INPUT_USD_PER_1M = 8.0
+_OFFICIAL_IMAGE_INPUT_CACHED_USD_PER_1M = 2.0
+_OFFICIAL_IMAGE_OUTPUT_USD_PER_1M = 30.0
 DEFAULT_IMAGE_QUALITY = "high"
+# Digital is the low-price SKU: 1024 + medium pages. Hardcover is the high-price SKU:
+# Sunburst high at 2048. Do not spend hardcover compute on a digital order.
+DEFAULT_IMAGE_MODEL_PAGES = "gpt-image-2.5-flare-vip"
+DEFAULT_IMAGE_QUALITY_PAGES = "medium"
+DEFAULT_IMAGE_QUALITY_PRINT = "high"
 DEFAULT_IMAGE_SIZE = "1024x1024"
+DEFAULT_IMAGE_SIZE_PRINT = "2048x2048"
 
 
 OFFICIAL_OPENAI_API_BASE = "https://api.openai.com/v1"
@@ -98,10 +117,17 @@ OFFICIAL_OPENAI_API_BASE = "https://api.openai.com/v1"
 # Names each endpoint actually serves. LaoZhang only exposes the ``-vip`` aliases for
 # GPT-Image-2.5 (the official snapshot names return 503 "no channel"), while api.openai.com
 # serves the dated snapshots. Ordering the aliases per endpoint avoids wasted round-trips.
+# VIP first ($0.03). Official-forward 2.5 next (LaoZhang option 1). No Image-2 fallback.
 _LAOZHANG_ALIASES = {
-    "sunburst": ["gpt-image-2.5-sunburst-vip", "gpt-image-2.5-sunburst", "gpt-image-2.5-sunburst-2026-09-08"],
-    "flare": ["gpt-image-2.5-flare-vip", "gpt-image-2.5-flare", "gpt-image-2.5-flare-2026-09-08"],
+    "sunburst": ["gpt-image-2.5-sunburst-vip", "gpt-image-2.5-sunburst"],
+    "flare": [
+        "gpt-image-2.5-flare-vip",
+        "gpt-image-2.5-flare",
+        "gpt-image-2.5-sunburst-vip",
+        "gpt-image-2.5-sunburst",
+    ],
 }
+_GPT25_VIP_MODELS = ("gpt-image-2.5-flare-vip", "gpt-image-2.5-sunburst-vip")
 _OPENAI_ALIASES = {
     "sunburst": ["gpt-image-2.5-sunburst-2026-09-08", "gpt-image-2.5-sunburst"],
     "flare": ["gpt-image-2.5-flare-2026-09-08", "gpt-image-2.5-flare"],
@@ -126,6 +152,15 @@ def _get_model_candidates(model_name: str, api_base: Optional[str] = None) -> Li
     table = _LAOZHANG_ALIASES if "laozhang" in base else _OPENAI_ALIASES
     candidates: List[str] = []
     is_official = "openai.com" in base
+    is_laozhang = "laozhang" in base
+    # LaoZhang 503s the dated snapshots; try vip aliases first.
+    if is_laozhang:
+        for alt in table[family]:
+            if alt not in candidates:
+                candidates.append(alt)
+        if model_name not in candidates:
+            candidates.append(model_name)
+        return candidates
     # Keep the caller's exact name first unless we know this endpoint cannot serve it.
     if not (is_official and model_name.endswith("-vip")):
         candidates.append(model_name)
@@ -145,13 +180,17 @@ def _normalize_api_base(base: str) -> str:
 def _image_endpoints() -> List[tuple[str, str, str]]:
     """Ordered ``(label, api_base, api_key)`` endpoints to try for the Images API.
 
-    The configured ``IMAGE_API_BASE`` is always first. When ``IMAGE_API_FALLBACK`` is not
-    disabled and a key for the *other* provider exists, it is appended so a rate limit or
-    outage on one proxy fails over instead of failing the whole job.
+    The configured ``IMAGE_API_BASE`` is always first. Fallback is on by default: if
+    primary is LaoZhang, official ``api.openai.com`` is appended when ``OPENAI_API_KEY``
+    exists. Flip ``IMAGE_API_BASE`` back to api2 when LaoZhang 2.5 VIP is stable.
     """
     primary_base = _normalize_api_base(os.getenv("IMAGE_API_BASE") or DEFAULT_IMAGE_API_BASE)
-    endpoints: List[tuple[str, str, str]] = [("primary", primary_base, _image_api_key())]
+    endpoints: List[tuple[str, str, str]] = [
+        ("primary", primary_base, _key_for_image_base(primary_base))
+    ]
 
+    # Default on: LaoZhang (or whichever IMAGE_API_BASE) first, official OpenAI as backup.
+    # Set IMAGE_API_FALLBACK=0 only when you want a single host with no failover.
     if (os.getenv("IMAGE_API_FALLBACK") or "1").strip().lower() in ("0", "false", "no", "off"):
         return endpoints
 
@@ -163,8 +202,8 @@ def _image_endpoints() -> List[tuple[str, str, str]]:
             endpoints.append(("fallback", fb, explicit_key))
         return endpoints
 
-    openai_key = (os.getenv("OPENAI_API_KEY") or "").strip()
-    laozhang_key = (os.getenv("LAOZHANG_API_KEY") or os.getenv("API_KEY_LAOZHANG") or "").strip()
+    openai_key = _openai_api_key()
+    laozhang_key = _laozhang_api_key()
     if "openai.com" not in primary_base and openai_key:
         endpoints.append(("openai", OFFICIAL_OPENAI_API_BASE, openai_key))
     elif "laozhang" not in primary_base and laozhang_key:
@@ -192,6 +231,32 @@ def _in_cooldown(api_base: str, model_name: str) -> bool:
 def _set_cooldown(api_base: str, model_name: str) -> None:
     with _COOLDOWN_LOCK:
         _ENDPOINT_COOLDOWN[(api_base, model_name)] = time.time() + _cooldown_seconds()
+
+
+def _is_gpt25_vip(model_name: str) -> bool:
+    return (model_name or "").strip().lower() in _GPT25_VIP_MODELS
+
+
+def _looks_like_vip_outage(status_code: int, err_text: str) -> bool:
+    if status_code not in (429, 502, 503, 504):
+        return False
+    low = (err_text or "").lower()
+    return (
+        "model_service_unavailable" in low
+        or "no available channels" in low
+        or "service unavailable" in low
+        or "try again later or choose another model" in low
+    )
+
+
+def _cool_gpt25_vip_family(api_base: str) -> None:
+    """One VIP outage means all 2.5 VIP names are down — skip them for sibling workers."""
+    for name in _GPT25_VIP_MODELS:
+        _set_cooldown(api_base, name)
+    logger.warning(
+        "GPT Image 2.5 VIP outage on %s; cooling %s then using official 2.5 relay",
+        api_base, ", ".join(_GPT25_VIP_MODELS),
+    )
 
 
 def _clear_cooldown(api_base: str, model_name: str) -> None:
@@ -323,47 +388,69 @@ def soften_prompt_for_moderation(prompt: str, level: int = 1) -> str:
 
 def _is_failover_status(status_code: int, err_text: str) -> bool:
     """True when the error is worth retrying on another alias/endpoint."""
-    if status_code in (408, 409, 425, 429, 500, 502, 503, 504):
+    if status_code in (401, 403, 408, 409, 425, 429, 500, 502, 503, 504):
         return True
     low = err_text.lower()
     return any(kw in low for kw in ("model", "not found", "does not exist", "unsupported", "invalid_model", "rate_limit", "no available channel"))
 
 
-def _image_api_key() -> str:
-    """Key for the OpenAI-compatible Images endpoint.
+def _laozhang_api_key() -> str:
+    return (os.getenv("LAOZHANG_API_KEY") or os.getenv("API_KEY_LAOZHANG") or "").strip()
 
-    Prefers an explicit ``IMAGE_API_KEY``; otherwise the LaoZhang key when the base URL
-    points at LaoZhang, else ``OPENAI_API_KEY``.
-    """
-    explicit = os.getenv("IMAGE_API_KEY")
-    if explicit:
-        return explicit
-    base = (os.getenv("IMAGE_API_BASE") or DEFAULT_IMAGE_API_BASE).lower()
-    if "laozhang" in base:
-        key = os.getenv("LAOZHANG_API_KEY") or os.getenv("API_KEY_LAOZHANG")
+
+def _openai_api_key() -> str:
+    return (os.getenv("OPENAI_API_KEY") or "").strip()
+
+
+def _key_for_image_base(api_base: str) -> str:
+    """Bind each Images host to its own key so LaoZhang keys never hit api.openai.com."""
+    explicit = (os.getenv("IMAGE_API_KEY") or "").strip()
+    low = (api_base or "").lower()
+    if "openai.com" in low:
+        key = _openai_api_key()
         if key:
             return key
-    key = os.getenv("LAOZHANG_API_KEY") or os.getenv("API_KEY_LAOZHANG") or os.getenv("OPENAI_API_KEY")
+        raise RuntimeError("Missing OPENAI_API_KEY for official OpenAI Images API.")
+    if "laozhang" in low:
+        key = _laozhang_api_key()
+        if key:
+            return key
+        raise RuntimeError("Missing LAOZHANG_API_KEY / API_KEY_LAOZHANG for LaoZhang Images API.")
+    if explicit:
+        return explicit
+    key = _laozhang_api_key() or _openai_api_key()
     if not key:
         raise RuntimeError(
-            "Missing API key for Images API. Set LAOZHANG_API_KEY, API_KEY_LAOZHANG, or IMAGE_API_KEY."
+            "Missing API key for Images API. Set LAOZHANG_API_KEY, OPENAI_API_KEY, or IMAGE_API_KEY."
         )
     return key
 
 
-def resolve_image_model(task_type: Optional[str] = None, explicit: Optional[str] = None) -> str:
-    """Pick the image model for a task type.
+def _image_api_key() -> str:
+    """Key for the configured ``IMAGE_API_BASE`` (or LaoZhang default)."""
+    return _key_for_image_base(os.getenv("IMAGE_API_BASE") or DEFAULT_IMAGE_API_BASE)
 
-    ``IMAGE_MODEL`` is the default for everything. ``IMAGE_MODEL_PAGES`` (optional) overrides
-    for story pages only, so identity-critical sheets/cover can stay on the precise model while
-    pages use a faster one.
-    """
+
+def resolve_image_model(
+    task_type: Optional[str] = None,
+    explicit: Optional[str] = None,
+    output_type: Optional[str] = None,
+) -> str:
+    """Pick the image model. Hardcover always uses the print/sunburst model."""
     if explicit:
         return explicit
-    if task_type == "page":
+    if (output_type or "").upper() == "LULU_BOOK":
+        return (
+            os.getenv("IMAGE_MODEL_PRINT")
+            or os.getenv("IMAGE_MODEL")
+            or os.getenv("LAOZHANG_IMAGE_MODEL")
+            or DEFAULT_IMAGE_MODEL
+        ).strip()
+    if task_type in ("page", "cover"):
         pages_model = (os.getenv("IMAGE_MODEL_PAGES") or "").strip()
         if pages_model:
             return pages_model
+        return DEFAULT_IMAGE_MODEL_PAGES
     return (os.getenv("IMAGE_MODEL") or os.getenv("LAOZHANG_IMAGE_MODEL") or DEFAULT_IMAGE_MODEL).strip()
 
 
@@ -371,12 +458,90 @@ def resolve_image_size(output_type: Optional[str] = None, explicit: Optional[str
     if explicit:
         return explicit
     if (output_type or "").upper() == "LULU_BOOK":
-        return (os.getenv("IMAGE_SIZE_PRINT") or "2048x2048").strip()
+        return (os.getenv("IMAGE_SIZE_PRINT") or DEFAULT_IMAGE_SIZE_PRINT).strip()
     return (os.getenv("IMAGE_SIZE_DIGI") or os.getenv("IMAGE_SIZE") or DEFAULT_IMAGE_SIZE).strip()
 
 
-def resolve_image_quality(explicit: Optional[str] = None) -> str:
-    return (explicit or os.getenv("IMAGE_QUALITY") or DEFAULT_IMAGE_QUALITY).strip()
+def is_laozhang_per_call_model(model_name: Optional[str]) -> bool:
+    """Default-group $0.03/call IDs from the LaoZhang GPT Image 2.5 docs."""
+    m = (model_name or "").strip().lower()
+    if not m:
+        return False
+    if m.endswith("-vip"):
+        return True
+    return m in {
+        "gpt-image-2",
+        "gpt-image-2-web",
+        "gpt-image-2-all",
+        "gpt-image-2.5-web",
+    }
+
+
+def estimate_image_call_cost_usd(
+    *,
+    model_name: Optional[str],
+    usage: Optional[Dict[str, Any]] = None,
+    api_base: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Estimate one successful image call. Per-call vip/web is $0.03; else token rates."""
+    model = (model_name or "").strip()
+    if is_laozhang_per_call_model(model):
+        return {
+            "billing": "per_call",
+            "model": model,
+            "api_base": api_base,
+            "usd": LAOZHANG_PER_CALL_USD,
+            "currency": "USD",
+        }
+
+    usage = usage or {}
+    in_details = usage.get("input_tokens_details") if isinstance(usage.get("input_tokens_details"), dict) else {}
+    out_details = usage.get("output_tokens_details") if isinstance(usage.get("output_tokens_details"), dict) else {}
+    text_in = int(in_details.get("text_tokens") or 0)
+    image_in = int(in_details.get("image_tokens") or 0)
+    text_in_cached = int(in_details.get("cached_text_tokens") or in_details.get("text_tokens_cached") or 0)
+    image_in_cached = int(in_details.get("cached_image_tokens") or in_details.get("image_tokens_cached") or 0)
+    if text_in == 0 and image_in == 0:
+        text_in = int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
+    image_out = int(out_details.get("image_tokens") or usage.get("output_tokens") or 0)
+
+    usd = (
+        (text_in - text_in_cached) / 1_000_000.0 * _OFFICIAL_IMAGE_TEXT_USD_PER_1M
+        + text_in_cached / 1_000_000.0 * _OFFICIAL_IMAGE_TEXT_CACHED_USD_PER_1M
+        + (image_in - image_in_cached) / 1_000_000.0 * _OFFICIAL_IMAGE_INPUT_USD_PER_1M
+        + image_in_cached / 1_000_000.0 * _OFFICIAL_IMAGE_INPUT_CACHED_USD_PER_1M
+        + image_out / 1_000_000.0 * _OFFICIAL_IMAGE_OUTPUT_USD_PER_1M
+    )
+    return {
+        "billing": "token",
+        "model": model,
+        "api_base": api_base,
+        "usd": round(usd, 6),
+        "currency": "USD",
+        "usage": {
+            "text_input_tokens": text_in,
+            "image_input_tokens": image_in,
+            "image_output_tokens": image_out,
+        },
+    }
+
+
+def resolve_image_quality(
+    task_type: Optional[str] = None,
+    explicit: Optional[str] = None,
+    output_type: Optional[str] = None,
+) -> str:
+    """Hardcover is always high. Digital pages/cover stay medium so the cheap SKU stays cheap."""
+    if (output_type or "").upper() == "LULU_BOOK":
+        return (explicit or os.getenv("IMAGE_QUALITY_PRINT") or DEFAULT_IMAGE_QUALITY_PRINT).strip()
+    if explicit:
+        return explicit.strip()
+    if task_type == "character":
+        return (os.getenv("IMAGE_QUALITY") or DEFAULT_IMAGE_QUALITY).strip()
+    pages_quality = (os.getenv("IMAGE_QUALITY_PAGES") or os.getenv("IMAGE_QUALITY_DIGI") or "").strip()
+    if pages_quality:
+        return pages_quality
+    return DEFAULT_IMAGE_QUALITY_PAGES
 
 
 def _prepare_reference_file(path: Path, *, max_side_px: int, target_bytes: int) -> tuple[str, bytes, str]:
@@ -443,9 +608,9 @@ def _image_generator_openai_images(
     multipart ``image[]`` parts in order; ``image_labels`` are folded into the prompt.
     Includes smart model snapshot fallback for gpt-image-2.5 models.
     """
-    primary_model = resolve_image_model(task_type, model)
+    primary_model = resolve_image_model(task_type, model, output_type)
     size_val = resolve_image_size(output_type, size)
-    quality_val = resolve_image_quality(quality)
+    quality_val = resolve_image_quality(task_type, quality, output_type)
     timeout_s = float(os.getenv("IMAGE_HTTP_TIMEOUT_S") or "420")
 
     ref_max_side_px = _env_int("IMAGE_REF_MAX_SIDE_PX", 1536)
@@ -522,6 +687,14 @@ def _image_generator_openai_images(
                 )
             if response.status_code in (429, 502, 503, 504):
                 _set_cooldown(api_base, model_name)
+                if _is_gpt25_vip(model_name) and _looks_like_vip_outage(response.status_code, err_text):
+                    _cool_gpt25_vip_family(api_base)
+                    remaining = [
+                        a for a in attempts[idx + 1 :]
+                        if not (a[1] == api_base and _is_gpt25_vip(a[3]))
+                    ]
+                    attempts = attempts[: idx + 1] + remaining
+                    is_last = idx + 1 >= len(attempts)
             if not is_last and _is_failover_status(response.status_code, err_text):
                 nxt = attempts[idx + 1]
                 logger.warning(
@@ -567,10 +740,12 @@ def _image_generator_openai_images(
         out_path.write_bytes(img_bytes)
 
         usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
+        cost = estimate_image_call_cost_usd(model_name=model_name, usage=usage, api_base=api_base)
         return {
             "images": [str(out_path)],
             "texts": [],
             "usage": usage,
+            "cost": cost,
             "model": model_name,
             "endpoint": label,
             "api_base": api_base,
@@ -662,7 +837,7 @@ def _image_generator_laozhang(
     if not api_key:
         raise RuntimeError("Missing API_KEY_LAOZHANG for LaoZhang image generation")
 
-    api_base = (os.getenv("LAOZHANG_API_BASE") or "https://api.laozhang.ai").rstrip("/")
+    api_base = (os.getenv("LAOZHANG_API_BASE") or "https://api2.laozhang.ai").rstrip("/")
     if api_base.endswith("/v1"):
         api_base = api_base[:-3]
     if api_base.endswith("/v1beta"):
