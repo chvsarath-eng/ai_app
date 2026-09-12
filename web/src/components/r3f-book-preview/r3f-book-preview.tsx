@@ -129,7 +129,7 @@ export function R3FBookPreview ({
     let flipInterval = 0
     const startDelay = window.setTimeout(() => {
       let flipCount = 0
-      const maxFlips = Math.min(maxPage, 6)
+      const maxFlips = Math.min(maxPage, 3)
 
       flipInterval = window.setInterval(() => {
         flipCount += 1
@@ -149,8 +149,8 @@ export function R3FBookPreview ({
           setIsAutoFlipPaused(true)
           setIsHintVisible(true)
         }
-      }, 1600)
-    }, 400)
+      }, 2800)
+    }, 1200)
 
     return () => {
       window.clearTimeout(startDelay)
