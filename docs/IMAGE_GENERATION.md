@@ -68,7 +68,7 @@ LaoZhang VIP can take a full book wave. Production `IMAGE_CONCURRENCY=16` so cov
 - Uploaded photo = **face identity only**, not body scale. Sheet defines height/shoulders/arms.
 - Adult head ~1/7 of height. Ban window/hole crops (giant-head bug on climb shots).
 - Frontal, camera-facing faces only. Do not invent profile / 3/4 / back from one front photo.
-- Closed-mouth micro-expressions. No social smile unless the beat is warm/proud.
+- Reference photo locks identity, not mood. Small living emotion per page (eyes, brows, tiny mouth). No teeth/laugh/shout. No copied studio smile on every page.
 
 ## Local test artifacts (gitignored `api/quality_jobs/`)
 

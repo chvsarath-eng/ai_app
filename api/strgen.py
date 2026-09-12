@@ -239,7 +239,7 @@ HARD CONSTRAINTS (HIGHEST PRIORITY)
 
 3) EXPRESSION + MOUTH LOCK:
    - Micro-expressions only (emotion shown mostly through eyes/eyebrows).
-   - Keep expression subtle and neutral across all images; avoid big emotions or dramatic facial changes.
+   - Small living emotion per page (identity locked, mood not locked). Avoid big emotions or dramatic facial changes.
    - Mouth closed or slightly parted only. NO teeth, NO wide-open mouth, NO screaming/laughing.
    - NO squinting.
 
