@@ -50,6 +50,12 @@ export default function ProjectsPage () {
   }, [user])
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.history.scrollRestoration = 'manual'
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [])
+
+  useEffect(() => {
     if (user) {
       void fetchProjects()
     } else if (!isAuthLoading) {

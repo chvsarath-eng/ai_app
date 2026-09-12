@@ -1,9 +1,59 @@
 'use client'
 
 import { Sparkles } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 import { feltProgress, formatElapsed, friendlyStageLabel, liveHint } from '@/lib/generation-status'
+import { cn } from '@/lib/utils'
+
+export function PageFrame ({
+  children,
+  className
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <div
+      className={cn(
+        'relative mx-auto w-full min-w-0 max-w-full overflow-hidden rounded-2xl bg-zinc-100 ring-1 ring-zinc-200',
+        'aspect-square',
+        className
+      )}
+    >
+      {children}
+    </div>
+  )
+}
+
+export function ContainedImage ({
+  src,
+  alt,
+  className
+}: {
+  src: string
+  alt: string
+  className?: string
+}) {
+  const [failed, setFailed] = useState(false)
+
+  if (failed) {
+    return (
+      <div className="flex h-full w-full items-center justify-center px-4 text-center text-xs text-zinc-500">
+        Preview unavailable
+      </div>
+    )
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      onError={() => setFailed(true)}
+      className={cn('absolute inset-0 h-full w-full max-w-full object-contain', className)}
+    />
+  )
+}
 
 export function ShimmerBlock ({ className = '' }: { className?: string }) {
   return (
@@ -75,9 +125,9 @@ export function GeneratingPreview ({
   subtitle: string
 }) {
   return (
-    <div className="relative flex min-h-[200px] items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-violet-50 via-pink-50 to-orange-50 ring-1 ring-zinc-200 sm:min-h-[240px] lg:aspect-square lg:min-h-0">
+    <div className="relative flex h-full min-h-[200px] w-full items-center justify-center overflow-hidden bg-gradient-to-br from-violet-50 via-pink-50 to-orange-50 sm:min-h-[240px] lg:min-h-0">
       <div className="pointer-events-none absolute inset-0 -translate-x-full animate-[shimmerSlide_2s_ease_infinite] bg-gradient-to-r from-transparent via-white/55 to-transparent" />
-      <div className="relative z-10 max-w-[18rem] px-4 py-6 text-center">
+      <div className="relative z-10 max-w-[16rem] px-3 py-5 text-center sm:max-w-[18rem] sm:px-4 sm:py-6">
         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/80 shadow-sm">
           <Sparkles className="h-6 w-6 animate-spin text-violet-500" />
         </div>

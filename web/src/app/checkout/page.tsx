@@ -294,10 +294,10 @@ export default function CheckoutPage () {
       await clearCheckoutFiles()
       store.reset()
       if (projectId) {
-        router.push(`/projects/${projectId}?new=1&payment=${paymentId}`)
+        router.push(`/projects/${projectId}?new=1&payment=${paymentId}`, { scroll: true })
         return
       }
-      router.push(`/projects?paid=${paymentId}`)
+      router.push(`/projects?paid=${paymentId}`, { scroll: true })
     } catch (error) {
       console.error('Failed to create job after payment:', error)
       setPaymentProcessing(false)
