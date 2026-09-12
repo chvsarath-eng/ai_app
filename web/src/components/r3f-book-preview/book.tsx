@@ -24,12 +24,11 @@ import {
 import type { BookPage } from './pages'
 import { bookPages } from './pages'
 
-const easingFactor = 0.72
-const easingFactorFold = 0.55
-const insideCurveStrength = 0.08
-const outsideCurveStrength = 0.02
-const turningCurveStrength = 0.035
-const turnDurationMs = 900
+const easingFactor = 0.5
+const easingFactorFold = 0.3
+const insideCurveStrength = 0.18
+const outsideCurveStrength = 0.05
+const turningCurveStrength = 0.09
 
 const PAGE_WIDTH = 1.28
 const PAGE_HEIGHT = 1.28
@@ -280,11 +279,11 @@ function Page ({
       lastOpened.current = opened
     }
 
-    let turningTime = Math.min(turnDurationMs, Date.now() - turnedAt.current) / turnDurationMs
+    let turningTime = Math.min(400, Date.now() - turnedAt.current) / 400
     turningTime = Math.sin(turningTime * Math.PI)
 
     let targetRotation = opened ? -Math.PI / 2 : Math.PI / 2
-    if (!bookClosed) targetRotation += MathUtils.degToRad(number * 0.35)
+    if (!bookClosed) targetRotation += MathUtils.degToRad(number * 0.8)
 
     const bones = skinnedMeshRef.current.skeleton.bones
     for (let i = 0; i < bones.length; i++) {
@@ -299,8 +298,7 @@ function Page ({
         outsideCurveStrength * outsideCurveIntensity * targetRotation +
         turningCurveStrength * turningIntensity * targetRotation
 
-      // Tiny lift only — stacked X folds on parented bones look like a page diving.
-      let foldRotationAngle = MathUtils.degToRad(Math.sign(targetRotation) * 0.28)
+      let foldRotationAngle = MathUtils.degToRad(Math.sign(targetRotation) * 2)
       if (bookClosed) {
         if (i === 0) {
           rotationAngle = targetRotation
