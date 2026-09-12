@@ -61,7 +61,7 @@ Measured locally Sep 11 2026 (1 adult, 10 pages):
 
 LaoZhang VIP (when up): **$0.03 per successful call** regardless of size/quality. Failed 503s are not billed.
 
-10-wide bursts hit OpenAI 429. Production `IMAGE_CONCURRENCY=5`. Print retry is serial after a failed wave.
+LaoZhang VIP can take a full book wave. Production `IMAGE_CONCURRENCY=16` so cover + pages paint together instead of batches of 5–6. Failed calls still retry; OpenAI fallback may 429 and will retry.
 
 ## Prompt / likeness decisions (keep)
 

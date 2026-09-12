@@ -4,25 +4,25 @@ import { useEffect, useState, useCallback, use, useRef } from 'react'
 import Link from 'next/link'
 import {
   BookOpen,
-  Sparkles,
   Download,
   Clock,
   CheckCircle2,
   AlertCircle,
   ArrowLeft,
-  RefreshCw,
   Share2,
-  Truck,
-  FileText,
-  Eye,
-  Layers,
-  ChevronRight,
-  ExternalLink
+  Truck
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import {
+  GeneratingPreview,
+  ProjectGeneratingStatus,
+  ShimmerBlock
+} from '@/components/project-generating-status'
+import { friendlyStageLabel } from '@/lib/generation-status'
 import { useAuthStore } from '@/lib/auth-store'
+import { cn } from '@/lib/utils'
 import type { Project } from '@/types/project'
 
 function resolveMedia (jobId: string | null | undefined, url: string | null | undefined) {
@@ -159,7 +159,7 @@ export default function ProjectDetailsPage ({
 
     const interval = setInterval(() => {
       void fetchProject()
-    }, 3000)
+    }, 2000)
     return () => clearInterval(interval)
   }, [project, fetchProject])
 
@@ -249,46 +249,37 @@ export default function ProjectDetailsPage ({
   )
   const coverImage = resolveMedia(project.jobId, project.coverUrl || project.images?.cover?.url)
 
-  const progressPct =
-    project.imagesTotal && project.imagesTotal > 0
-      ? Math.round(((project.imagesDone || 0) / project.imagesTotal) * 100)
-      : isGenerating
-        ? 35
-        : 100
-
   const flipbookUrl =
     project.artifacts?.html?.url ||
     (project.jobId ? `/api/storybook/jobs/${project.jobId}/storybook.html` : null)
 
   return (
-    <div className="py-4 sm:py-12">
+    <div className="px-0 py-3 sm:py-12">
       <div className="mx-auto max-w-6xl">
         {/* Breadcrumb */}
-        <div className="flex items-center justify-between pb-6">
+        <div className="flex items-center justify-between gap-3 pb-3 sm:pb-6">
           <Link
             href="/projects"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-500 transition hover:text-zinc-900"
+            className="inline-flex min-w-0 items-center gap-1.5 text-xs font-semibold text-zinc-500 transition hover:text-zinc-900"
           >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to my storybooks
+            <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Back to my storybooks</span>
           </Link>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleShare}
-              className="h-8 gap-1.5 bg-white/80 text-xs text-zinc-700"
-            >
-              <Share2 className="h-3.5 w-3.5" />
-              {copied ? 'Link copied' : 'Share'}
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleShare}
+            className="h-8 shrink-0 gap-1.5 bg-white/80 px-3 text-xs text-zinc-700"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+            {copied ? 'Copied' : 'Share'}
+          </Button>
         </div>
 
         {/* Header */}
-        <Card className="mb-4 p-4 sm:mb-8 sm:p-8">
-          <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+        <Card className="mb-3 p-3 sm:mb-8 sm:p-8">
+          <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center lg:gap-6">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 {isReady && (
@@ -297,8 +288,9 @@ export default function ProjectDetailsPage ({
                   </span>
                 )}
                 {isGenerating && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-pink-500 px-3 py-1 text-xs font-semibold text-white shadow-sm animate-pulse">
-                    <Clock className="h-3.5 w-3.5 animate-spin" /> Generating ({progressPct}%)
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-pink-500 px-3 py-1 text-xs font-semibold text-white shadow-sm">
+                    <Clock className="h-3.5 w-3.5 animate-spin" />
+                    {friendlyStageLabel(project.stage)}
                   </span>
                 )}
                 {isFailed && (
@@ -316,10 +308,10 @@ export default function ProjectDetailsPage ({
                 </span>
               </div>
 
-              <h1 className="text-2xl font-bold tracking-tight text-zinc-800 sm:text-3xl">
+              <h1 className="break-words text-xl font-bold tracking-tight text-zinc-800 sm:text-3xl">
                 {project.title || project.story?.title || 'Personalized Storybook'}
               </h1>
-              <p className="max-w-2xl text-sm text-zinc-500">
+              <p className="max-w-2xl text-sm leading-relaxed text-zinc-500">
                 {project.storyline || 'A custom cinematic storybook generated with AI face preservation.'}
               </p>
               {isFailed && (
@@ -377,34 +369,19 @@ export default function ProjectDetailsPage ({
             </div>
           </div>
 
-          {/* Live progress */}
           {isGenerating && (
-            <div className="mt-6 border-t border-zinc-100 pt-6">
-              <div className="mb-2 flex items-center justify-between text-xs font-medium text-zinc-600">
-                <span className="flex items-center gap-1.5 text-zinc-800">
-                  <Sparkles className="h-4 w-4 animate-spin" />
-                  {project.stage || 'Rendering high-resolution pages…'}
-                </span>
-                <span>
-                  {project.imagesDone || 0} / {project.imagesTotal || 12} images rendered
-                </span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-100">
-                <div
-                  className="h-full bg-gradient-to-r from-violet-500 via-pink-500 to-orange-500 transition-all duration-500"
-                  style={{ width: `${Math.max(10, progressPct)}%` }}
-                />
-              </div>
-              <p className="mt-2 text-[11px] text-zinc-400">
-                You can read the story and preview finished pages below while the remaining scenes render.
-              </p>
-            </div>
+            <ProjectGeneratingStatus
+              stage={project.stage}
+              imagesDone={project.imagesDone || 0}
+              imagesTotal={project.imagesTotal || 12}
+              startedAt={project.startedAt || project.paidAt || project.createdAt}
+            />
           )}
         </Card>
 
         {/* Page viewer: image first on phones, filmstrip beside on desktop */}
-        <div className="grid gap-4 lg:grid-cols-12 lg:gap-8">
-          <div className="order-2 space-y-3 lg:order-1 lg:col-span-4">
+        <div className="grid gap-3 lg:grid-cols-12 lg:gap-8">
+          <div className="order-2 space-y-2 lg:order-1 lg:col-span-4">
             <h2 className="text-xs font-medium uppercase tracking-widest text-zinc-500">
               Pages &amp; scenes
             </h2>
@@ -413,15 +390,18 @@ export default function ProjectDetailsPage ({
               <button
                 type="button"
                 onClick={() => setSelectedPage(0)}
-                className={`flex w-28 shrink-0 flex-col items-center gap-2 rounded-2xl border p-2 text-left transition lg:w-full lg:flex-row lg:p-3 ${
+                className={cn(
+                  'flex w-[4.75rem] shrink-0 flex-col items-center gap-1.5 rounded-2xl border p-1.5 text-left transition sm:w-28 sm:gap-2 sm:p-2 lg:w-full lg:flex-row lg:p-3',
                   selectedPage === 0
                     ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-500/20'
                     : 'border-zinc-200/70 bg-white hover:border-violet-300'
-                }`}
+                )}
               >
-                <div className="relative h-20 w-full shrink-0 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 lg:h-14 lg:w-14">
+                <div className="relative h-16 w-full shrink-0 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 sm:h-20 lg:h-14 lg:w-14">
                   {coverImage ? (
                     <img src={coverImage} alt="Cover" className="h-full w-full object-cover" />
+                  ) : isGenerating ? (
+                    <ShimmerBlock className="h-full w-full" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-zinc-400">
                       COVER
@@ -429,9 +409,9 @@ export default function ProjectDetailsPage ({
                   )}
                 </div>
                 <div className="min-w-0 w-full">
-                  <p className="truncate text-center text-xs font-semibold text-zinc-900 lg:text-left">Cover</p>
-                  <p className="truncate text-center text-[11px] text-zinc-500 lg:text-left">
-                    {coverImage ? 'Ready' : isGenerating ? 'Rendering…' : 'Title art'}
+                  <p className="truncate text-center text-[11px] font-semibold text-zinc-900 sm:text-xs lg:text-left">Cover</p>
+                  <p className="truncate text-center text-[10px] text-zinc-500 sm:text-[11px] lg:text-left">
+                    {coverImage ? 'Ready' : isGenerating ? 'Painting' : 'Title art'}
                   </p>
                 </div>
               </button>
@@ -449,15 +429,18 @@ export default function ProjectDetailsPage ({
                     key={pageNum}
                     type="button"
                     onClick={() => setSelectedPage(pageNum)}
-                    className={`flex w-28 shrink-0 flex-col items-center gap-2 rounded-2xl border p-2 text-left transition lg:w-full lg:flex-row lg:p-2.5 ${
+                    className={cn(
+                      'flex w-[4.75rem] shrink-0 flex-col items-center gap-1.5 rounded-2xl border p-1.5 text-left transition sm:w-28 sm:gap-2 sm:p-2 lg:w-full lg:flex-row lg:p-2.5',
                       isSelected
                         ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-500/20'
                         : 'border-zinc-200/70 bg-white hover:border-violet-300'
-                    }`}
+                    )}
                   >
-                    <div className="relative h-20 w-full shrink-0 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 lg:h-12 lg:w-12">
+                    <div className="relative h-16 w-full shrink-0 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 sm:h-20 lg:h-12 lg:w-12">
                       {pageImg ? (
                         <img src={pageImg} alt={`Page ${pageNum}`} className="h-full w-full object-cover" />
+                      ) : isGenerating ? (
+                        <ShimmerBlock className="h-full w-full" />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-[11px] font-bold text-zinc-400">
                           {pageNum}
@@ -465,9 +448,9 @@ export default function ProjectDetailsPage ({
                       )}
                     </div>
                     <div className="min-w-0 w-full">
-                      <p className="text-center text-xs font-semibold text-zinc-900 lg:text-left">Page {pageNum}</p>
-                      <p className="mt-0.5 line-clamp-1 text-center text-[11px] text-zinc-500 lg:text-left">
-                        {pageImg ? 'Ready' : isGenerating ? 'Queued' : (p.story || `Scene ${pageNum}`)}
+                      <p className="text-center text-[11px] font-semibold text-zinc-900 sm:text-xs lg:text-left">Page {pageNum}</p>
+                      <p className="mt-0.5 line-clamp-1 text-center text-[10px] text-zinc-500 sm:text-[11px] lg:text-left">
+                        {pageImg ? 'Ready' : isGenerating ? 'Painting' : (p.story || `Scene ${pageNum}`)}
                       </p>
                     </div>
                   </button>
@@ -487,8 +470,8 @@ export default function ProjectDetailsPage ({
                     <h3 className="text-sm font-semibold tracking-tight text-zinc-900">
                       {selectedPage === 0 ? 'Book cover' : `Page ${selectedPage}`}
                     </h3>
-                    <p className="text-xs text-zinc-500">
-                      {selectedPage === 0 ? 'Title art' : 'Scene and story'}
+                    <p className="truncate text-xs text-zinc-500">
+                      {selectedPage === 0 ? 'Title art' : isGenerating && !activePageImage ? 'Painting this scene now' : 'Scene and story'}
                     </p>
                   </div>
                 </div>
@@ -515,30 +498,32 @@ export default function ProjectDetailsPage ({
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 md:gap-6">
-                <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-2xl bg-zinc-100 ring-1 ring-zinc-200">
-                  {selectedPage === 0 ? (
-                    coverImage ? (
+              <div className="grid gap-3 md:grid-cols-2 md:gap-6">
+                {selectedPage === 0 ? (
+                  coverImage ? (
+                    <div className="relative aspect-square overflow-hidden rounded-2xl bg-zinc-100 ring-1 ring-zinc-200">
                       <img src={coverImage} alt="Cover" className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="p-6 text-center text-zinc-500">
-                        <Sparkles className="mx-auto mb-2 h-8 w-8 animate-spin text-violet-400" />
-                        <p className="text-xs font-medium">Generating cover…</p>
-                      </div>
-                    )
-                  ) : activePageImage ? (
+                    </div>
+                  ) : (
+                    <GeneratingPreview
+                      title="Painting the cover"
+                      subtitle="This scene is rendering with every other page at the same time."
+                    />
+                  )
+                ) : activePageImage ? (
+                  <div className="relative aspect-square overflow-hidden rounded-2xl bg-zinc-100 ring-1 ring-zinc-200">
                     <img
                       src={activePageImage}
                       alt={`Page ${selectedPage}`}
                       className="h-full w-full object-cover"
                     />
-                  ) : (
-                    <div className="p-6 text-center text-zinc-500">
-                      <Clock className="mx-auto mb-2 h-8 w-8 animate-spin text-violet-400" />
-                      <p className="text-xs font-medium">Rendering page {selectedPage}…</p>
-                    </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <GeneratingPreview
+                    title={`Painting page ${selectedPage}`}
+                    subtitle="All remaining scenes are rendering together, not waiting in batches of 6."
+                  />
+                )}
 
                 {/* Narrative Text Content */}
                 <div className="flex flex-col justify-between space-y-4">
@@ -549,17 +534,29 @@ export default function ProjectDetailsPage ({
                     </span>
 
                     <div className="rounded-2xl border border-zinc-200/70 bg-zinc-50/80 p-4">
-                      <p className="text-sm leading-relaxed text-zinc-800">
-                        {selectedPage === 0
-                          ? project.story?.coverText || project.storyline || 'Personalized AI storybook created with your character photos.'
-                          : activePage?.story ||
-                            'The magical adventure unfolds with your character facing extraordinary encounters.'}
-                      </p>
+                      {selectedPage === 0 ? (
+                        <p className="text-sm leading-relaxed text-zinc-800">
+                          {project.story?.coverText || project.storyline || 'Personalized AI storybook created with your character photos.'}
+                        </p>
+                      ) : activePage?.story ? (
+                        <p className="text-sm leading-relaxed text-zinc-800">{activePage.story}</p>
+                      ) : isGenerating ? (
+                        <div className="space-y-2">
+                          <ShimmerBlock className="h-3 w-full rounded-full" />
+                          <ShimmerBlock className="h-3 w-5/6 rounded-full" />
+                          <ShimmerBlock className="h-3 w-4/6 rounded-full" />
+                          <p className="pt-1 text-xs text-zinc-500">Story text appears as soon as writing finishes.</p>
+                        </div>
+                      ) : (
+                        <p className="text-sm leading-relaxed text-zinc-800">
+                          The magical adventure unfolds with your character facing extraordinary encounters.
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   {/* Lulu Hardcover Print CTA for digital books */}
-                  {!isHardcover && (
+                  {!isHardcover && !isGenerating && (
                     <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/70 to-teal-50/40 p-4">
                       <div className="flex items-center gap-2 text-xs font-semibold text-emerald-900">
                         <Truck className="h-4 w-4 text-emerald-600" />

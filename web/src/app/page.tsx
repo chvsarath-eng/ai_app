@@ -2,6 +2,12 @@ import * as React from 'react'
 
 import { HeroSplit } from '@/components/hero-split'
 import { DemoLoop } from '@/components/demo-loop'
+import {
+  HERO_COVER_SIZES,
+  HERO_COVER_SRC,
+  HERO_COVER_SRCSET,
+  HeroCoverImage
+} from '@/components/hero-cover'
 import { GeneratorCard } from '@/components/generator-card'
 import { PricingCards } from '@/components/pricing-cards'
 import { FAQAccordion } from '@/components/faq-accordion'
@@ -229,6 +235,15 @@ export default function Home () {
 
   return (
     <>
+      <link
+        rel="preload"
+        as="image"
+        href={HERO_COVER_SRC}
+        imageSrcSet={HERO_COVER_SRCSET}
+        imageSizes={HERO_COVER_SIZES}
+        type="image/webp"
+        fetchPriority="high"
+      />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -353,7 +368,9 @@ function HeroLeft () {
         <span className="ultraGlowText font-bold">4K</span> images.
       </h1>
 
-      <DemoLoop className="mt-2 min-h-0 flex-1 sm:mt-4" />
+      <DemoLoop className="mt-2 min-h-0 flex-1 sm:mt-4">
+        <HeroCoverImage />
+      </DemoLoop>
     </div>
   )
 }

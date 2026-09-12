@@ -108,9 +108,9 @@ export const metadata: Metadata = {
     siteName: 'img2x',
     images: [
       {
-        url: '/brand/preview-cover_new.jpeg',
-        width: 1200,
-        height: 630,
+        url: '/brand/preview-cover_hero.jpg',
+        width: 1400,
+        height: 1045,
         alt: 'img2x Personalized AI Storybook - Create custom stories for kids, couples, and pets',
       }
     ],
@@ -121,7 +121,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'img2x - AI Storybooks for Kids, Couples, Pets & Special Moments',
     description: 'Turn photos into personalized storybooks with AI. Perfect for children, couples, pet lovers, retirement, anniversaries. 4K illustrations.',
-    images: ['/brand/preview-cover_new.jpeg'],
+    images: ['/brand/preview-cover_hero.jpg'],
     creator: '@img2x',
   },
   robots: {

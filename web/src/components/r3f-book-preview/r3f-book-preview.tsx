@@ -5,6 +5,8 @@ import { Hand, MousePointer2 } from 'lucide-react'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { SRGBColorSpace } from 'three'
 
+import { HeroCoverImage } from '@/components/hero-cover'
+
 import { bookPages } from './pages'
 import { Experience } from './experience'
 
@@ -20,15 +22,7 @@ function PreviewCover ({
 }) {
   return (
     <div className={`${className} flex items-center justify-center`}>
-      <img
-        src="/brand/preview-cover_new.jpeg"
-        alt=""
-        loading="eager"
-        decoding="async"
-        fetchPriority="high"
-        className="max-h-full max-w-full object-contain"
-        style={{ transform: 'scale(0.9)' }}
-      />
+      <HeroCoverImage alt="" />
     </div>
   )
 }
