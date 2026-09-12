@@ -43,9 +43,9 @@ export function Experience ({
       <Float
         rotation-x={-Math.PI / 4}
         // Reduce "free flow" motion so it feels steadier.
-        floatIntensity={isReceded ? 0.08 : 0.12}
-        speed={0.9}
-        rotationIntensity={isReceded ? 0.12 : 0.22}
+        floatIntensity={isReceded ? 0.12 : 0.25}
+        speed={1.2}
+        rotationIntensity={isReceded ? 0.35 : 0.6}
       >
         <group ref={bookGroupRef}>
           <Book page={page} onSelectPage={onSelectPage} />
