@@ -110,8 +110,8 @@ export default function AccountPage () {
                 <div className="flex items-center gap-3">
                   <ShieldCheck className="h-5 w-5 text-emerald-600" />
                   <div>
-                    <p className="text-sm font-semibold text-zinc-900">Admin control panel</p>
-                    <p className="text-xs text-zinc-500">Manage jobs, payments, and AI models</p>
+                    <p className="text-sm font-semibold text-zinc-900">Support desk</p>
+                    <p className="text-xs text-zinc-500">Find a customer book and fix it</p>
                   </div>
                 </div>
                 <ArrowRight className="h-4 w-4 text-zinc-400" />

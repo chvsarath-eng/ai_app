@@ -24,11 +24,14 @@ function uploadUris (project: Project): string[] {
  * Kick off story-api generation from photos already stored on the project.
  * Safe to call more than once: an in-flight or finished job is returned as-is.
  */
-export async function startProjectGeneration (projectId: string): Promise<StartGenerationResult> {
+export async function startProjectGeneration (
+  projectId: string,
+  options?: { force?: boolean }
+): Promise<StartGenerationResult> {
   const project = await getProject(projectId)
   if (!project) return { ok: false, error: 'Project not found' }
 
-  if (project.jobId && ACTIVE_STATUSES.has(project.status)) {
+  if (!options?.force && project.jobId && ACTIVE_STATUSES.has(project.status)) {
     return { ok: true, jobId: project.jobId, alreadyStarted: true }
   }
 
