@@ -347,13 +347,13 @@ function Section ({
 
 function HeroLeft () {
   return (
-    <div className="min-w-0">
-      <h1 className="break-words text-[1.65rem] leading-snug font-semibold tracking-tight text-zinc-900 sm:text-5xl sm:leading-tight lg:text-6xl lg:max-w-[52rem]">
+    <div className="flex min-h-[calc(100dvh-7rem)] min-w-0 flex-col sm:min-h-0">
+      <h1 className="shrink-0 break-words text-4xl font-semibold tracking-tight text-zinc-900 sm:text-5xl lg:text-6xl lg:max-w-[52rem]">
         Turn your photo into an <span className="ultraGlowText font-bold">Ultra‑Photorealistic</span> storybook with{' '}
         <span className="ultraGlowText font-bold">4K</span> images.
       </h1>
 
-      <DemoLoop className="mt-2 sm:mt-4" />
+      <DemoLoop className="mt-2 min-h-0 flex-1 sm:mt-4" />
     </div>
   )
 }

@@ -228,13 +228,14 @@ HARD CONSTRAINTS (HIGHEST PRIORITY)
 13) PROMPT FORMAT: Every image prompt MUST be written as a short, cohesive paragraph (3-5 sentences).
     Start by naming who is photographed from which reference, then the scene.
     NO bullet points, NO labeled sections, NO paragraph breaks within the prompt.
-14) RECURRING COMPANIONS: If the story has a named or recurring pet, animal, or
-   sidekick that is NOT an uploaded photo (dog, cat, horse, etc.) and that
-   companion appears on 2+ pages, add them as an extra character with
-   source="invented", a detailed identity_card (species, breed, size, coat,
-   markings, eye color, unique features), and a sheet prompt. Use that SAME
-   companion on every page they appear. Background extras in a new location
-   (a random monkey, a herd) do not need sheets. Maximum ONE invented companion.
+14) RECURRING COMPANIONS: If the story has a named or recurring pet, animal, robot,
+   or sidekick that is NOT an uploaded photo and that companion appears on 2+ pages,
+   add them as an extra character with source="invented", a detailed identity_card
+   (species, breed, size, coat, markings, colors, unique features), and a sheet
+   prompt of ONLY that creature. Use that SAME companion on every page they appear.
+   The companion is a DIFFERENT being from every uploaded person. Never give them a
+   human child's face. Never put the uploaded person on the companion sheet.
+   Background extras in a new location do not need sheets. Maximum ONE invented companion.
 
 ═══════════════════════════════════════════════════════════════════
 EPIC SCENE CONSTRUCTION & GENRE AESTHETICS (STEVEN SPIELBERG / SS RAJAMOULI STYLE)
@@ -265,11 +266,12 @@ STORY REQUIREMENTS
   6 Bonding, 7 Turning, 8 Crisis, 9 Climax, 10 Resolution
 - AUDIENCE: If input shows ADULT, write for adults. If CHILD, write for kids.
 - LANGUAGE (MANDATORY - SIMPLE STORYBOOK ENGLISH):
-  Write like a children's picture book. SHORT, DIRECT sentences only.
+  Write like a children's picture book. Direct sentences of 8-14 everyday words.
   Use ONLY concrete, visible actions and simple everyday words.
   Target: 3rd-4th grade reading level (age 8-9). Use words a child would say out loud.
-  Keep the story moving in a simple linear motion (like Chetan Bhagat's English)
+  Keep the story moving in a simple linear motion
   with clear cause-and-effect, straightforward, and highly readable phrasing.
+  Do NOT write a tiny 50-word page. The right-hand page must look full.
 
   BANNED WRITING PATTERNS (NEVER use these):
   × NO metaphors or similes: "like a drum", "as if", "like someone turned a knob"
@@ -287,8 +289,11 @@ STORY REQUIREMENTS
   GOOD EXAMPLE: "Krishna ran to the river. He saw a rope in the water. He grabbed it and pulled hard. His arms hurt. But he did not stop. Thunder boomed loud. He was scared. But he kept pulling."
   BAD EXAMPLE: "His eyes held a quiet secret. A calm force stayed inside him. The world began to sharpen."
 
-- Each page: 8-10 sentences, 145-150 words.
-- Include: Action (2-3 sentences), Feelings (2), Sensory (2), Dialogue (1-2), Hook (1).
+- Each page MUST FILL the printed right-hand text page. Target 12-16 sentences and 160-200 words in 4 short paragraphs.
+  A sparse page with a few lines and empty cream space is a FAIL.
+  Count words before output. If a page is under 160 words, add more action, spoken lines, and sensory detail on THAT page.
+- Include: Action (4-5 sentences), Feelings (2-3), Sensory (3-4), Dialogue (2-3), Hook (1).
+- Sentences can be 8-14 everyday words. Still simple English -- not tiny "He ran. He sat." fragments only.
 
 ═══════════════════════════════════════════════════════════════════
 STORY-IMAGE COHERENCE (CRITICAL -- READ BEFORE WRITING EACH PROMPT)
@@ -462,8 +467,9 @@ INPUT IMAGES & JSON SCHEMA
 ═══════════════════════════════════════════════════════════════════
 
 For uploaded people: character-sheet input_images has 1 image (face photo).
-For an invented companion: input_images is ["input_images/char_1_face.jpeg"]
-  (style/scale only -- do not copy that face).
+For an invented companion: input_images is ["input_images/companion_studio_ref.jpeg"]
+  (empty studio plate only -- NEVER the child's face). The companion sheet must
+  show ONLY that creature, twice (close-up + full body). No human in either panel.
 For cover and pages: each uploaded person gets TWO refs, face then sheet.
   Order per person: original close-up, then costume sheet.
   ["input_images/char_1_face.jpeg", "generated/char_1_sheet.png"]
@@ -495,7 +501,7 @@ JSON structure:
   }}}},
   "pages": [
     {{{{
-      "page_number": 1, "story": "string (145-150 words)",
+      "page_number": 1, "story": "string (160-200 words, 4 short paragraphs)",
       "emotion_beat": "wary|tense|focused|weary|curious|relieved|proud|warm",
       "characters_in_scene": [1, 2],
       "input_images": ["input_images/char_1_face.jpeg", "generated/char_1_sheet.png"],
@@ -510,7 +516,9 @@ GENERATION STEPS (internal, output JSON only):
 2) Create character descriptions + iconic costumes.
 2b) If the story needs a recurring pet/sidekick, add ONE invented character
     with identity_card and a companion sheet prompt.
-3) Generate character sheet prompts (two-panel: close-up + full body, front only).
+3) Generate character sheet prompts. Uploaded people: two-panel human identity
+   sheet (close-up + full body, front only). Invented companion: two-panel of
+   ONLY that creature -- never a human face, never the uploaded child.
 4) Generate cover prompt (short, cohesive paragraph, 150-250 words).
 5) For pages 1-10: write story, pick ONE emotion_beat that matches that page's
    feeling, pick shot from arc, build a short, cohesive paragraph following
@@ -535,10 +543,13 @@ GENERATION STEPS (internal, output JSON only):
      AND the same feeling as the story text.
    - STORY TEXT SIMPLICITY CHECK: An 8-year-old can picture every sentence.
    - COVER REALISM CHECK: Reject 3D/CGI title effects and decorative frames.
-   - COMPANION CHECK: If a named pet/sidekick recurs, they have one
+   - COMPANION CHECK: If a named pet/sidekick/robot recurs, they have one
      identity_card and appear as that same creature on every relevant page.
+     Their sheet contains ZERO humans.
+   - PAGE FILL CHECK: Every page story is 160-200 words. Rewrite any short page.
    - Every prompt ends with a semantic negative sentence about no collage.
-   - Character sheet is a two-panel identity card (close-up + full body, front only).
+   - Human character sheet is a two-panel identity card (close-up + full body, front only).
+     Companion sheet is a two-panel of the creature only.
    - Cover prompt includes the book title woven into the sentence.
 7) COUNT WORDS in each prompt. If over 250, trim. NEVER exceed 280.
 
@@ -880,4 +891,21 @@ def sheet_anti_collage_suffix() -> str:
         "camera-facing full-body in costume with exactly two hands at the sides. "
         "Same person. No extra limbs. No floating hands. No text. No profile. "
         "No 3/4. No back view. Thin divider."
+    )
+
+
+def sheet_companion_suffix(char: Optional[Dict[str, Any]] = None) -> str:
+    """Companion sheets must never become a second copy of the uploaded child."""
+    name = "this companion"
+    card = "the locked creature identity"
+    if isinstance(char, dict):
+        name = str(char.get("name") or name)
+        card = str(char.get("identity_card") or char.get("description") or card)
+    return (
+        f" Two-panel identity sheet of ONLY {name} ({card}). "
+        "LEFT: close-up of this companion's own head or face. "
+        "RIGHT: full-body of this same companion, studio light, one creature. "
+        "ZERO humans. ZERO children. Do not copy, clone, or place the uploaded "
+        "person's face anywhere. This reference plate is empty studio style only, "
+        "not a person to photograph. No extra creatures. No text. Thin divider."
     )

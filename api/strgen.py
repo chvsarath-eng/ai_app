@@ -11,7 +11,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError
 from langchain_openai import ChatOpenAI
 
-DEFAULT_OPENAI_MODEL = "gpt-5.5-2026-04-23"
+DEFAULT_OPENAI_MODEL = "gpt-5.6-terra"
+DEFAULT_GEMINI_MODEL = "gemini-3.1-pro-preview"
 
 
 # ---------- Utilities ----------
@@ -132,7 +133,7 @@ def _normalize_model_provider(model_provider: Optional[str], model: Optional[str
 
 
 def _default_model_for_provider(provider: str) -> str:
-    return DEFAULT_OPENAI_MODEL if provider == "openai" else "gemini-3-pro-preview"
+    return DEFAULT_OPENAI_MODEL if provider == "openai" else DEFAULT_GEMINI_MODEL
 
 
 def _get_openai_api_key() -> Optional[str]:
@@ -152,13 +153,18 @@ def _build_llm(
 
 
     if provider == "openai":
+        effort = (thinking_level or "high").strip().lower()
+        if effort not in ("low", "medium", "high"):
+            effort = "high"
         openai_kwargs = {
             "model": model_name,
             "seed": seed,
             "api_key": _get_openai_api_key(),
             "model_kwargs": {"response_format": {"type": "json_object"}},
         }
-        if not model_name.startswith("gpt-5.5"):
+        if model_name.startswith(("gpt-5.5", "gpt-5.6")):
+            openai_kwargs["reasoning_effort"] = effort
+        else:
             openai_kwargs["temperature"] = temperature
         return ChatOpenAI(**openai_kwargs)
 
@@ -288,8 +294,8 @@ STORY REQUIREMENTS (STRICT)
   - Good: "The wind hit his face. He grabbed the rope and held on tight."
   - Bad: "The tempestuous gale assailed his countenance as he seized the taut cordage."
   - The story should FEEL cinematic through action and emotion, NOT through complicated language.
-- Each page story must be 8–10 sentences AND 145–150 words (~700–710 characters).
-- Word count is STRICT: count words before output and keep within 145–150.
+- Each page story must FILL the right-hand printed page: 12–16 sentences AND 160–200 words.
+- Short pages with empty cream space are a FAIL. Count words. If under 160, add more action, dialogue, and sensory detail on that same page.
 - Each page must include:
   - Action (2–3 sentences) - describe the scene vividly but simply
   - Feelings/thoughts (2 sentences) - what the character feels inside
@@ -611,7 +617,7 @@ GENERATION PROCEDURE (DO THIS INTERNALLY, OUTPUT JSON ONLY)
    - All prompts include MAIN_IDENTITY_PHRASE (main only), FRONTAL_FACE_PHRASE, MOUTH_EXPRESSION_PHRASE, QUALITY_KEYWORD_STACK.
    - book.input_images and every pages[].input_images start with original face at index 0.
    - main character appears in cover + all pages.
-   - Each page story is 8–10 sentences and 145–150 words (~700–710 characters).
+   - Each page story fills the printed right-hand page: 12–16 sentences and 160–200 words.
 Return JSON only.
     '''
     mapping_text = "\n".join(mapping_lines)
@@ -1070,7 +1076,7 @@ STORY TEXT REQUIREMENTS (MANDATORY):
 2. LANGUAGE RULE (MANDATORY): Write in SIMPLE, CLEAR English. Use short sentences and everyday words.
    Write at a 6th-grade reading level. NO complex vocabulary, NO literary jargon, NO flowery prose.
    The story should feel cinematic through action and emotion, NOT through complicated language.
-3. LONGER TEXT: Each page must have 8-10 SENTENCES minimum (145-150 words, ~700-710 characters per page). Count words before output and keep within 145–150.
+3. LONGER TEXT: Each page must FILL the right-hand printed page (12-16 sentences, 160-200 words). Empty cream space is a FAIL.
 4. STORYTELLING STYLE: Cinematic feel through vivid action and real emotions - dramatic dialogue, sensory details, cliffhangers, emotional depth. Use SIMPLE words to create powerful moments.
 
 JSON OUTPUT FORMAT (HYBRID STRATEGY EXAMPLE)

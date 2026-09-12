@@ -55,7 +55,19 @@ function canUseWebgl () {
   }
 }
 
-export function R3FBookPreview ({ isReceded }: { isReceded?: boolean }) {
+function stopFlipAudio (audio: HTMLAudioElement | null) {
+  if (!audio) return
+  audio.pause()
+  audio.currentTime = 0
+}
+
+export function R3FBookPreview ({
+  isReceded,
+  isActive = true
+}: {
+  isReceded?: boolean
+  isActive?: boolean
+}) {
   const [page, setPage] = useState(0)
   const [isMounted, setIsMounted] = useState(false)
   const [hasWebgl, setHasWebgl] = useState<boolean | null>(null)
@@ -65,12 +77,15 @@ export function R3FBookPreview ({ isReceded }: { isReceded?: boolean }) {
   const [hasUserInteracted, setHasUserInteracted] = useState(false)
   const [isAutoFlipPaused, setIsAutoFlipPaused] = useState(false)
   const [isHintVisible, setIsHintVisible] = useState(false)
+  const [isCoarsePointer, setIsCoarsePointer] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const maxPage = bookPages.length
 
   useEffect(() => {
     setIsMounted(true)
     setHasWebgl(canUseWebgl())
+    const phoneLike = window.matchMedia('(pointer: coarse), (max-width: 480px)').matches
+    setIsCoarsePointer(phoneLike)
   }, [])
 
   useEffect(() => {
@@ -100,18 +115,20 @@ export function R3FBookPreview ({ isReceded }: { isReceded?: boolean }) {
     return () => window.clearTimeout(timer)
   }, [isMounted, hasWebgl, isCanvasReady])
 
-  // Auto flip pages after book is revealed
+  // Auto flip pages after book is revealed — only while this preview is on screen.
   useEffect(() => {
     if (!showBook) return
+    if (!isActive) return
     if (isCoverVisible) return
     if (hasUserInteracted) return
     if (isAutoFlipPaused) return
 
+    let flipInterval = 0
     const startDelay = window.setTimeout(() => {
       let flipCount = 0
       const maxFlips = Math.min(maxPage, 6)
 
-      const flipInterval = window.setInterval(() => {
+      flipInterval = window.setInterval(() => {
         flipCount += 1
 
         setPage((prev) => {
@@ -120,20 +137,23 @@ export function R3FBookPreview ({ isReceded }: { isReceded?: boolean }) {
         })
 
         if (flipCount === 2) {
-          // After a couple flips, hint that it's interactive.
           setIsHintVisible(true)
         }
 
         if (flipCount >= maxFlips) {
           window.clearInterval(flipInterval)
+          flipInterval = 0
           setIsAutoFlipPaused(true)
           setIsHintVisible(true)
         }
       }, 1600)
     }, 400)
 
-    return () => window.clearTimeout(startDelay)
-  }, [showBook, maxPage, isCoverVisible, hasUserInteracted, isAutoFlipPaused])
+    return () => {
+      window.clearTimeout(startDelay)
+      window.clearInterval(flipInterval)
+    }
+  }, [showBook, maxPage, isCoverVisible, hasUserInteracted, isAutoFlipPaused, isActive])
 
   useEffect(() => {
     // If the demo is running and the user hasn't interacted yet,
@@ -149,25 +169,29 @@ export function R3FBookPreview ({ isReceded }: { isReceded?: boolean }) {
   useEffect(() => {
     if (!isMounted) return
     if (!hasWebgl) return
-    // Only play audio if book is shown to avoid sound during intro?
-    // User didn't specify, but let's allow it to play as pages flip (which starts after intro)
     if (!audioRef.current) {
       audioRef.current = new Audio('/r3f-book/audios/page-flip-01a.mp3')
       audioRef.current.volume = 0.35
     }
 
-    const audio = audioRef.current
-    audio.currentTime = 0
-    // Only play if page > 0 (don't play on initial mount of page 0)
-    // or if we want sound on every flip.
-    // The original code played on mount.
-    if (page > 0) {
-        const playPromise = audio.play()
-        if (playPromise && typeof playPromise.catch === 'function') {
-        playPromise.catch(() => {})
-        }
+    if (!isActive) {
+      stopFlipAudio(audioRef.current)
+      return
     }
-  }, [page, isMounted, hasWebgl])
+
+    const audio = audioRef.current
+    if (page > 0) {
+      audio.currentTime = 0
+      const playPromise = audio.play()
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {})
+      }
+    }
+
+    return () => {
+      stopFlipAudio(audio)
+    }
+  }, [page, isMounted, hasWebgl, isActive])
 
   const safeSetPage = (next: number) => {
     setHasUserInteracted(true)
@@ -206,15 +230,24 @@ export function R3FBookPreview ({ isReceded }: { isReceded?: boolean }) {
         ? (
             <div className="pointer-events-none absolute inset-x-0 bottom-6 z-20 flex justify-center px-4">
               <div className="flex items-center gap-3 rounded-full border border-zinc-200/70 bg-white/80 px-4 py-2 text-sm text-zinc-800 shadow-sm backdrop-blur">
-                <span className="inline-flex items-center gap-2">
-                  <MousePointer2 className="h-4 w-4" aria-hidden="true" />
-                  Click
-                </span>
-                <span className="text-zinc-400">•</span>
-                <span className="inline-flex items-center gap-2">
-                  <Hand className="h-4 w-4" aria-hidden="true" />
-                  Drag to rotate
-                </span>
+                {isCoarsePointer ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Hand className="h-4 w-4" aria-hidden="true" />
+                    Tap a page to flip
+                  </span>
+                ) : (
+                  <>
+                    <span className="inline-flex items-center gap-2">
+                      <MousePointer2 className="h-4 w-4" aria-hidden="true" />
+                      Click
+                    </span>
+                    <span className="text-zinc-400">•</span>
+                    <span className="inline-flex items-center gap-2">
+                      <Hand className="h-4 w-4" aria-hidden="true" />
+                      Drag to rotate
+                    </span>
+                  </>
+                )}
                 <span className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-violet-500" />
               </div>
             </div>
@@ -228,9 +261,11 @@ export function R3FBookPreview ({ isReceded }: { isReceded?: boolean }) {
       >
         <Canvas
           shadows
+          frameloop={isActive ? 'always' : 'never'}
           dpr={[1, 2]}
           camera={{ position: [-0.42, 0.92, 3.65], fov: 42 }}
           gl={{ antialias: true, alpha: true }}
+          style={{ touchAction: 'pan-y' }}
           onPointerDown={() => {
             setHasUserInteracted(true)
             setIsAutoFlipPaused(true)
@@ -253,6 +288,7 @@ export function R3FBookPreview ({ isReceded }: { isReceded?: boolean }) {
               <Experience
                 page={page}
                 isReceded={isReceded}
+                allowOrbit={!isCoarsePointer}
                 onSelectPage={(next) => safeSetPage(next)}
               />
             </Suspense>

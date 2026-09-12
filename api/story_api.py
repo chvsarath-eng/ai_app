@@ -18,6 +18,7 @@ from storygen_v2 import (
     emotion_lock_suffix,
     scene_integration_prefix,
     sheet_anti_collage_suffix,
+    sheet_companion_suffix,
     strip_collage_language,
 )
 
@@ -672,7 +673,7 @@ def generate_ebook_html_bundle(
     if model_provider and model_provider.lower() in ("openai", "oai", "gpt"):
         model = model or os.getenv("STORY_MODEL") or "gpt-5.6-terra"
     else:
-        model = model or "gemini-3-pro-preview"
+        model = model or os.getenv("STORY_MODEL") or "gemini-3.1-pro-preview"
 
     base_dir = Path(job_dir).resolve()
     base_dir.mkdir(parents=True, exist_ok=True)
@@ -1057,22 +1058,120 @@ def _maybe_add_recurring_companion(story: Dict[str, Any], num_uploaded: int) -> 
         "description": lock,
         "identity_card": lock,
         "prompt": (
-            f"Create a single full-body photograph of {name}, {lock}, standing in a simple studio "
-            "with even light. One continuous photograph, no collage, no extra animals. "
-            "The uploaded human photo is style and scale only -- do not copy that person's face."
+            f"Create a two-panel studio identity sheet of ONLY {name}, {lock}. "
+            "LEFT a close-up of this companion. RIGHT a full-body of the same companion. "
+            "Zero humans. Do not copy any child's face."
         ),
     })
     logger.info("added invented companion from story text: %s mentions=%d", best, counts[best])
 
 
+COMPANION_STUDIO_REF = "input_images/companion_studio_ref.jpeg"
+PAGE_STORY_MIN_WORDS = 160
+PAGE_STORY_TARGET_WORDS = 180
+
+
+def _ensure_companion_studio_ref(base_dir: Optional[Path] = None) -> str:
+    """Blank studio plate so invented companions are not generated from the child's face."""
+    dest = (Path(base_dir) / COMPANION_STUDIO_REF) if base_dir else Path(COMPANION_STUDIO_REF)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists() and dest.stat().st_size > 800:
+        return COMPANION_STUDIO_REF
+    from PIL import Image
+    Image.new("RGB", (1024, 1024), (236, 230, 218)).save(dest, format="JPEG", quality=90)
+    return COMPANION_STUDIO_REF
+
+
+def _page_word_count(text: Any) -> int:
+    return len(str(text or "").split())
+
+
+def _expand_short_page_stories(
+    story: Dict[str, Any],
+    *,
+    model_provider: Optional[str],
+    model: Optional[str],
+    thinking_level: str = "high",
+    seed: int = 42,
+) -> Dict[str, Any]:
+    """If the model wrote sparse pages, expand them so the printed right page fills."""
+    from strgen import _build_llm
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    pages = story.get("pages") if isinstance(story.get("pages"), list) else []
+    short = [
+        p for p in pages
+        if isinstance(p, dict) and _page_word_count(p.get("story")) < PAGE_STORY_MIN_WORDS
+    ]
+    if not short:
+        return story
+
+    payload = [
+        {
+            "page_number": p.get("page_number"),
+            "story": p.get("story") or "",
+            "words": _page_word_count(p.get("story")),
+        }
+        for p in short
+    ]
+    llm = _build_llm(
+        model_provider=model_provider,
+        model=model,
+        temperature=0.4,
+        thinking_level=thinking_level,
+        seed=seed,
+    )
+    messages = [
+        SystemMessage(content=(
+            "You expand children's storybook pages so each printed right-hand page looks full. "
+            "Keep the same events, characters, and order. Simple everyday English. "
+            "Each rewritten page: 160-200 words, 12-16 sentences, 4 short paragraphs. "
+            "Return JSON only: {\"pages\": [{\"page_number\": 1, \"story\": \"...\"}]}"
+        )),
+        HumanMessage(content=json.dumps({"pages": payload}, ensure_ascii=False)),
+    ]
+    try:
+        message = llm.invoke(messages)
+        raw = _coerce_model_text_to_string(getattr(message, "content", ""))
+        expanded = parse_llm_json(raw)
+    except Exception:
+        logger.exception("short_page_expand_failed count=%d", len(short))
+        return story
+
+    by_num = {}
+    for item in (expanded.get("pages") or []):
+        if isinstance(item, dict) and item.get("page_number") is not None:
+            by_num[int(item["page_number"])] = str(item.get("story") or "").strip()
+    filled = 0
+    for page in pages:
+        if not isinstance(page, dict):
+            continue
+        try:
+            num = int(page.get("page_number"))
+        except (TypeError, ValueError):
+            continue
+        new_text = by_num.get(num)
+        if new_text and _page_word_count(new_text) > _page_word_count(page.get("story")):
+            page["story"] = new_text
+            filled += 1
+    logger.info(
+        "short_page_expand pages=%d expanded=%d",
+        len(short),
+        filled,
+    )
+    return story
+
+
 def _ensure_story_paths_consistent_v2(
     story: Dict[str, Any],
     num_characters: int,
+    *,
+    base_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """
     Enforce V2 path conventions:
       - Uploaded face photos at: input_images/char_N_face.jpeg
-      - Invented companions (pets) reuse char_1_face.jpeg as style/scale only
+      - Invented companions use a blank studio plate, never the child's face
       - Character sheets at: generated/char_N_sheet.png
       - Cover/page input_images use original face then costume sheet per uploaded person
     """
@@ -1105,15 +1204,31 @@ def _ensure_story_paths_consistent_v2(
             if is_invented:
                 char["source"] = "invented"
                 char["role"] = char.get("role") or "companion"
-                char["input_images"] = ["input_images/char_1_face.jpeg"]
+                char["input_images"] = [_ensure_companion_studio_ref(base_dir)]
+                char["output_image"] = f"generated/char_{i}_sheet.png"
+                char["identity_card"] = build_identity_card(char)
+                raw_prompt = strip_collage_language(str(char.get("prompt") or ""))
+                leaked_human = any(
+                    tok in raw_prompt.lower()
+                    for tok in ("uploaded face", "same person", "child's face", "two-panel identity sheet only")
+                )
+                if not raw_prompt or leaked_human:
+                    name = char.get("name") or "the companion"
+                    card = char.get("identity_card") or name
+                    raw_prompt = (
+                        f"Create a two-panel studio identity sheet of ONLY {name}, {card}. "
+                        "LEFT a close-up of this companion. RIGHT a full-body of the same companion. "
+                        "Zero humans. No child's face."
+                    )
+                char["prompt"] = raw_prompt + sheet_companion_suffix(char)
             else:
                 char["source"] = "photo"
                 char["input_images"] = [f"input_images/char_{i}_face.jpeg"]
                 if "role" not in char:
                     char["role"] = "main" if i == 1 else "supporting"
-            char["output_image"] = f"generated/char_{i}_sheet.png"
-            char["identity_card"] = build_identity_card(char)
-            char["prompt"] = strip_collage_language(str(char.get("prompt") or "")) + sheet_anti_collage_suffix()
+                char["output_image"] = f"generated/char_{i}_sheet.png"
+                char["identity_card"] = build_identity_card(char)
+                char["prompt"] = strip_collage_language(str(char.get("prompt") or "")) + sheet_anti_collage_suffix()
 
     char_list = characters if isinstance(characters, list) else []
     total_chars = len(char_list) or num_characters
@@ -1263,7 +1378,7 @@ def generate_ebook_html_bundle_v2(
     if model_provider and model_provider.lower() in ("openai", "oai", "gpt"):
         model = model or os.getenv("STORY_MODEL") or "gpt-5.6-terra"
     else:
-        model = model or "gemini-3-pro-preview"
+        model = model or os.getenv("STORY_MODEL") or "gemini-3.1-pro-preview"
 
     base_dir = Path(job_dir).resolve()
     base_dir.mkdir(parents=True, exist_ok=True)
@@ -1342,7 +1457,14 @@ def generate_ebook_html_bundle_v2(
         ) from e
 
     # Enforce V2 paths
-    story = _ensure_story_paths_consistent_v2(story, num_chars)
+    story = _ensure_story_paths_consistent_v2(story, num_chars, base_dir=base_dir)
+    story = _expand_short_page_stories(
+        story,
+        model_provider=model_provider,
+        model=model,
+        thinking_level=thinking_level,
+        seed=seed,
+    )
 
     # Save story_data.json
     story_json_path = str(base_dir / "story_data.json")
@@ -1519,8 +1641,9 @@ def generate_ebook_html_bundle_v2(
         is_invented = (char.get("source") or "") == "invented"
         if is_invented:
             sheet_label = (
-                f"Style and scale reference only. Do not copy this person's face. "
-                f"Create {name} as a new companion: {char.get('identity_card') or name}."
+                f"Empty studio plate only -- not a person. Do not copy any human face. "
+                f"Create {name} as a new companion: {char.get('identity_card') or name}. "
+                "Two panels of this companion only. Zero humans."
             )
         else:
             sheet_label = (

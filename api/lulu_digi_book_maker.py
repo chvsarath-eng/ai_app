@@ -1055,6 +1055,17 @@ class FastLuluBookGenerator:
             except Exception:
                 pass
 
+        # Identity-H subsets often omit U+0020, which glues words together.
+        try:
+            if body_registered:
+                page.insert_text(fitz.Point(-200, -200), 'x x', fontsize=12, fontname=self._font_body_name)
+            if bold_registered:
+                page.insert_text(fitz.Point(-200, -180), 'x x', fontsize=12, fontname=self._font_bold_name)
+            if italic_registered:
+                page.insert_text(fitz.Point(-200, -160), 'x x', fontsize=12, fontname=self._font_italic_name)
+        except Exception:
+            pass
+
         # If custom fonts failed, ensure Base14 fallback fonts are registered
         # Base14 fonts (helv, helvb, helvi) are always available in PyMuPDF
         if not body_registered:
@@ -1072,6 +1083,43 @@ class FastLuluBookGenerator:
                 page.insert_font(fontname='helvi')
             except Exception:
                 pass
+
+    def _story_font(self, *, bold=False, italic=False):
+        if bold and self._font_bold:
+            return self._font_bold
+        if italic and self._font_italic:
+            return self._font_italic
+        return self._font_body
+
+    def _draw_line(self, page, point, text, fontsize, color, *, bold=False, italic=False):
+        """Draw a line with the original TTF so space glyphs stay visible."""
+        if not text:
+            return
+        font = self._story_font(bold=bold, italic=italic)
+        if font:
+            tw = fitz.TextWriter(page.rect, color=color)
+            tw.append(point, text, font=font, fontsize=fontsize)
+            tw.write_text(page)
+            return
+        fontname = self._bold_fontname() if bold else (
+            self._font_italic_name if italic and self._font_italic_file else self._body_fontname()
+        )
+        page.insert_text(point, text, fontsize=fontsize, fontname=fontname, color=color)
+
+    def _draw_box(self, page, rect, text, fontsize, color, *, bold=False, italic=False, align=1):
+        """Centered/aligned text box that keeps spaces (TextWriter, not insert_textbox)."""
+        if not text:
+            return
+        font = self._story_font(bold=bold, italic=italic)
+        if font:
+            tw = fitz.TextWriter(page.rect, color=color)
+            tw.fill_textbox(rect, text, font=font, fontsize=fontsize, align=align)
+            tw.write_text(page)
+            return
+        fontname = self._bold_fontname() if bold else (
+            self._font_italic_name if italic and self._font_italic_file else self._body_fontname()
+        )
+        page.insert_textbox(rect, text, fontsize=fontsize, fontname=fontname, color=color, align=align)
 
     def _text_length(self, text, fontsize, is_bold=False):
         """Measure text width for our chosen font (matches what we actually draw)."""
@@ -1233,12 +1281,7 @@ class FastLuluBookGenerator:
             return self._text_length(s, fontsize, is_bold=False)
 
         def insert_faux_bold(point, text, fontsize, color):
-            if self._font_bold_file:
-                page.insert_text(point, text, fontsize=fontsize, fontname=bold_font, color=color)
-                return
-            # Draw twice with a tiny x-offset to simulate bold (fallback).
-            page.insert_text(point, text, fontsize=fontsize, fontname=body_font, color=color)
-            page.insert_text(fitz.Point(point.x + 0.6, point.y), text, fontsize=fontsize, fontname=body_font, color=color)
+            self._draw_line(page, point, text, fontsize, color, bold=True)
 
         # Helper: build one line of words that fits max_width
         def take_line(words, fontsize, max_width):
@@ -1263,7 +1306,9 @@ class FastLuluBookGenerator:
         first_para = cleaned_paragraphs[0]
         first_para_stripped = first_para.lstrip()
         first_letter = first_para_stripped[0] if first_para_stripped else ''
-        first_para_remainder = first_para_stripped[1:].lstrip() if len(first_para_stripped) > 1 else ''
+        first_rest = first_para_stripped[1:] if len(first_para_stripped) > 1 else ''
+        first_letter_is_whole_word = first_rest[:1].isspace() or first_rest == ''
+        first_para_remainder = first_rest.lstrip()
 
         # Wrap all paragraphs into lines for a given (body_size, leading)
         def measure_layout(body_size, leading):
@@ -1345,32 +1390,33 @@ class FastLuluBookGenerator:
                 total_w = letter_w + line_w
                 start_x = content_rect.x0 + max(0, (content_rect.width - total_w) / 2)
 
-                # Draw bold first letter at start_x
                 insert_faux_bold(
                     fitz.Point(start_x, item['y']),
                     first_letter_local,
                     fontsize=body_size,
                     color=to_rgb(TEXT_COLOR)
                 )
-                # Draw the rest right after the letter
-                page.insert_text(
+                remainder = item['text']
+                if first_letter_is_whole_word and remainder:
+                    remainder = ' ' + remainder
+                self._draw_line(
+                    page,
                     fitz.Point(start_x + letter_w, item['y']),
-                    item['text'],
-                    fontsize=body_size,
-                    fontname=body_font,
-                    color=to_rgb(TEXT_COLOR)
+                    remainder,
+                    body_size,
+                    to_rgb(TEXT_COLOR),
                 )
                 continue
 
             # Center normal line
             line_w = text_len(item['text'], body_size)
             x = content_rect.x0 + max(0, (content_rect.width - line_w) / 2)
-            page.insert_text(
+            self._draw_line(
+                page,
                 fitz.Point(x, item['y']),
                 item['text'],
-                fontsize=body_size,
-                fontname=body_font,
-                color=to_rgb(TEXT_COLOR)
+                body_size,
+                to_rgb(TEXT_COLOR),
             )
 
         # Page number: centered and always visible inside the outer border
@@ -1378,12 +1424,12 @@ class FastLuluBookGenerator:
         page_num_str = f'• {page_num} •'
         num_w = text_len(page_num_str, PAGE_NUMBER_SIZE)
         num_x = (INTERIOR_PAGE_WIDTH - num_w) / 2
-        page.insert_text(
+        self._draw_line(
+            page,
             fitz.Point(num_x, num_baseline),
             page_num_str,
-            fontsize=PAGE_NUMBER_SIZE,
-            fontname=body_font,
-            color=to_rgb(border_outer)
+            PAGE_NUMBER_SIZE,
+            to_rgb(border_outer),
         )
 
     def _draw_title_page(self, page):
@@ -1550,13 +1596,14 @@ class FastLuluBookGenerator:
             content_right,
             content_top + 0.5 * inch
         )
-        page.insert_textbox(
+        self._draw_box(
+            page,
             title_rect,
             title_text,
-            fontsize=24,
-            fontname=self._bold_fontname(),
-            color=to_rgb(TEXT_COLOR),
-            align=fitz.TEXT_ALIGN_CENTER
+            24,
+            to_rgb(TEXT_COLOR),
+            bold=True,
+            align=fitz.TEXT_ALIGN_CENTER,
         )
 
         # Character names subtitle
@@ -1573,13 +1620,14 @@ class FastLuluBookGenerator:
                 italic_font = self._font_italic_name if self._font_italic_file else (
                     self._font_body_name if self._font_body_file else 'helvi'
                 )
-                page.insert_textbox(
+                self._draw_box(
+                    page,
                     name_rect,
                     name_text,
-                    fontsize=16 if num_chars <= 2 else 14,  # Smaller font for more names
-                    fontname=italic_font,
-                    color=to_rgb(ACCENT_COLOR),
-                    align=fitz.TEXT_ALIGN_CENTER
+                    16 if num_chars <= 2 else 14,
+                    to_rgb(ACCENT_COLOR),
+                    italic=True,
+                    align=fitz.TEXT_ALIGN_CENTER,
                 )
                 img_top = name_rect.y1 + 0.2 * inch
             else:
@@ -1869,12 +1917,13 @@ class FastLuluBookGenerator:
         text_x = center_x - text_width / 2
         text_y = y_cursor + 0.35 * inch  # Baseline position
         
-        page.insert_text(
+        self._draw_line(
+            page,
             fitz.Point(text_x, text_y),
             the_end_text,
-            fontsize=the_end_fontsize,
-            fontname=the_end_font,
-            color=to_rgb(Color(0, 0, 0))
+            the_end_fontsize,
+            to_rgb(Color(0, 0, 0)),
+            bold=True,
         )
         y_cursor += headline_h
 
@@ -1897,13 +1946,13 @@ class FastLuluBookGenerator:
             y_cursor + tagline_h
         )
         body_font = self._font_body_name if self._font_body_file else 'helv'
-        page.insert_textbox(
+        self._draw_box(
+            page,
             tagline_rect,
             'Stories may end on the page,\nbut imagination continues beyond it.',
-            fontsize=14,
-            fontname=body_font,
-            color=to_rgb(Color(0.45, 0.42, 0.38)),
-            align=fitz.TEXT_ALIGN_CENTER
+            14,
+            to_rgb(Color(0.45, 0.42, 0.38)),
+            align=fitz.TEXT_ALIGN_CENTER,
         )
         y_cursor += tagline_h + gap
 
@@ -1914,41 +1963,43 @@ class FastLuluBookGenerator:
             content_right - 0.15 * inch,
             y_cursor + body_h
         )
-        page.insert_textbox(
+        self._draw_box(
+            page,
             body_rect,
             'This personalized storybook was created from a real photo\n'
             'to turn a moment into a story worth remembering.\n\n'
             'Every photo holds the potential for a new adventure,\n'
             'a new character, and a new story.',
-            fontsize=12,
-            fontname=body_font,
-            color=to_rgb(Color(0.35, 0.32, 0.28)),
-            align=fitz.TEXT_ALIGN_CENTER
+            12,
+            to_rgb(Color(0.35, 0.32, 0.28)),
+            align=fitz.TEXT_ALIGN_CENTER,
         )
         y_cursor += body_h + gap
 
         # 4. Thank you line
         thank_rect = fitz.Rect(content_left, y_cursor, content_right, y_cursor + thank_h)
-        page.insert_textbox(
+        self._draw_box(
+            page,
             thank_rect,
             'Thank you for creating this story with us.',
-            fontsize=13,
-            fontname=self._bold_fontname(),
-            color=to_rgb(Color(0, 0, 0)),
-            align=fitz.TEXT_ALIGN_CENTER
+            13,
+            to_rgb(Color(0, 0, 0)),
+            bold=True,
+            align=fitz.TEXT_ALIGN_CENTER,
         )
         y_cursor += thank_h + gap
 
         # 5. CTA text above QR
         cta_color = Color(0.55, 0.42, 0.26)
         cta_rect = fitz.Rect(content_left, y_cursor, content_right, y_cursor + cta_h)
-        page.insert_textbox(
+        self._draw_box(
+            page,
             cta_rect,
             'Create more stories at img2x.com',
-            fontsize=13,
-            fontname=self._bold_fontname(),
-            color=to_rgb(cta_color),
-            align=fitz.TEXT_ALIGN_CENTER
+            13,
+            to_rgb(cta_color),
+            bold=True,
+            align=fitz.TEXT_ALIGN_CENTER,
         )
 
         # Clickable link annotation
@@ -1972,13 +2023,13 @@ class FastLuluBookGenerator:
 
         # 7. Scan instruction below QR
         scan_rect = fitz.Rect(content_left, y_cursor, content_right, y_cursor + scan_h)
-        page.insert_textbox(
+        self._draw_box(
+            page,
             scan_rect,
             'Scan to get started',
-            fontsize=10,
-            fontname=self._font_body_name if self._font_body_file else 'helv',
-            color=to_rgb(Color(0.5, 0.5, 0.5)),
-            align=fitz.TEXT_ALIGN_CENTER
+            10,
+            to_rgb(Color(0.5, 0.5, 0.5)),
+            align=fitz.TEXT_ALIGN_CENTER,
         )
 
         # QR code

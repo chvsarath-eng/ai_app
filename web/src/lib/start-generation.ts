@@ -55,6 +55,8 @@ export async function startProjectGeneration (projectId: string): Promise<StartG
     form.append('output_type', project.outputType || 'DIGI_BOOK')
     form.append('keep_job_dir', 'false')
     form.append('project_id', project.id)
+    form.append('model_provider', settings.story.provider || 'openai')
+    form.append('model', settings.story.model || 'gpt-5.6-terra')
     for (const uri of uris) form.append('image_gcs_uris', uri)
     const isHardcover = project.outputType === 'LULU_BOOK'
     if (settings.images.model) form.append('image_model', settings.images.model)

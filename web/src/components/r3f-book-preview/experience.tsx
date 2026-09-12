@@ -10,11 +10,13 @@ import { Book } from './book'
 export function Experience ({
   page,
   isReceded,
-  onSelectPage
+  onSelectPage,
+  allowOrbit = true
 }: {
   page: number
   isReceded?: boolean
   onSelectPage: (nextPage: number) => void
+  allowOrbit?: boolean
 }) {
   const bookGroupRef = useRef<Group>(null)
 
@@ -50,16 +52,19 @@ export function Experience ({
         </group>
       </Float>
 
-      {/* User control like the original demo: drag to rotate, scroll to zoom */}
-      <OrbitControls
-        enablePan={false}
-        enableDamping
-        dampingFactor={0.08}
-        minDistance={2.6}
-        maxDistance={6.5}
-        minPolarAngle={0.35}
-        maxPolarAngle={1.35}
-      />
+      {/* Desktop: drag to rotate. Phones: leave one-finger free so the page can scroll. */}
+      {allowOrbit ? (
+        <OrbitControls
+          enablePan={false}
+          enableZoom={false}
+          enableDamping
+          dampingFactor={0.08}
+          minDistance={2.6}
+          maxDistance={6.5}
+          minPolarAngle={0.35}
+          maxPolarAngle={1.35}
+        />
+      ) : null}
 
       <Environment preset="studio" />
 

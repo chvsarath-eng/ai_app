@@ -76,13 +76,13 @@ export function DemoLoop ({ className }: { className?: string }) {
         // No "card" container — just floating preview in the hero.
         // Keep the preview area size, but clip overflow so it never
         // spills into the form on the right.
-        'relative overflow-hidden bg-[var(--md-surface)]',
+        'relative h-full min-h-[360px] overflow-hidden bg-[var(--md-surface)] sm:min-h-0',
         className
       )}
       aria-label="Live 3D preview"
     >
       {/* Give the book real vertical space — increased for larger book */}
-      <div className="h-[200px] w-full sm:h-[420px] lg:h-[520px]" />
+      <div className="h-full min-h-[360px] w-full sm:h-[420px] sm:min-h-0 lg:h-[520px]" />
       <div className="absolute inset-0">
         {/* Very subtle halo so white pages don't merge into the page background */}
         <div

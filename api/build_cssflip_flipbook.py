@@ -559,13 +559,14 @@ body {{
         front_img = images[front_page_num] if front_page_num < len(images) and images[front_page_num] else None
         back_img = images[back_page_num] if back_page_num < len(images) and images[back_page_num] else None
         
-        front_content = f'<img src="{front_img}" alt="Page {front_page_num + 1}" draggable="false">' if front_img else '<div class="blank"></div>'
+        eager = 'fetchpriority="high" decoding="async"' if i < 2 else 'loading="lazy" decoding="async"'
+        front_content = f'<img {eager} src="{front_img}" alt="Page {front_page_num + 1}" draggable="false">' if front_img else '<div class="blank"></div>'
         is_back_cover = back_img is None and back_page_num == total_pages - 1 and cover_image
         back_content = (
-            f'<img src="{back_img}" alt="Page {back_page_num + 1}" draggable="false">'
+            f'<img {eager} src="{back_img}" alt="Page {back_page_num + 1}" draggable="false">'
             if back_img
             else (
-                f'<img src="{cover_image}" alt="Back cover" draggable="false">'
+                f'<img loading="lazy" decoding="async" src="{cover_image}" alt="Back cover" draggable="false">'
                 if is_back_cover
                 else '<div class="blank"></div>'
             )

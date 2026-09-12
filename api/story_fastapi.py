@@ -166,8 +166,8 @@ def admin_config() -> Dict[str, Any]:
             "concurrency": os.getenv("IMAGE_CONCURRENCY") or None,
         },
         "story": {
-            "provider": os.getenv("STORY_MODEL_PROVIDER") or os.getenv("MODEL_PROVIDER") or "gemini",
-            "model": os.getenv("STORY_MODEL") or os.getenv("MODEL") or None,
+            "provider": os.getenv("STORY_MODEL_PROVIDER") or os.getenv("MODEL_PROVIDER") or "openai",
+            "model": os.getenv("STORY_MODEL") or os.getenv("MODEL") or "gpt-5.6-terra",
         },
         "keys": {
             "laozhang": bool(os.getenv("LAOZHANG_API_KEY") or os.getenv("API_KEY_LAOZHANG")),

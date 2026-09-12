@@ -56,6 +56,12 @@ export async function POST (request: Request) {
         const size = isHardcover ? settings.images.sizePrint : settings.images.sizeDigital
         if (size) form.append('image_size', size)
       }
+      if (!incoming.has('model_provider')) {
+        form.append('model_provider', settings.story.provider || 'openai')
+      }
+      if (!incoming.has('model')) {
+        form.append('model', settings.story.model || 'gpt-5.6-terra')
+      }
     } catch (settingsErr) {
       console.warn('Could not load app settings; using story service defaults:', settingsErr)
     }
