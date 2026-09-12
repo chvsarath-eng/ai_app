@@ -5,12 +5,16 @@ import Image from 'next/image'
 import Link from 'next/link'
 
 import { cn } from '@/lib/utils'
-import { UserMenu } from '@/components/auth/user-menu'
+import { AccountPanel, UserMenu } from '@/components/auth/user-menu'
 import { useAuthStore } from '@/lib/auth-store'
 
 export function SiteHeader ({ className }: { className?: string }) {
   const [isOpen, setIsOpen] = useState(false)
   const user = useAuthStore((s) => s.user)
+
+  function closeMenu () {
+    setIsOpen(false)
+  }
 
   return (
     <header
@@ -20,7 +24,7 @@ export function SiteHeader ({ className }: { className?: string }) {
       )}
     >
       <div className="w-full px-3 sm:px-4 lg:px-6">
-        <div className="relative flex h-11 w-full items-center justify-between rounded-2xl bg-white/85 px-5 shadow-md ring-1 ring-zinc-200/70 backdrop-blur">
+        <div className="relative flex h-11 w-full items-center justify-between rounded-2xl bg-white/85 px-4 shadow-md ring-1 ring-zinc-200/70 backdrop-blur sm:px-5">
           <Link href="/" className="group inline-flex items-center leading-none">
             <span className="inline-flex items-center px-2 -translate-y-[1px]">
               <Image
@@ -49,56 +53,46 @@ export function SiteHeader ({ className }: { className?: string }) {
             <UserMenu />
           </div>
 
-          <div className="flex items-center gap-2 md:hidden">
-            <UserMenu onNavigate={() => setIsOpen(false)} />
-            <button
-              type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-zinc-700 transition hover:bg-zinc-100"
-              aria-label="Toggle navigation menu"
-              aria-expanded={isOpen}
-              onClick={() => setIsOpen((prev) => !prev)}
-            >
-              <span className="flex h-4 w-4 flex-col items-center justify-between">
-                <span className="h-0.5 w-full rounded bg-current" />
-                <span className="h-0.5 w-full rounded bg-current" />
-                <span className="h-0.5 w-full rounded bg-current" />
-              </span>
-            </button>
-          </div>
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-zinc-700 transition hover:bg-zinc-100 md:hidden"
+            aria-label={isOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={isOpen}
+            onClick={() => setIsOpen((prev) => !prev)}
+          >
+            <span className="relative flex h-4 w-4 items-center justify-center">
+              <span className={cn('absolute h-0.5 w-full rounded bg-current transition', isOpen ? 'rotate-45' : '-translate-y-[5px]')} />
+              <span className={cn('absolute h-0.5 w-full rounded bg-current transition', isOpen ? 'opacity-0' : 'opacity-100')} />
+              <span className={cn('absolute h-0.5 w-full rounded bg-current transition', isOpen ? '-rotate-45' : 'translate-y-[5px]')} />
+            </span>
+          </button>
 
           {isOpen && (
             <div className="absolute left-0 right-0 top-full mt-2 rounded-2xl bg-white/95 p-3 text-sm text-zinc-700 shadow-lg ring-1 ring-zinc-200/70 backdrop-blur md:hidden">
-              <div className="grid gap-2">
+              <AccountPanel onNavigate={closeMenu} />
+              <div className="my-2 h-px bg-zinc-100" />
+              <div className="grid">
                 <Link
-                  className="rounded-lg px-3 py-2 font-semibold transition hover:bg-zinc-100"
+                  className="rounded-lg px-3 py-2.5 font-semibold transition hover:bg-zinc-100"
                   href="/#gallery"
-                  onClick={() => setIsOpen(false)}
+                  onClick={closeMenu}
                 >
                   Gallery
                 </Link>
                 <Link
-                  className="rounded-lg px-3 py-2 font-semibold transition hover:bg-zinc-100"
+                  className="rounded-lg px-3 py-2.5 font-semibold transition hover:bg-zinc-100"
                   href="/#pricing"
-                  onClick={() => setIsOpen(false)}
+                  onClick={closeMenu}
                 >
                   Pricing
                 </Link>
                 <Link
-                  className="rounded-lg px-3 py-2 font-semibold transition hover:bg-zinc-100"
+                  className="rounded-lg px-3 py-2.5 font-semibold transition hover:bg-zinc-100"
                   href="/#reviews"
-                  onClick={() => setIsOpen(false)}
+                  onClick={closeMenu}
                 >
                   Reviews
                 </Link>
-                {user ? (
-                  <Link
-                    className="rounded-lg px-3 py-2 font-semibold transition hover:bg-zinc-100"
-                    href="/projects"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    My Storybooks
-                  </Link>
-                ) : null}
               </div>
             </div>
           )}
