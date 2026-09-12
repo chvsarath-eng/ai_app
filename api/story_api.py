@@ -713,7 +713,7 @@ def generate_ebook_html_bundle(
 
     # --- Concurrency knobs (keep simple) ---
     # 5-at-a-time as requested; can be overridden via env if needed later.
-    max_image_workers = int(os.getenv("IMAGE_CONCURRENCY") or "5")
+    max_image_workers = int(os.getenv("IMAGE_CONCURRENCY") or "16")
 
     def _is_retryable_error(e: Exception) -> bool:
         msg = (str(e) or "").lower()
@@ -1504,8 +1504,8 @@ def generate_ebook_html_bundle_v2(
     )
 
     # --- Concurrency setup ---
-    # Default is high enough to render cover + 10 pages in a single wave; 429s are retried below.
-    max_image_workers = int(os.getenv("IMAGE_CONCURRENCY") or "10")
+    # Cover + 10 pages (+ extras) in one wave. 429s are retried below.
+    max_image_workers = int(os.getenv("IMAGE_CONCURRENCY") or "16")
     _img = image_params or {}
     _img_provider = _img.get("provider") or None
     _img_model = _img.get("model") or None
@@ -1982,7 +1982,7 @@ def generate_print_edition_v2(
 
     _progress("print_images_start", {"count": len(tasks), "size": print_size, "model": model})
     generated: List[Dict[str, Any]] = []
-    max_workers = int(os.getenv("IMAGE_CONCURRENCY") or "10")
+    max_workers = int(os.getenv("IMAGE_CONCURRENCY") or "16")
 
     def _run_one(task: Dict[str, Any]) -> Dict[str, Any]:
         rel_inputs = [str(p) for p in (task.get("input_images") or [])]

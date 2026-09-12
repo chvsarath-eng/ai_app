@@ -25,7 +25,7 @@
     "IMAGE_RESOLUTION": "4K",
     "IMAGE_ASPECT_RATIO": "1:1",
     "JOBS_BUCKET": "imgstr-story-jobs-us-central1",
-    "IMAGE_CONCURRENCY": "5",
+    "IMAGE_CONCURRENCY": "16",
     "PUBLIC_SITE_URL": "https://img2x.com",
     "SMTP_FROM": "team@img2x.com",
     "SMTP_FROM_NAME": "IMG2X",

@@ -74,15 +74,14 @@ function loadTexture (url: string) {
   return p
 }
 
-function useNonSuspenseTexture (url?: string) {
+function useNonSuspenseTexture (url?: string, enabled = true) {
   const [texture, setTexture] = useState<Texture | null>(() => {
-    if (!url) return null
+    if (!url || !enabled) return null
     return textureCache.get(url) || null
   })
 
   useEffect(() => {
-    if (!url) {
-      setTexture(null)
+    if (!url || !enabled) {
       return
     }
 
@@ -106,7 +105,7 @@ function useNonSuspenseTexture (url?: string) {
     return () => {
       isCancelled = true
     }
-  }, [url])
+  }, [url, enabled])
 
   return texture
 }
@@ -232,8 +231,9 @@ function Page ({
 
   const frontTexPath = frontText ? '' : getTextureUrl(front)
   const backTexPath = backText ? '' : getTextureUrl(back)
-  const loadedFront = useNonSuspenseTexture(frontTexPath || undefined)
-  const loadedBack = useNonSuspenseTexture(backTexPath || undefined)
+  const shouldLoadTextures = number === 0 || Math.abs(number - page) <= 1
+  const loadedFront = useNonSuspenseTexture(frontTexPath || undefined, shouldLoadTextures)
+  const loadedBack = useNonSuspenseTexture(backTexPath || undefined, shouldLoadTextures)
 
   const manualSkinnedMesh = useMemo(() => {
     const bones: Bone[] = []

@@ -28,6 +28,7 @@ IMAGE_MODEL=gpt-image-2.5-sunburst-vip
 IMAGE_MODEL_PAGES=gpt-image-2.5-flare-vip
 IMAGE_MODEL_PRINT=gpt-image-2.5-sunburst-vip
 IMAGE_API_FALLBACK=1
+IMAGE_CONCURRENCY=16
 ```
 
 ### Timed local proof (gitignored)

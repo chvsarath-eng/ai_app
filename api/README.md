@@ -255,7 +255,7 @@ Print-ready files for Lulu.com POD (Print-on-Demand).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `IMAGE_CONCURRENCY` | 5 | Max concurrent image generations |
+| `IMAGE_CONCURRENCY` | 16 | Max concurrent image generations (cover + pages in one wave) |
 | `IMAGE_MAX_ATTEMPTS` | 6 | Retries on rate limit errors |
 | `IMAGE_RETRY_BASE_SLEEP_S` | 2.0 | Exponential backoff base (seconds) |
 | `IMAGE_PROVIDER` | `gemini` | Image provider (`gemini` or `laozhang`) |

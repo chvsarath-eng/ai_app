@@ -1,8 +1,9 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
+import { HeroCoverImage } from '@/components/hero-cover'
 import { cn } from '@/lib/utils'
 
 const R3FBookPreview = dynamic(
@@ -14,21 +15,19 @@ const R3FBookPreview = dynamic(
     ssr: false,
     loading: () => (
       <div className="absolute inset-0 flex items-center justify-center bg-[var(--md-surface)]">
-        <img
-          src="/brand/preview-cover_new.jpeg"
-          alt=""
-          loading="eager"
-          decoding="async"
-          fetchPriority="high"
-          className="max-h-full max-w-full object-contain"
-          style={{ transform: 'scale(0.9)' }}
-        />
+        <HeroCoverImage alt="" />
       </div>
     )
   }
 )
 
-export function DemoLoop ({ className }: { className?: string }) {
+export function DemoLoop ({
+  children,
+  className
+}: {
+  children?: ReactNode
+  className?: string
+}) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const [isReceded, setIsReceded] = useState(false)
   const [isInView, setIsInView] = useState(true)
@@ -84,6 +83,10 @@ export function DemoLoop ({ className }: { className?: string }) {
       {/* Give the book real vertical space — increased for larger book */}
       <div className="h-full min-h-[360px] w-full sm:h-[420px] sm:min-h-0 lg:h-[520px]" />
       <div className="absolute inset-0">
+        {/* Server-rendered poster so the cover paints with the first HTML. */}
+        <div className="absolute inset-0 flex items-center justify-center -translate-x-3 sm:-translate-x-6">
+          {children ?? <HeroCoverImage alt="" />}
+        </div>
         {/* Very subtle halo so white pages don't merge into the page background */}
         <div
           className={cn(
@@ -93,7 +96,7 @@ export function DemoLoop ({ className }: { className?: string }) {
           )}
         />
 
-        <div className="h-full w-full -translate-x-3 sm:-translate-x-6">
+        <div className="relative h-full w-full -translate-x-3 sm:-translate-x-6">
           <R3FBookPreview isReceded={isReceded} isActive={isActive} />
         </div>
       </div>
