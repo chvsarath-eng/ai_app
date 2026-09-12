@@ -290,6 +290,7 @@ function Page ({
     const backMap = backTexture || loadedBack
 
     if (materials[4] && materials[4].map !== frontMap) {
+      // eslint-disable-next-line react-hooks/immutability -- Three.js maps are patched in place so the mesh does not remount
       materials[4].map = frontMap
       materials[4].needsUpdate = true
     }

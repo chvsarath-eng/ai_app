@@ -2,7 +2,7 @@
 
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Hand, MousePointer2 } from 'lucide-react'
-import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { SRGBColorSpace } from 'three'
 
 import { HeroCoverImage } from '@/components/hero-cover'
@@ -37,14 +37,6 @@ function isCompactCanvas (size: { width: number; height: number }) {
 function ResponsiveCamera () {
   const { camera, size } = useThree()
   const isCompact = isCompactCanvas(size)
-
-  useLayoutEffect(() => {
-    const perspective = camera as typeof camera & { fov?: number }
-    if (typeof perspective.fov === 'number') {
-      perspective.fov = isCompact ? 38 : 42
-      camera.updateProjectionMatrix()
-    }
-  }, [camera, isCompact])
 
   useFrame(() => {
     if (isCompact) {
