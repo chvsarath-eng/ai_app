@@ -57,10 +57,12 @@ function stopFlipAudio (audio: HTMLAudioElement | null) {
 
 export function R3FBookPreview ({
   isReceded,
-  isActive = true
+  isActive = true,
+  onBookRevealed
 }: {
   isReceded?: boolean
   isActive?: boolean
+  onBookRevealed?: () => void
 }) {
   const [page, setPage] = useState(0)
   const [isMounted, setIsMounted] = useState(false)
@@ -84,6 +86,12 @@ export function R3FBookPreview ({
 
   useEffect(() => {
     if (!isMounted) return
+    // R3F now owns this slot (cover overlay, then the book). Drop the HTML poster.
+    onBookRevealed?.()
+  }, [isMounted, onBookRevealed])
+
+  useEffect(() => {
+    if (!isMounted) return
     if (!hasWebgl) return
 
     // Show the 3D canvas ASAP, but keep a lightweight cover image
@@ -104,10 +112,11 @@ export function R3FBookPreview ({
     // then fade it out and start the demo from page 1.
     const timer = window.setTimeout(() => {
       setIsCoverVisible(false)
+      onBookRevealed?.()
     }, 2500)
 
     return () => window.clearTimeout(timer)
-  }, [isMounted, hasWebgl, isCanvasReady])
+  }, [isMounted, hasWebgl, isCanvasReady, onBookRevealed])
 
   // Auto flip pages after book is revealed — only while this preview is on screen.
   useEffect(() => {
@@ -257,7 +266,7 @@ export function R3FBookPreview ({
           shadows
           frameloop={isActive ? 'always' : 'never'}
           dpr={[1, 2]}
-          camera={{ position: [-0.42, 0.92, 3.65], fov: 42 }}
+          camera={{ position: [0, 0.92, 3.65], fov: 42 }}
           gl={{ antialias: true, alpha: true }}
           style={{ touchAction: 'pan-y' }}
           onPointerDown={() => {
