@@ -1,25 +1,20 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  ShieldCheck,
-  TrendingUp,
-  BookOpen,
-  DollarSign,
-  Clock,
-  CheckCircle2,
   AlertCircle,
-  Search,
-  RefreshCw,
-  Cpu,
-  Layers,
-  Settings,
+  ArrowDownUp,
+  BookOpen,
+  CheckCircle2,
+  Clock,
   CreditCard,
-  Trash2,
+  DollarSign,
   ExternalLink,
-  Sparkles,
-  Truck
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  X
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -27,17 +22,77 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Eyebrow } from '@/components/page-header'
 import { useAuthStore } from '@/lib/auth-store'
+import {
+  bookTypeLabel,
+  characterNames,
+  customerEmail,
+  formatMoney,
+  looksLikeCustomerLookup,
+  matchesSupportSearch,
+  moneyFromProject,
+  sortSupportBooks,
+  statusLabel,
+  supportIssues,
+  type SupportSort
+} from '@/lib/admin-support'
+import type { Project } from '@/types/project'
 
-type TabType = 'overview' | 'jobs' | 'orders' | 'ai-models'
+type TabType = 'attention' | 'books' | 'orders'
 
-// Map any alias/snapshot the story service reports (e.g. "gpt-image-2.5-sunburst-vip",
-// "gpt-image-2.5-flare") onto the option IDs shown in the model picker.
-function canonicalModelId (model: string): string {
-  const m = model.toLowerCase()
-  if (m.includes('sunburst')) return 'gpt-image-2.5-sunburst-2026-09-08'
-  if (m.includes('flare')) return 'gpt-image-2.5-flare-2026-09-08'
-  if (m.includes('gemini')) return 'gemini-3-pro-image-preview'
-  return model
+function StatusPill ({ project }: { project: Project }) {
+  const issues = supportIssues(project)
+  if (issues.length > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700 ring-1 ring-rose-200/70">
+        <AlertCircle className="h-3 w-3" />
+        {issues[0].label}
+      </span>
+    )
+  }
+  if (project.status === 'ready') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200/70">
+        <CheckCircle2 className="h-3 w-3" /> Ready
+      </span>
+    )
+  }
+  if (project.status === 'generating' || project.status === 'starting') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200/70">
+        <Clock className="h-3 w-3" /> {statusLabel(project.status)}
+      </span>
+    )
+  }
+  if (project.status === 'awaiting_payment') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-0.5 text-[11px] font-semibold text-zinc-600 ring-1 ring-zinc-200/70">
+        Waiting for payment
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-[11px] font-semibold text-zinc-600">
+      {statusLabel(project.status)}
+    </span>
+  )
+}
+
+function BookActions ({ project }: { project: Project }) {
+  return (
+    <div className="flex justify-end gap-2">
+      <Button asChild variant="outline" size="sm" className="h-7 px-2 text-[11px]">
+        <Link href={`/admin/books/${project.id}`}>
+          Open case
+        </Link>
+      </Button>
+      <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-[11px]">
+        <Link href={`/projects/${project.id}`} target="_blank">
+          <ExternalLink className="mr-1 h-3 w-3" />
+          Live book
+        </Link>
+      </Button>
+    </div>
+  )
 }
 
 export default function AdminPage () {
@@ -45,123 +100,138 @@ export default function AdminPage () {
   const isAuthLoading = useAuthStore((s) => s.isLoading)
   const openSignIn = useAuthStore((s) => s.openSignIn)
 
-  const [activeTab, setActiveTab] = useState<TabType>('overview')
-  const [stats, setStats] = useState<any>(null)
-  const [jobs, setJobs] = useState<any[]>([])
-  const [settings, setSettings] = useState<any>(null)
+  const [activeTab, setActiveTab] = useState<TabType>('attention')
+  const [recentBooks, setRecentBooks] = useState<Project[]>([])
+  const [searchHits, setSearchHits] = useState<Project[] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isSearching, setIsSearching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedModel, setSelectedModel] = useState('gpt-image-2.5-sunburst-2026-09-08')
-  const [savedOverrideModel, setSavedOverrideModel] = useState<string>('')
-  const [isSavingModel, setIsSavingModel] = useState(false)
-  const [saveMessage, setSaveMessage] = useState<string | null>(null)
-  const [testResult, setTestResult] = useState<string | null>(null)
-  const [isTesting, setIsTesting] = useState(false)
+  const [sort, setSort] = useState<SupportSort>('issues')
+  const [urlReady, setUrlReady] = useState(false)
 
-  const fetchAdminData = useCallback(async () => {
+  const fetchRecent = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [overviewRes, jobsRes, settingsRes, appSettingsRes] = await Promise.all([
-        fetch('/api/admin/overview', { cache: 'no-store' }),
-        fetch('/api/admin/jobs', { cache: 'no-store' }),
-        fetch('/api/admin/settings', { cache: 'no-store' }),
-        fetch('/api/admin/app-settings', { cache: 'no-store' })
-      ])
-
-      let overrideModel = ''
-      if (appSettingsRes.ok) {
-        const data = await appSettingsRes.json()
-        overrideModel = data?.settings?.images?.model || ''
-        setSavedOverrideModel(overrideModel)
-      }
-
-      if (overviewRes.ok) {
-        const data = await overviewRes.json()
-        setStats(data.stats)
-      }
-      if (jobsRes.ok) {
-        const data = await jobsRes.json()
-        setJobs(data.jobs || [])
-      }
-      if (settingsRes.ok) {
-        const data = await settingsRes.json()
-        setSettings(data.settings)
-        // Show the override if one is saved, otherwise the story service's effective model.
-        const effective = overrideModel || data.settings?.imageModel
-        if (effective) setSelectedModel(canonicalModelId(effective))
-      }
+      const res = await fetch('/api/admin/jobs', { cache: 'no-store' })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) setRecentBooks(data.jobs || [])
     } catch (err) {
-      console.error('Failed to fetch admin data:', err)
+      console.error('Failed to fetch customer books:', err)
     } finally {
       setIsLoading(false)
     }
   }, [])
 
-  const handleSaveModel = async (model: string) => {
-    setIsSavingModel(true)
-    setSaveMessage(null)
-    try {
-      const res = await fetch('/api/admin/app-settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images: { model } })
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error || 'Failed to save')
-      setSavedOverrideModel(data?.settings?.images?.model || '')
-      setSaveMessage(model ? `Saved. New jobs will use ${model}.` : 'Override cleared. New jobs use the story service default.')
-    } catch (err) {
-      setSaveMessage(`Error: ${err instanceof Error ? err.message : 'Failed to save'}`)
-    } finally {
-      setIsSavingModel(false)
+  const runCustomerSearch = useCallback(async (query: string) => {
+    if (!looksLikeCustomerLookup(query)) {
+      setSearchHits(null)
+      return
     }
-  }
+    setIsSearching(true)
+    try {
+      const res = await fetch(`/api/admin/jobs?q=${encodeURIComponent(query)}`, { cache: 'no-store' })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) setSearchHits(data.jobs || [])
+    } catch (err) {
+      console.error('Failed to search customer books:', err)
+    } finally {
+      setIsSearching(false)
+    }
+  }, [])
 
   useEffect(() => {
-    void fetchAdminData()
-  }, [fetchAdminData])
+    const initial = new URLSearchParams(window.location.search).get('q') || ''
+    if (initial) setSearchQuery(initial)
+    setUrlReady(true)
+  }, [])
 
-  const handleDeleteJob = async (jobId: string) => {
-    if (!confirm('Are you sure you want to delete this job record?')) return
-    try {
-      const res = await fetch('/api/admin/jobs', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: jobId })
-      })
-      if (res.ok) {
-        setJobs((prev) => prev.filter((j) => j.id !== jobId))
-      }
-    } catch (err) {
-      console.error('Delete error:', err)
+  useEffect(() => {
+    if (!user?.isAdmin) return
+    void fetchRecent()
+  }, [fetchRecent, user?.isAdmin])
+
+  useEffect(() => {
+    if (!urlReady) return
+    const url = new URL(window.location.href)
+    if (searchQuery.trim()) url.searchParams.set('q', searchQuery.trim())
+    else url.searchParams.delete('q')
+    window.history.replaceState(null, '', `${url.pathname}${url.search}`)
+  }, [searchQuery, urlReady])
+
+  useEffect(() => {
+    if (!user?.isAdmin) return
+    const query = searchQuery.trim()
+    if (!query) {
+      setSearchHits(null)
+      return
     }
+    const timer = window.setTimeout(() => {
+      void runCustomerSearch(query)
+    }, 350)
+    return () => window.clearTimeout(timer)
+  }, [runCustomerSearch, searchQuery, user?.isAdmin])
+
+  const books = searchHits ?? recentBooks
+
+  const filtered = useMemo(
+    () => sortSupportBooks(
+      books.filter((book) => matchesSupportSearch(book, searchQuery)),
+      sort
+    ),
+    [books, searchQuery, sort]
+  )
+
+  const attention = useMemo(
+    () => sortSupportBooks(
+      filtered.filter((book) => supportIssues(book).length > 0),
+      sort
+    ),
+    [filtered, sort]
+  )
+
+  const orders = useMemo(
+    () => sortSupportBooks(
+      filtered.filter((book) => Boolean(book.payment?.orderId || book.payment?.paymentId)),
+      sort
+    ),
+    [filtered, sort]
+  )
+
+  const focusCustomer = (email: string) => {
+    if (!email || email === 'No email') return
+    setSearchQuery(email)
+    setSort('issues')
+    setActiveTab('books')
   }
 
-  const handleTestConnection = async () => {
-    setIsTesting(true)
-    setTestResult(null)
-    try {
-      const res = await fetch('/api/admin/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: selectedModel })
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data?.ok) {
-        setTestResult(`Error: ${data?.error || 'Image API unreachable'}${data?.apiBase ? ` (${data.apiBase})` : ''}`)
-        return
-      }
-      if (data.modelListed) {
-        setTestResult(`OK ${data.apiBase} reachable in ${data.elapsedMs}ms · model "${data.matchedModel}" is available.`)
-      } else {
-        setTestResult(`Warning: ${data.apiBase} reachable in ${data.elapsedMs}ms, but "${selectedModel}" is not in the model list. Generation will try aliases: ${(data.candidates || []).join(', ')}.`)
-      }
-    } catch (err) {
-      setTestResult(`Error: ${err instanceof Error ? err.message : 'Connection test failed'}`)
-    } finally {
-      setIsTesting(false)
-    }
+  const clearSearch = () => {
+    setSearchQuery('')
+    setSearchHits(null)
   }
+
+  const stats = useMemo(() => {
+    let revenueMinor = 0
+    let currency = 'INR'
+    let generating = 0
+    let ready = 0
+    let failed = 0
+    for (const book of recentBooks) {
+      if (book.status === 'generating' || book.status === 'starting') generating++
+      if (book.status === 'ready') ready++
+      if (book.status === 'failed') failed++
+      if (book.payment?.status === 'captured') {
+        revenueMinor += Number(book.payment.amountMinor || book.amounts?.totalMinor || 0)
+        if (book.payment.currency) currency = book.payment.currency
+      }
+    }
+    return {
+      revenue: formatMoney(revenueMinor, currency),
+      generating,
+      ready,
+      failed,
+      attention: recentBooks.filter((book) => supportIssues(book).length > 0).length
+    }
+  }, [recentBooks])
 
   if (isAuthLoading) {
     return (
@@ -178,8 +248,8 @@ export default function AdminPage () {
           <div className="mx-auto mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-500 text-white">
             <ShieldCheck className="h-7 w-7" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-800">Admin control center</h1>
-          <p className="mt-2 text-sm text-zinc-500">Sign in with an admin account to continue.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-800">Support desk</h1>
+          <p className="mt-2 text-sm text-zinc-500">Sign in with an admin account to help customers.</p>
           <Button className="mt-6 w-full font-semibold" onClick={() => openSignIn('Admin access requires sign-in.')}>
             Sign in
           </Button>
@@ -197,7 +267,7 @@ export default function AdminPage () {
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-800">Admin access required</h1>
           <p className="mt-2 text-sm text-zinc-500">
-            <span className="font-medium text-zinc-700">{user.email}</span> is not on the admin list. Add it to <code className="rounded bg-zinc-100 px-1">ADMIN_EMAILS</code> and sign in again.
+            <span className="font-medium text-zinc-700">{user.email}</span> is not on the admin list.
           </p>
           <Button asChild variant="outline" className="mt-6">
             <Link href="/projects">Go to my books</Link>
@@ -207,585 +277,283 @@ export default function AdminPage () {
     )
   }
 
-  const ok = (flag: boolean | null | undefined) => flag ? 'bg-emerald-400' : 'bg-red-400'
-  const revenueCurrency: string = stats?.currency || 'INR'
-  const revenueSymbol = revenueCurrency === 'INR' ? 'â‚¹' : revenueCurrency === 'USD' ? '$' : `${revenueCurrency} `
-
-  const filteredJobs = jobs.filter((job) => {
-    if (!searchQuery) return true
-    const q = searchQuery.toLowerCase()
-    return (
-      (job.id || '').toLowerCase().includes(q) ||
-      (job.email || '').toLowerCase().includes(q) ||
-      (job.title || '').toLowerCase().includes(q) ||
-      (job.storyline || '').toLowerCase().includes(q)
-    )
-  })
+  const rows = activeTab === 'attention' ? attention : activeTab === 'orders' ? orders : filtered
 
   return (
     <div className="py-10 sm:py-14">
       <div className="mx-auto max-w-7xl space-y-8">
-        {/* Admin header */}
         <div className="flex flex-col gap-4 border-b border-zinc-200/70 pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex flex-col items-start gap-3">
-            <Eyebrow tone="emerald">Admin</Eyebrow>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-zinc-800 sm:text-3xl">
-                Control center
-              </h1>
-              <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200/70">
-                Live
-              </span>
-            </div>
-            <p className="text-sm text-zinc-500">
-              Manage generation jobs, Razorpay revenue, customer orders, and AI model routing.
+            <Eyebrow tone="emerald">Support</Eyebrow>
+            <h1 className="text-2xl font-bold tracking-tight text-zinc-800 sm:text-3xl">
+              Customer books
+            </h1>
+            <p className="max-w-xl text-sm text-zinc-500">
+              Paste a customer email, payment id, or book title. Click their email in the list to see only that person.
             </p>
           </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void fetchAdminData()}
-              disabled={isLoading}
-              className="h-9 gap-1.5 text-xs bg-white/80"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-              Sync Data
-            </Button>
-            <Button asChild size="sm" className="h-9 gap-1.5 text-xs font-semibold">
-              <Link href="/create" target="_blank">
-                <Sparkles className="h-3.5 w-3.5" />
-                Test Generator UI
-              </Link>
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void fetchRecent()
+              if (searchQuery.trim()) void runCustomerSearch(searchQuery)
+            }}
+            disabled={isLoading || isSearching}
+            className="h-9 gap-1.5 bg-white/80 text-xs"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading || isSearching ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
         </div>
 
-        {/* Tab Navigation */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium text-zinc-500">Needs you</CardTitle>
+              <AlertCircle className="h-4 w-4 text-rose-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-rose-600">{stats.attention}</div>
+              <p className="mt-1 text-[11px] text-zinc-500">Failed, stuck, or running too long</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium text-zinc-500">Books sold</CardTitle>
+              <BookOpen className="h-4 w-4 text-violet-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-zinc-900">{stats.ready}</div>
+              <p className="mt-1 text-[11px] text-zinc-500">{recentBooks.length} total in the recent list</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium text-zinc-500">Making now</CardTitle>
+              <Clock className="h-4 w-4 text-amber-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-amber-600">{stats.generating}</div>
+              <p className="mt-1 text-[11px] text-zinc-500">{stats.failed} failed</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium text-zinc-500">Revenue captured</CardTitle>
+              <DollarSign className="h-4 w-4 text-emerald-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-emerald-600">{stats.revenue}</div>
+              <p className="mt-1 text-[11px] text-zinc-500">From paid orders in this list</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <form
+          className="space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void runCustomerSearch(searchQuery)
+          }}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-zinc-400" />
+              <Input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Customer email, payment id, character name, or book title…"
+                className="h-11 pl-10 pr-10 text-sm"
+              />
+              {searchQuery ? (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-700"
+                  aria-label="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
+            <label className="flex h-11 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-xs text-zinc-600 shadow-sm">
+              <ArrowDownUp className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+              <span className="shrink-0">Sort</span>
+              <select
+                value={sort}
+                onChange={(event) => setSort(event.target.value as SupportSort)}
+                className="min-w-0 flex-1 bg-transparent font-medium text-zinc-800 outline-none"
+              >
+                <option value="issues">Issues first</option>
+                <option value="newest">Newest</option>
+                <option value="oldest">Oldest</option>
+                <option value="customer">Customer A–Z</option>
+              </select>
+            </label>
+          </div>
+          {searchQuery.trim() ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-600">
+              <span className="rounded-full bg-violet-50 px-3 py-1 font-medium text-violet-800">
+                {filtered.length} book{filtered.length === 1 ? '' : 's'} for this search
+                {attention.length ? ` · ${attention.length} need you` : ''}
+              </span>
+              {isSearching ? <span className="text-zinc-500">Looking up older orders…</span> : null}
+              <button type="button" onClick={clearSearch} className="font-medium text-zinc-500 hover:text-zinc-800">
+                Show everyone
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-zinc-500">Click a customer email to jump straight to their books.</p>
+          )}
+        </form>
+
         <div className="flex flex-wrap gap-2 border-b border-zinc-200/70 pb-3">
-          <button
-            type="button"
-            onClick={() => setActiveTab('overview')}
-            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
-              activeTab === 'overview'
-                ? 'bg-zinc-900 text-white shadow-sm'
-                : 'bg-white/80 text-zinc-600 ring-1 ring-zinc-200/70 hover:bg-white hover:text-zinc-900'
-            }`}
-          >
-            <TrendingUp className="h-4 w-4" /> Overview & KPIs
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('jobs')}
-            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
-              activeTab === 'jobs'
-                ? 'bg-zinc-900 text-white shadow-sm'
-                : 'bg-white/80 text-zinc-600 ring-1 ring-zinc-200/70 hover:bg-white hover:text-zinc-900'
-            }`}
-          >
-            <Layers className="h-4 w-4" /> Storybook Jobs ({jobs.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('orders')}
-            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
-              activeTab === 'orders'
-                ? 'bg-zinc-900 text-white shadow-sm'
-                : 'bg-white/80 text-zinc-600 ring-1 ring-zinc-200/70 hover:bg-white hover:text-zinc-900'
-            }`}
-          >
-            <CreditCard className="h-4 w-4" /> Razorpay Orders
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('ai-models')}
-            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
-              activeTab === 'ai-models'
-                ? 'bg-zinc-900 text-white shadow-sm'
-                : 'bg-white/80 text-zinc-600 ring-1 ring-zinc-200/70 hover:bg-white hover:text-zinc-900'
-            }`}
-          >
-            <Cpu className="h-4 w-4" /> AI Models & LaoZhang
-          </button>
+          {([
+            { id: 'attention' as const, label: `Needs attention (${attention.length})`, icon: AlertCircle },
+            { id: 'books' as const, label: `All books (${filtered.length})`, icon: BookOpen },
+            { id: 'orders' as const, label: `Orders (${orders.length})`, icon: CreditCard }
+          ]).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition ${
+                activeTab === tab.id
+                  ? 'bg-zinc-900 text-white shadow-sm'
+                  : 'bg-white/80 text-zinc-600 ring-1 ring-zinc-200/70 hover:bg-white hover:text-zinc-900'
+              }`}
+            >
+              <tab.icon className="h-4 w-4" />
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        {/* TAB 1: OVERVIEW */}
-        {activeTab === 'overview' && (
-          <div className="space-y-6">
-            {/* KPI Cards */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-xs font-medium text-zinc-500">Total Books Created</CardTitle>
-                  <BookOpen className="h-4 w-4 text-violet-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-zinc-900">{stats?.totalProjects ?? jobs.length}</div>
-                  <p className="mt-1 text-[11px] text-zinc-500">
-                    {stats?.completedProjects ?? 0} ready · {stats?.awaitingPayment ?? 0} awaiting payment
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-xs font-medium text-zinc-500">Total Revenue ({revenueCurrency})</CardTitle>
-                  <DollarSign className="h-4 w-4 text-emerald-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-emerald-600">
-                    {revenueSymbol}{((stats?.totalRevenueMinor || 0) / 100).toLocaleString('en-IN')}
-                  </div>
-                  <p className="mt-1 text-[11px] text-zinc-500">
-                    Captured via Razorpay{settings?.razorpayKeyMode ? ` (${settings.razorpayKeyMode} keys)` : ''}
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-xs font-medium text-zinc-500">Active Generating</CardTitle>
-                  <Clock className="h-4 w-4 text-amber-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-amber-600">
-                    {stats?.activeGenerating ?? jobs.filter((j) => j.status === 'generating' || j.status === 'starting').length}
-                  </div>
-                  <p className="mt-1 text-[11px] text-zinc-500">
-                    {settings?.storyServiceActiveJobs !== null && settings?.storyServiceActiveJobs !== undefined
-                      ? `${settings.storyServiceActiveJobs} active on story service`
-                      : 'Rendering pages right now'}
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-xs font-medium text-zinc-500">Generation Success Rate</CardTitle>
-                  <CheckCircle2 className="h-4 w-4 text-cyan-600" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-cyan-600">
-                    {typeof stats?.successRate === 'number' ? `${stats.successRate}%` : '—'}
-                  </div>
-                  <p className="mt-1 text-[11px] text-zinc-500">
-                    {stats?.failedProjects ? `${stats.failedProjects} failed` : 'No failures recorded'}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Quick System Status Card */}
-            <Card className="p-5">
-              <h3 className="text-sm font-bold text-zinc-800 mb-3">Live System & Provider Health</h3>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
-                <div className="flex items-center gap-2 rounded-2xl bg-zinc-50 p-3 border border-zinc-200/70">
-                  <span className={`h-2.5 w-2.5 rounded-full ${ok(settings?.storyServiceReachable)} ${settings?.storyServiceReachable ? 'animate-pulse' : ''}`} />
-                  <div className="min-w-0">
-                    <p className="font-semibold text-zinc-800">Story Service</p>
-                    <p className="truncate text-zinc-500">
-                      {settings?.storyServiceReachable
-                        ? `Online · ${settings.storyServiceLatencyMs}ms`
-                        : settings ? `Offline · ${settings.storyServiceError || 'unreachable'}` : 'Checking…'}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 rounded-2xl bg-zinc-50 p-3 border border-zinc-200/70">
-                  <span className={`h-2.5 w-2.5 rounded-full ${ok(settings?.razorpayKeyIdSet && settings?.razorpaySecretSet)}`} />
-                  <div className="min-w-0">
-                    <p className="font-semibold text-zinc-800">Payment Gateway</p>
-                    <p className="truncate text-zinc-500">
-                      {settings?.razorpayKeyIdSet
-                        ? `Razorpay · ${settings.razorpayKeyMode || 'unknown'} keys${settings.razorpayWebhookSecretSet ? ' · webhook set' : ' · no webhook secret'}`
-                        : 'Razorpay keys missing'}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 rounded-2xl bg-zinc-50 p-3 border border-zinc-200/70">
-                  <span className={`h-2.5 w-2.5 rounded-full ${ok(settings?.laozhangKeySet || settings?.openaiKeySet)}`} />
-                  <div className="min-w-0">
-                    <p className="font-semibold text-zinc-800">Image AI</p>
-                    <p className="truncate text-zinc-500">{settings?.imageModel || 'not reported'}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 rounded-2xl bg-zinc-50 p-3 border border-zinc-200/70">
-                  <span className={`h-2.5 w-2.5 rounded-full ${settings?.authMode === 'firebase' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                  <div className="min-w-0">
-                    <p className="font-semibold text-zinc-800">Auth & Data</p>
-                    <p className="truncate text-zinc-500">
-                      {settings ? `${settings.authMode} auth · ${settings.dataBackend} store` : 'Checking…'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              {settings && settings.authMode === 'local' && (
-                <p className="mt-3 rounded-2xl border border-amber-200/80 bg-amber-50 p-2.5 text-[11px] text-amber-800">
-                  {settings.dataBackend === 'firestore'
-                    ? <>Data is in Firestore, but sign-in is still local dev auth. Enable the Google provider in Firebase Auth and set <code>AUTH_MODE=firebase</code> to turn on Google sign-in.</>
-                    : <>Running with local dev auth and a JSON data store. Add <code>NEXT_PUBLIC_FIREBASE_*</code> + a service account to switch to Google sign-in and Firestore.</>}
-                </p>
-              )}
-            </Card>
-          </div>
-        )}
-
-        {/* TAB 2: JOBS QUEUE */}
-        {activeTab === 'jobs' && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
-                <Input
-                  type="text"
-                  placeholder="Search by job ID, customer email, character..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 text-xs h-9"
-                />
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-3xl border border-zinc-200/70 bg-white shadow-[0_16px_50px_rgba(10,10,15,0.07)]">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-zinc-700">
-                  <thead className="bg-zinc-50 text-zinc-500 border-b border-zinc-200/70 uppercase text-[10px] tracking-wider">
-                    <tr>
-                      <th className="p-3.5">Job / Project ID</th>
-                      <th className="p-3.5">Customer</th>
-                      <th className="p-3.5">Story / Title</th>
-                      <th className="p-3.5">Status</th>
-                      <th className="p-3.5">Type</th>
-                      <th className="p-3.5">Date</th>
-                      <th className="p-3.5 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-100">
-                    {filteredJobs.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="p-6 text-center text-zinc-500">
-                          No jobs found matching your filter
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredJobs.map((job) => {
-                        const isGenerating = job.status === 'generating' || job.status === 'starting'
-                        const isReady = job.status === 'ready'
-                        return (
-                          <tr key={job.id} className="hover:bg-zinc-50 transition">
-                            <td className="p-3.5 font-mono text-zinc-500 truncate max-w-[140px]">
-                              {job.id}
-                            </td>
-                            <td className="p-3.5 font-medium text-zinc-800">
-                              {job.email || job.payment?.email || 'Guest User'}
-                            </td>
-                            <td className="p-3.5 max-w-[200px] truncate text-zinc-700">
-                              {job.title || job.storyline || 'Personalized Story'}
-                            </td>
-                            <td className="p-3.5">
-                              {isReady && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200/70">
-                                  <CheckCircle2 className="h-3 w-3" /> Ready
-                                </span>
-                              )}
-                              {isGenerating && (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-pink-500 px-2.5 py-0.5 text-[11px] font-semibold text-white shadow-sm animate-pulse">
-                                  <Clock className="h-3 w-3 animate-spin" /> {job.stage || 'Rendering'}
-                                </span>
-                              )}
-                              {job.status === 'awaiting_payment' && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200/70">
-                                  Pending Pay
-                                </span>
-                              )}
-                              {job.status === 'failed' && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-[11px] font-semibold text-red-700 ring-1 ring-red-200/70">
-                                  Failed
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-3.5 text-zinc-500">
-                              {job.outputType === 'LULU_BOOK' ? 'Hardcover' : 'Digital'}
-                            </td>
-                            <td className="p-3.5 text-zinc-500">
-                              {new Date(job.createdAt || Date.now()).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric'
-                              })}
-                            </td>
-                            <td className="p-3.5 text-right space-x-2">
-                              <Button
-                                asChild
-                                variant="outline"
-                                size="sm"
-                                className="h-7 px-2 text-[11px]"
-                              >
-                                <Link href={`/projects/${job.id}`} target="_blank">
-                                  <ExternalLink className="h-3 w-3 mr-1" /> View
-                                </Link>
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDeleteJob(job.id)}
-                                className="h-7 px-2 text-[11px] border-red-200 text-red-600 hover:bg-red-50"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </td>
-                          </tr>
-                        )
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: ORDERS */}
-        {activeTab === 'orders' && (
-          <div className="space-y-4">
-            <div className="overflow-hidden rounded-3xl border border-zinc-200/70 bg-white shadow-[0_16px_50px_rgba(10,10,15,0.07)]">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-zinc-700">
-                  <thead className="bg-zinc-50 text-zinc-500 border-b border-zinc-200/70 uppercase text-[10px] tracking-wider">
-                    <tr>
-                      <th className="p-3.5">Razorpay Payment ID</th>
-                      <th className="p-3.5">Customer Email</th>
-                      <th className="p-3.5">Amount</th>
-                      <th className="p-3.5">Type</th>
-                      <th className="p-3.5">Shipping Address</th>
-                      <th className="p-3.5">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-100">
-                    {jobs.filter((j) => j.payment?.orderId).length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="p-6 text-center text-zinc-500">
-                          No Razorpay orders recorded yet
-                        </td>
-                      </tr>
-                    ) : (
-                      jobs
-                        .filter((j) => j.payment?.orderId)
-                        .map((order) => (
-                          <tr key={order.id} className="hover:bg-zinc-50 transition">
-                            <td className="p-3.5 font-mono text-emerald-600">
-                              <div>{order.payment?.paymentId || '—'}</div>
-                              <div className="text-[10px] text-zinc-500">{order.payment?.orderId}</div>
-                            </td>
-                            <td className="p-3.5 font-medium text-zinc-800">
-                              {order.email || order.payment?.email || '—'}
-                            </td>
-                            <td className="p-3.5 font-semibold text-zinc-800">
-                              {(order.payment?.currency || order.amounts?.currency) === 'USD' ? '$' : 'â‚¹'}
-                              {((order.payment?.amountMinor || order.amounts?.totalMinor || 0) / 100).toLocaleString('en-IN')}
-                            </td>
-                            <td className="p-3.5">
-                              {order.outputType === 'LULU_BOOK' ? 'Hardcover Print' : 'Digital Edition'}
-                            </td>
-                            <td className="p-3.5 text-zinc-500 max-w-[200px] truncate">
-                              {order.shipping?.address1 ? (
-                                `${order.shipping.address1}, ${order.shipping.city} ${order.shipping.postalCode || ''}`
-                              ) : (
-                                <span className="text-zinc-500">Digital Delivery</span>
-                              )}
-                            </td>
-                            <td className="p-3.5">
-                              {order.payment?.status === 'captured' ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200/70">
-                                  Captured{String(order.payment?.paymentId || '').includes('mock') ? ' (test)' : ''}
-                                </span>
-                              ) : order.payment?.status === 'failed' ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-[11px] font-semibold text-red-700 ring-1 ring-red-200/70">
-                                  Failed
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200/70">
-                                  {order.payment?.status || 'created'}
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 4: AI MODELS & SETTINGS */}
-        {activeTab === 'ai-models' && (
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card className="p-6 space-y-5">
-              <div>
-                <h3 className="text-base font-bold text-zinc-900 flex items-center gap-2">
-                  <Cpu className="h-5 w-5 text-violet-600" />
-                  Image Model Configuration
-                </h3>
-                <p className="mt-1 text-xs text-zinc-500">
-                  Select and control the AI generation model routed through LaoZhang API.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-xs font-semibold text-zinc-700">Active Model Snapshot</label>
-                <div className="space-y-2">
-                  {[
-                    {
-                      id: 'gpt-image-2.5-sunburst-2026-09-08',
-                      name: 'gpt-image-2.5-sunburst (2026-09-08 Snapshot)',
-                      desc: 'Highest edit precision, ideal for exact face consistency & cinematic realism'
-                    },
-                    {
-                      id: 'gpt-image-2.5-flare-2026-09-08',
-                      name: 'gpt-image-2.5-flare (2026-09-08 Snapshot)',
-                      desc: 'Fast everyday generation with high quality'
-                    },
-                    {
-                      id: 'gemini-3-pro-image-preview',
-                      name: 'Gemini 3 Pro Image (Nano Banana Pro)',
-                      desc: 'Google GenAI Direct / LaoZhang v1beta format'
-                    }
-                  ].map((m) => (
-                    <label
-                      key={m.id}
-                      onClick={() => setSelectedModel(m.id)}
-                      className={`flex items-start gap-3 p-3.5 rounded-2xl border cursor-pointer transition ${
-                        selectedModel === m.id
-                          ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-500/20 text-zinc-900'
-                          : 'border-zinc-200 bg-white text-zinc-700 hover:border-violet-300'
-                      }`}
+        <div className="overflow-hidden rounded-3xl border border-zinc-200/70 bg-white shadow-[0_16px_50px_rgba(10,10,15,0.07)]">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-zinc-700">
+              <thead className="border-b border-zinc-200/70 bg-zinc-50 text-[10px] uppercase tracking-wider text-zinc-500">
+                <tr>
+                  <th className="p-3.5">
+                    <button
+                      type="button"
+                      onClick={() => setSort('customer')}
+                      className={`inline-flex items-center gap-1 ${sort === 'customer' ? 'text-zinc-800' : 'hover:text-zinc-800'}`}
                     >
-                      <input
-                        type="radio"
-                        name="model"
-                        checked={selectedModel === m.id}
-                        onChange={() => setSelectedModel(m.id)}
-                        className="mt-1 accent-violet-500"
-                      />
-                      <div>
-                        <p className="text-xs font-semibold text-zinc-900">{m.name}</p>
-                        <p className="text-[11px] text-zinc-500 mt-0.5">{m.desc}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <p className="text-[11px] text-zinc-500">
-                Story service default: <span className="font-mono text-zinc-700">{settings?.imageModel || '—'}</span>
-                {savedOverrideModel
-                  ? <> · Admin override active: <span className="font-mono text-violet-700">{savedOverrideModel}</span></>
-                  : ' · No admin override (using default)'}
-              </p>
-
-              <div className="pt-3 border-t border-zinc-200/70 flex flex-wrap items-center gap-3">
-                <Button
-                  onClick={() => handleSaveModel(selectedModel)}
-                  disabled={isSavingModel || selectedModel === savedOverrideModel}
-                  className="text-xs font-semibold h-9"
-                >
-                  {isSavingModel ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
-                  Apply to new jobs
-                </Button>
-                {savedOverrideModel && (
-                  <Button
-                    variant="outline"
-                    onClick={() => handleSaveModel('')}
-                    disabled={isSavingModel}
-                    className="text-xs h-9 bg-white/80"
-                  >
-                    Clear override
-                  </Button>
-                )}
-                <Button
-                  onClick={handleTestConnection}
-                  disabled={isTesting}
-                  variant="outline"
-                  className="text-xs font-semibold h-9"
-                >
-                  {isTesting ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : null}
-                  Test API Connection
-                </Button>
-              </div>
-              {saveMessage && (
-                <p className={`text-xs font-medium ${saveMessage.startsWith('Error') ? 'text-red-600' : 'text-emerald-600'}`}>{saveMessage}</p>
-              )}
-              {testResult && (
-                <p className={`text-xs font-medium ${testResult.startsWith('OK') ? 'text-emerald-600' : testResult.startsWith('Warning') ? 'text-amber-700' : 'text-red-600'}`}>{testResult}</p>
-              )}
-            </Card>
-
-            <Card className="p-6 space-y-5">
-              <div>
-                <h3 className="text-base font-bold text-zinc-900 flex items-center gap-2">
-                  <Settings className="h-5 w-5 text-emerald-600" />
-                  API & Payment Credentials Status
-                </h3>
-                <p className="mt-1 text-xs text-zinc-500">
-                  Real-time status of configured API keys and environment parameters.
-                </p>
-              </div>
-
-              <div className="space-y-3 text-xs">
-                {[
-                  { label: 'LAOZHANG_API_KEY (story service)', set: settings?.laozhangKeySet },
-                  { label: 'OPENAI_API_KEY (story service)', set: settings?.openaiKeySet },
-                  { label: 'GEMINI_API_KEY (story service)', set: settings?.geminiKeySet },
-                  { label: 'SMTP (email delivery)', set: settings?.smtpSet },
-                  { label: 'RAZORPAY_KEY_ID', set: settings?.razorpayKeyIdSet },
-                  { label: 'RAZORPAY_KEY_SECRET', set: settings?.razorpaySecretSet },
-                  { label: 'RAZORPAY_WEBHOOK_SECRET', set: settings?.razorpayWebhookSecretSet },
-                  { label: 'Firebase client (Google sign-in)', set: settings?.firebaseClientConfigured },
-                  { label: 'ADMIN_EMAILS', set: settings?.adminEmailsConfigured }
-                ].map((row) => (
-                  <div key={row.label} className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 border border-zinc-200/70">
-                    <span className="text-zinc-700 font-medium">{row.label}</span>
-                    {row.set ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Set
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-red-600 font-semibold">
-                        <AlertCircle className="h-3.5 w-3.5" /> Missing
-                      </span>
+                      Customer
+                    </button>
+                  </th>
+                  <th className="p-3.5">Book</th>
+                  <th className="p-3.5">
+                    {activeTab === 'orders' ? 'Payment' : (
+                      <button
+                        type="button"
+                        onClick={() => setSort('issues')}
+                        className={`inline-flex items-center gap-1 ${sort === 'issues' ? 'text-zinc-800' : 'hover:text-zinc-800'}`}
+                      >
+                        What happened
+                      </button>
                     )}
-                  </div>
-                ))}
-
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 border border-zinc-200/70">
-                  <span className="text-zinc-700 font-medium">Image API base</span>
-                  <span className="text-zinc-700 font-mono truncate max-w-[220px]">{settings?.imageApiBase || '—'}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 border border-zinc-200/70">
-                  <span className="text-zinc-700 font-medium">Pages model</span>
-                  <span className="text-zinc-700 font-mono truncate max-w-[220px]">{settings?.imageModelPages || '—'}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 border border-zinc-200/70">
-                  <span className="text-zinc-700 font-medium">Image size (digital / print)</span>
-                  <span className="text-zinc-700 font-mono">{settings?.imageSizeDigital || '—'} / {settings?.imageSizePrint || '—'}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 border border-zinc-200/70">
-                  <span className="text-zinc-700 font-medium">Quality · Concurrency</span>
-                  <span className="text-zinc-700 font-mono">{settings?.imageQuality || '—'} · {settings?.imageConcurrency || '—'}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 border border-zinc-200/70">
-                  <span className="text-zinc-700 font-medium">Story model</span>
-                  <span className="text-zinc-700 font-mono truncate max-w-[220px]">{settings?.storyProvider || '—'}{settings?.storyModel ? ` · ${settings.storyModel}` : ''}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 border border-zinc-200/70">
-                  <span className="text-zinc-700 font-medium">Story service</span>
-                  <span className="text-zinc-700 font-mono truncate max-w-[220px]">{settings?.storyServiceUrl || '—'}</span>
-                </div>
-              </div>
-            </Card>
+                  </th>
+                  <th className="p-3.5">Product</th>
+                  <th className="p-3.5">
+                    <button
+                      type="button"
+                      onClick={() => setSort(sort === 'newest' ? 'oldest' : 'newest')}
+                      className={`inline-flex items-center gap-1 ${sort === 'newest' || sort === 'oldest' ? 'text-zinc-800' : 'hover:text-zinc-800'}`}
+                    >
+                      When {sort === 'oldest' ? '↑' : sort === 'newest' ? '↓' : ''}
+                    </button>
+                  </th>
+                  <th className="p-3.5 text-right">Fix</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {isLoading && books.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-zinc-500">Loading customer books…</td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-zinc-500">
+                      {activeTab === 'attention' && searchQuery && filtered.length > 0 ? (
+                        <div className="space-y-2">
+                          <p>This search has {filtered.length} book{filtered.length === 1 ? '' : 's'}, and none need attention.</p>
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('books')}
+                            className="font-medium text-violet-700 hover:underline"
+                          >
+                            See all their books
+                          </button>
+                        </div>
+                      ) : activeTab === 'attention' && !searchQuery
+                        ? 'No customer books need you right now.'
+                        : 'No books match that search. Try the exact email or payment id.'}
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((book) => {
+                    const issues = supportIssues(book)
+                    const names = characterNames(book)
+                    return (
+                      <tr key={book.id} className="transition hover:bg-zinc-50">
+                        <td className="p-3.5">
+                          <button
+                            type="button"
+                            onClick={() => focusCustomer(customerEmail(book))}
+                            className="text-left font-medium text-zinc-800 hover:text-violet-700 hover:underline"
+                            title="Show only this customer"
+                          >
+                            {customerEmail(book)}
+                          </button>
+                          {names ? <p className="mt-0.5 text-[11px] text-zinc-500">{names}</p> : null}
+                        </td>
+                        <td className="max-w-[220px] p-3.5">
+                          <p className="truncate font-medium text-zinc-800">
+                            {book.title || book.story?.title || 'Personalized Storybook'}
+                          </p>
+                          <p className="mt-0.5 truncate text-[11px] text-zinc-500">{book.storyline || '—'}</p>
+                        </td>
+                        <td className="max-w-[240px] p-3.5">
+                          {activeTab === 'orders' ? (
+                            <div>
+                              <p className="font-semibold text-zinc-800">{moneyFromProject(book)}</p>
+                              <p className="truncate font-mono text-[10px] text-zinc-500">
+                                {book.payment?.paymentId || book.payment?.orderId || '—'}
+                              </p>
+                            </div>
+                          ) : issues.length > 0 ? (
+                            <div>
+                              <StatusPill project={book} />
+                              {issues[0].detail ? (
+                                <p className="mt-1 line-clamp-2 text-[11px] text-zinc-500">{issues[0].detail}</p>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <StatusPill project={book} />
+                          )}
+                        </td>
+                        <td className="p-3.5 text-zinc-600">{bookTypeLabel(book)}</td>
+                        <td className="p-3.5 text-zinc-500">
+                          {new Date(book.createdAt || Date.now()).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </td>
+                        <td className="p-3.5 text-right">
+                          <BookActions project={book} />
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
       </div>
     </div>
   )

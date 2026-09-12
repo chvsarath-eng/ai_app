@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getSessionUser } from '@/lib/session'
-import { deleteProject, listRecentProjects, refreshProjects } from '@/lib/projects-server'
+import { deleteProject, listRecentProjects, refreshProjects, searchProjectsForSupport } from '@/lib/projects-server'
 
 export const runtime = 'nodejs'
 
@@ -21,9 +21,12 @@ export async function GET (request: NextRequest) {
     if (!(await assertAdmin(request))) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
-    const stored = await listRecentProjects(100)
+    const query = request.nextUrl.searchParams.get('q')?.trim() || ''
+    const stored = query
+      ? await searchProjectsForSupport(query, 50)
+      : await listRecentProjects(100)
     const jobs = await refreshProjects(stored)
-    return NextResponse.json({ jobs })
+    return NextResponse.json({ jobs, query })
   } catch (error: unknown) {
     console.error('Admin jobs fetch error:', error)
     return NextResponse.json({ error: 'Failed to fetch jobs', jobs: [] }, { status: 500 })

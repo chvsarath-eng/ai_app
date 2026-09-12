@@ -1,6 +1,7 @@
 import 'server-only'
 
-import { deleteDocument, getDocument, listDocuments, setDocument } from '@/lib/data-store'
+import { deleteDocument, getDocument, listDocuments, setDocument, type ListOptions } from '@/lib/data-store'
+import { matchesSupportSearch } from '@/lib/admin-support'
 import { getStoryAuthHeaders, getStoryServiceUrl } from '@/lib/storyApiServer'
 import type { Project, ProjectImage } from '@/types/project'
 import type { SessionUser } from '@/lib/session'
@@ -54,6 +55,62 @@ export function deleteProject (id: string) {
 export async function listRecentProjects (limit = 100): Promise<Project[]> {
   const docs = await listDocuments(COLLECTION, { orderBy: 'createdAt', descending: true, limit })
   return docs as unknown as Project[]
+}
+
+async function tryListProjects (options: ListOptions): Promise<Project[]> {
+  try {
+    const docs = await listDocuments(COLLECTION, options)
+    return docs as unknown as Project[]
+  } catch (err) {
+    console.warn('searchProjectsForSupport query failed', options.where, err)
+    return []
+  }
+}
+
+/**
+ * Support lookup: exact email / payment / book id, plus a wider recent scan
+ * so a title or character name still works.
+ */
+export async function searchProjectsForSupport (query: string, limit = 50): Promise<Project[]> {
+  const q = query.trim()
+  if (!q) return listRecentProjects(100)
+
+  const found = new Map<string, Project>()
+  const add = (projects: Project[]) => {
+    for (const project of projects) {
+      if (project?.id) found.set(project.id, project)
+    }
+  }
+
+  const byId = await getProject(q)
+  if (byId) add([byId])
+
+  const exact: Array<[string, string]> = []
+  if (q.includes('@')) {
+    exact.push(['email', q], ['email', q.toLowerCase()], ['payment.email', q], ['payment.email', q.toLowerCase()])
+  }
+  if (/^(pay_|order_|proj_|job_)/i.test(q)) {
+    exact.push(['jobId', q], ['payment.paymentId', q], ['payment.orderId', q])
+  }
+  const phone = q.replace(/[\s-]/g, '')
+  if (/^\+?\d{8,}$/.test(phone)) {
+    exact.push(['payment.contact', q], ['payment.contact', phone])
+  }
+
+  const seen = new Set<string>()
+  for (const [field, value] of exact) {
+    const key = `${field}:${value}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    add(await tryListProjects({ where: [[field, value]], limit }))
+  }
+
+  const recent = await listRecentProjects(200)
+  add(recent.filter((project) => matchesSupportSearch(project, q)))
+
+  return [...found.values()]
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+    .slice(0, limit)
 }
 
 export async function listProjectsForUser (user: SessionUser, limit = 50): Promise<Project[]> {
@@ -111,16 +168,18 @@ function toWebUrl (url: string | null | undefined, jobId: string) {
 
 function publicImageUrl (jobId: string | null | undefined, image: JobImage, key: string): string | null {
   const proxied = toWebUrl(image.url, jobId || '')
-  if (proxied && (proxied.startsWith('/api/storybook/') || proxied.startsWith('https://'))) return proxied
+  if (proxied && proxied.startsWith('/api/storybook/')) return proxied
+  // Always use the same-origin proxy on phones. Direct GCS / signed URLs
+  // often fail (CORS, expiry, or a 4K file blowing the layout).
   if (jobId) {
-    const fromPath = (image.gcs_uri || '').split('/').pop()
+    const fromPath = (image.gcs_uri || image.url || '').split('?')[0].split('/').pop()
     const fromKey = key.startsWith('page_')
       ? `page_${key.slice(5)}.png`
       : key === 'cover'
         ? 'book_cover.png'
         : `${key}.png`
     const name = fromPath || fromKey
-    return `/api/storybook/jobs/${jobId}/images/${name}`
+    if (name) return `/api/storybook/jobs/${jobId}/images/${name}`
   }
   return proxied
 }
