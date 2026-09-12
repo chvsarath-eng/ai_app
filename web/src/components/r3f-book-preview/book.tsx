@@ -32,7 +32,7 @@ const turningCurveStrength = 0.09
 
 const PAGE_WIDTH = 1.28
 const PAGE_HEIGHT = 1.28
-const PAGE_DEPTH = 0.003
+const PAGE_DEPTH = 0.006
 const PAGE_SEGMENTS = 24
 const SEGMENT_WIDTH = PAGE_WIDTH / PAGE_SEGMENTS
 
@@ -47,6 +47,17 @@ function getTextureUrl (name?: string) {
 const textureLoader = new TextureLoader()
 const textureCache = new Map<string, Texture>()
 const texturePending = new Map<string, Promise<Texture>>()
+
+export function preloadBookTextures () {
+  const urls = bookPages.flatMap((page) => {
+    const next: string[] = []
+    if (page.front && !page.frontText) next.push(getTextureUrl(page.front))
+    if (page.back && !page.backText) next.push(getTextureUrl(page.back))
+    return next
+  })
+
+  return Promise.all(urls.map((url) => loadTexture(url).catch(() => null)))
+}
 
 function loadTexture (url: string) {
   if (textureCache.has(url)) return Promise.resolve(textureCache.get(url)!)
@@ -231,7 +242,7 @@ function Page ({
 
   const frontTexPath = frontText ? '' : getTextureUrl(front)
   const backTexPath = backText ? '' : getTextureUrl(back)
-  const shouldLoadTextures = number === 0 || Math.abs(number - page) <= 1
+  const shouldLoadTextures = Math.abs(number - page) <= 2
   const loadedFront = useNonSuspenseTexture(frontTexPath || undefined, shouldLoadTextures)
   const loadedBack = useNonSuspenseTexture(backTexPath || undefined, shouldLoadTextures)
 
@@ -248,20 +259,22 @@ function Page ({
     const skeleton = new Skeleton(bones)
 
     const materials = [
-      ...pageMaterials,
+      ...pageMaterials.map((material) => material.clone()),
       new MeshStandardMaterial({
         color: paperColor,
-        map: frontText ? frontTexture : (loadedFront || null),
+        map: frontTexture,
         roughness: 0.55
       }),
       new MeshStandardMaterial({
         color: paperColor,
-        map: backText ? backTexture : (loadedBack || null),
+        map: backTexture,
         roughness: 0.55
       })
     ]
 
-    const mesh = new SkinnedMesh(pageGeometry, materials)
+    // Clone so each page has its own skin bind. Sharing one geometry makes
+    // several sheets flicker and warp when a page turns.
+    const mesh = new SkinnedMesh(pageGeometry.clone(), materials)
     mesh.castShadow = true
     mesh.receiveShadow = true
     mesh.frustumCulled = false
@@ -269,7 +282,22 @@ function Page ({
     mesh.bind(skeleton)
 
     return mesh
-  }, [frontTexture, backTexture, loadedFront, loadedBack, frontText, backText])
+  }, [frontTexture, backTexture])
+
+  useEffect(() => {
+    const materials = manualSkinnedMesh.material as MeshStandardMaterial[]
+    const frontMap = frontTexture || loadedFront
+    const backMap = backTexture || loadedBack
+
+    if (materials[4] && materials[4].map !== frontMap) {
+      materials[4].map = frontMap
+      materials[4].needsUpdate = true
+    }
+    if (materials[5] && materials[5].map !== backMap) {
+      materials[5].map = backMap
+      materials[5].needsUpdate = true
+    }
+  }, [manualSkinnedMesh, frontTexture, backTexture, loadedFront, loadedBack])
 
   useFrame((_, delta) => {
     if (!skinnedMeshRef.current || !group.current) return
@@ -363,29 +391,25 @@ export function Book ({
   const lastSelectAtRef = useRef(0)
 
   useEffect(() => {
-    let timeout: ReturnType<typeof setTimeout> | undefined
+    preloadBookTextures().catch(() => {})
+  }, [])
 
-    const goToPage = () => {
+  useEffect(() => {
+    if (delayedPage === page) return
+
+    // One sheet at a time. Wait for the current turn to finish before
+    // starting the next if we are more than one page behind.
+    const stepDelay = Math.abs(page - delayedPage) === 1 ? 0 : 850
+    const timeout = window.setTimeout(() => {
       setDelayedPage((current) => {
-        if (page === current) return current
-
-        timeout = setTimeout(
-          () => goToPage(),
-          Math.abs(page - current) > 2 ? 50 : 150
-        )
-
+        if (current === page) return current
         if (page > current) return current + 1
-        if (page < current) return current - 1
-        return current
+        return current - 1
       })
-    }
+    }, stepDelay)
 
-    goToPage()
-
-    return () => {
-      if (timeout) clearTimeout(timeout)
-    }
-  }, [page])
+    return () => window.clearTimeout(timeout)
+  }, [page, delayedPage])
 
   const handleSelectPage = (nextPage: number) => {
     // Prevent jitter when users spam-click while pages are still animating.

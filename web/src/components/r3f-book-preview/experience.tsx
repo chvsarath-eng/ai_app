@@ -1,5 +1,5 @@
 import { ContactShadows, Environment, Float, OrbitControls } from '@react-three/drei'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { easing } from 'maath'
 import { useMemo, useRef } from 'react'
 import { Vector3 } from 'three'
@@ -19,17 +19,21 @@ export function Experience ({
   allowOrbit?: boolean
 }) {
   const bookGroupRef = useRef<Group>(null)
+  const { viewport, size } = useThree()
+  const isCompact = size.width < 640 || size.height < 360
 
   const targets = useMemo(() => {
-    // No recede behavior — book stays in place since shadow is removed
+    // Fit the open spread inside the canvas so phones see the whole book.
+    const fit = Math.min(viewport.width / 2.7, viewport.height / 2.7)
+    const scale = Math.min(1.35, Math.max(0.68, fit * (isCompact ? 1.12 : 0.88)))
     return {
-      position: new Vector3(0, -0.1, 0),
-      scale: new Vector3(1.35, 1.35, 1.35),
+      position: new Vector3(0, isCompact ? -0.02 : -0.1, 0),
+      scale: new Vector3(scale, scale, scale),
       shadowOpacity: 0,
       shadowBlur: 3.6,
       shadowFar: 3.6
     }
-  }, [])
+  }, [viewport.width, viewport.height, isCompact])
 
   useFrame((_, delta) => {
     if (!bookGroupRef.current) return
@@ -41,7 +45,7 @@ export function Experience ({
     <>
       <ambientLight intensity={0.35} />
       <Float
-        rotation-x={-Math.PI / 4}
+        rotation-x={isCompact ? -Math.PI / 5.6 : -Math.PI / 4}
         // Reduce "free flow" motion so it feels steadier.
         floatIntensity={isReceded ? 0.12 : 0.25}
         speed={1.2}

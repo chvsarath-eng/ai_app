@@ -77,18 +77,18 @@ export function DemoLoop ({
         // No "card" container — just floating preview in the hero.
         // Keep the preview area size, but clip overflow so it never
         // spills into the form on the right.
-        'relative h-full min-h-[360px] overflow-hidden bg-[var(--md-surface)] sm:min-h-0',
+        'relative overflow-hidden bg-[var(--md-surface)] sm:h-full',
         className
       )}
       aria-label="Live 3D preview"
     >
       {/* Give the book real vertical space — increased for larger book */}
-      <div className="h-full min-h-[360px] w-full sm:h-[420px] sm:min-h-0 lg:h-[520px]" />
+      <div className="h-[260px] w-full sm:h-[420px] lg:h-[520px]" />
       <div className="absolute inset-0">
         {/* Fast first paint. Hide once the 3D book is rotating so both never stack. */}
         <div
           className={cn(
-            'absolute inset-0 flex items-center justify-center transition-opacity duration-500',
+            'absolute inset-0 flex items-center justify-center transition-opacity duration-150',
             isBookRevealed ? 'pointer-events-none opacity-0' : 'opacity-100'
           )}
           aria-hidden={isBookRevealed}
