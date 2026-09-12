@@ -182,7 +182,7 @@ def _image_endpoints() -> List[tuple[str, str, str]]:
 
     The configured ``IMAGE_API_BASE`` is always first. Fallback is on by default: if
     primary is LaoZhang, official ``api.openai.com`` is appended when ``OPENAI_API_KEY``
-    exists. Flip ``IMAGE_API_BASE`` back to api2 when LaoZhang 2.5 VIP is stable.
+    exists. Primary should stay on api2 VIP while LaoZhang is healthy.
     """
     primary_base = _normalize_api_base(os.getenv("IMAGE_API_BASE") or DEFAULT_IMAGE_API_BASE)
     endpoints: List[tuple[str, str, str]] = [
