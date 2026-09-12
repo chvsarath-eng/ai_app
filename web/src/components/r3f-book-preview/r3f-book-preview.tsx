@@ -1,12 +1,13 @@
 'use client'
 
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Hand, MousePointer2 } from 'lucide-react'
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { SRGBColorSpace } from 'three'
 
 import { HeroCoverImage } from '@/components/hero-cover'
 
+import { preloadBookTextures } from './book'
 import { bookPages } from './pages'
 import { Experience } from './experience'
 
@@ -25,6 +26,40 @@ function PreviewCover ({
       <HeroCoverImage alt="" />
     </div>
   )
+}
+
+function isCompactCanvas (size: { width: number; height: number }) {
+  // Phone well is short and wide — do not use Three viewport.width,
+  // which stays large on a 390x230 canvas and skips the mobile framing.
+  return size.width < 640 || size.height < 360
+}
+
+function ResponsiveCamera () {
+  const { camera, size } = useThree()
+  const isCompact = isCompactCanvas(size)
+
+  useLayoutEffect(() => {
+    const perspective = camera as typeof camera & { fov?: number }
+    if (typeof perspective.fov === 'number') {
+      perspective.fov = isCompact ? 38 : 42
+      camera.updateProjectionMatrix()
+    }
+  }, [camera, isCompact])
+
+  useFrame(() => {
+    if (isCompact) {
+      // Look slightly above the book so it sits in the lower-center of the well,
+      // filling the empty gap above the generate form. Leave a little headroom
+      // so page flips are not clipped.
+      camera.position.set(0, 0.3, 3.35)
+      camera.lookAt(0, 0.12, 0)
+      return
+    }
+    camera.position.set(0, 0.92, 3.65)
+    camera.lookAt(0, 0, 0)
+  })
+
+  return null
 }
 
 function FirstFrame ({ onReady }: { onReady: () => void }) {
@@ -64,8 +99,7 @@ export function R3FBookPreview ({
   isActive?: boolean
   onBookRevealed?: () => void
 }) {
-  // Start already open so the first motion is a page flip, not the cover splitting apart.
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(0)
   const [isMounted, setIsMounted] = useState(false)
   const [hasWebgl, setHasWebgl] = useState<boolean | null>(null)
   const [isCoverVisible, setIsCoverVisible] = useState(true)
@@ -83,6 +117,7 @@ export function R3FBookPreview ({
     setHasWebgl(canUseWebgl())
     const phoneLike = window.matchMedia('(pointer: coarse), (max-width: 480px)').matches
     setIsCoarsePointer(phoneLike)
+    preloadBookTextures().catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -103,16 +138,16 @@ export function R3FBookPreview ({
     if (!hasWebgl) return
     if (!isCanvasReady) return
 
-    // Drop the hero image as soon as the book has a frame, then flip immediately.
+    // Dissolve the hero as soon as the 3D cover is on screen.
     const timer = window.setTimeout(() => {
       setIsCoverVisible(false)
       onBookRevealed?.()
-    }, 120)
+    }, 0)
 
     return () => window.clearTimeout(timer)
   }, [isMounted, hasWebgl, isCanvasReady, onBookRevealed])
 
-  // Auto flip pages after book is revealed — only while this preview is on screen.
+  // Auto flip: one right-hand page at a time, after the overlay has faded.
   useEffect(() => {
     if (!showBook) return
     if (!isActive) return
@@ -121,7 +156,7 @@ export function R3FBookPreview ({
     if (isAutoFlipPaused) return
 
     let flipCount = 0
-    const maxFlips = Math.min(Math.max(maxPage - 1, 1), 6)
+    const maxFlips = Math.min(maxPage, 6)
     let flipInterval = 0
 
     const flipOnce = () => {
@@ -140,8 +175,9 @@ export function R3FBookPreview ({
       }
     }
 
+    // Cover turns as the hero dissolves, then one right-hand page at a time.
     flipOnce()
-    flipInterval = window.setInterval(flipOnce, 1600)
+    flipInterval = window.setInterval(flipOnce, 2200)
 
     return () => {
       window.clearInterval(flipInterval)
@@ -174,7 +210,7 @@ export function R3FBookPreview ({
 
     const audio = audioRef.current
     // Play on real page turns only — not the already-open starting spread.
-    if (!isCoverVisible && page > 1) {
+    if (!isCoverVisible && page > 0) {
       audio.currentTime = 0
       const playPromise = audio.play()
       if (playPromise && typeof playPromise.catch === 'function') {
@@ -213,7 +249,7 @@ export function R3FBookPreview ({
   return (
     <div className="relative h-full w-full">
       <div
-        className={`absolute inset-0 z-10 bg-[var(--md-surface)] transition-opacity duration-700 ${
+        className={`absolute inset-0 z-10 bg-[var(--md-surface)] transition-opacity duration-150 ${
           isCoverVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
       >
@@ -222,7 +258,7 @@ export function R3FBookPreview ({
 
       {isHintVisible && !isCoverVisible && !hasUserInteracted && !isReceded
         ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-6 z-20 flex justify-center px-4">
+            <div className="pointer-events-none absolute inset-x-0 bottom-1 z-20 flex justify-center px-4 sm:bottom-6">
               <div className="flex items-center gap-3 rounded-full border border-zinc-200/70 bg-white/80 px-4 py-2 text-sm text-zinc-800 shadow-sm backdrop-blur">
                 {isCoarsePointer ? (
                   <span className="inline-flex items-center gap-2">
@@ -278,6 +314,7 @@ export function R3FBookPreview ({
         >
           <group position-y={0}>
             <Suspense fallback={null}>
+              <ResponsiveCamera />
               <FirstFrame onReady={() => setIsCanvasReady(true)} />
               <Experience
                 page={page}

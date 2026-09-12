@@ -14,11 +14,11 @@ export function HeroSplit ({
   return (
     <section
       className={cn(
-        'flex min-h-[calc(100dvh-5.5rem)] items-stretch pt-4 pb-0 sm:min-h-[calc(100dvh-14rem)] sm:pt-6 sm:pb-0 lg:pt-8 lg:pb-0',
+        'flex items-start pt-4 pb-0 sm:min-h-[calc(100dvh-14rem)] sm:items-stretch sm:pt-6 sm:pb-0 lg:pt-8 lg:pb-0',
         className
       )}
     >
-      <div className="grid w-full gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,480px)] lg:items-center lg:gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(380px,560px)]">
+      <div className="grid w-full gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(360px,480px)] lg:items-center lg:gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(380px,560px)]">
         <div className="order-1 flex min-h-0 min-w-0 flex-col lg:order-1">
           {left}
         </div>
