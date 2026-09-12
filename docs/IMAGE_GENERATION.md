@@ -21,15 +21,13 @@ Web hooks:
 - `POST /api/user/projects/{id}/print` → story-api `render-print`
 - `POST /api/user/projects/{id}/start` on a **ready digital** project that is now `LULU_BOOK` also triggers print upgrade
 
-## Hosts (LaoZhang down, OpenAI live)
+## Hosts (LaoZhang VIP primary, OpenAI backup)
 
-LaoZhang **GPT Image 2.5 VIP** (`*-vip`, ~$0.03/call on Default-group) was unstable (503 “model service unavailable” / “no available channels”). Official-forward LaoZhang names (`gpt-image-2.5-sunburst` without `-vip`) **cannot** run on a Default-group token — they need a LaoZhang token with group **Sora2Official**.
+LaoZhang **GPT Image 2.5 VIP** (`*-vip`, ~$0.03/call on Default-group) is the production primary. Official-forward LaoZhang names (`gpt-image-2.5-sunburst` without `-vip`) **cannot** run on a Default-group token — they need a LaoZhang token with group **Sora2Official**.
 
-**Temporary production primary:** `https://api.openai.com/v1`  
-**Backup:** LaoZhang `https://api2.laozhang.ai/v1` (`IMAGE_API_FALLBACK=1`)  
+**Production primary:** `https://api2.laozhang.ai/v1`  
+**Backup:** official OpenAI `https://api.openai.com/v1` (`IMAGE_API_FALLBACK=1`)  
 Use **api2**, not `api.laozhang.ai` (their DNS-pollution notice).
-
-When VIP is stable again, only flip:
 
 ```
 IMAGE_API_BASE=https://api2.laozhang.ai/v1

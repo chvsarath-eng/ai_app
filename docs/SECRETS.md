@@ -33,8 +33,8 @@ Local template: `web/.env.example`
 | Cloud Run env var | Secret Manager ID | Notes |
 |-------------------|-------------------|-------|
 | `GOOGLE_API_KEY` | `gemini-api-key` | Gemini fallback |
-| `API_KEY_LAOZHANG` | `API_KEY_LAOZHANG` | LaoZhang Images key (backup; use `api2.laozhang.ai`) |
-| `OPENAI_API_KEY` | `OPENAI_API_KEY` | Official OpenAI (temporary primary + always backup) |
+| `API_KEY_LAOZHANG` | `API_KEY_LAOZHANG` | LaoZhang Images key (primary; use `api2.laozhang.ai`) |
+| `OPENAI_API_KEY` | `OPENAI_API_KEY` | Official OpenAI Images backup |
 | `SMTP_HOST` | `smtp-host` | Shared with web |
 | `SMTP_PORT` | `smtp-port` | |
 | `SMTP_USER` | `smtp-user` | |
