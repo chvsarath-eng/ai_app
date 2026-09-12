@@ -69,11 +69,14 @@ SCENE_INTEGRATION_PHRASE = (
     "uploaded front of the face, so profile or three-quarter heads invent a different person. "
     "Body does the action; head stays camera-facing. Put props between them and the lens "
     "so they do not have to turn away. "
-    "Match this page's feeling with a micro-expression only: a slight change in the eyes "
-    "and brows. Mouth stays closed or barely relaxed. Same face bones -- do not restyle "
-    "the face. No social smile, no laugh, no teeth unless the emotion_beat is warm, "
-    "relieved, or proud, and even then only a faint closed-mouth ease. "
-    "No shout, grimace, or wide-open mouth. "
+    "The uploaded photo is WHO they are, not how they feel in this frame. "
+    "Keep age, bone structure, skin, hair, and unique marks. "
+    "Do not copy the reference expression -- that studio face is identity only. "
+    "Act a SMALL living emotion that matches this page: readable in the eyes, brows, "
+    "and a tiny mouth change. The face is an actor in this moment, not a passport freeze "
+    "and not a stock-photo smile reused on every page. "
+    "No teeth, no laugh, no shout, no cartoon grimace, no wide grin. "
+    "Same film, same costume, same world -- light and weather on the face match this beat. "
     "Forbidden: face swap, cutout, collage, studio-lit face on a location plate, side face, 3/4 face."
 )
 
@@ -96,7 +99,8 @@ FEW_SHOT_EXAMPLE_1 = (
     "Bodies are mid-action, but both faces point at the camera with both eyes visible -- "
     "as if the camera is mounted on the front of the bike. Do not invent a side of either face. "
     "Dust and warm sidelight wrap their frontal faces the same way they wrap the leather and canyon. "
-    "Subtle focused eyes, mouths relaxed. Medium shot, shallow depth of field. "
+    "Do not copy the reference expressions. Small proud-warm acting: a faint closed-mouth smile "
+    "that reaches the eyes. Medium shot, shallow depth of field. "
     "Same people as the references, fully relit. No face swap, no cutout, no profile, no 3/4 face."
 )
 
@@ -106,7 +110,8 @@ FEW_SHOT_EXAMPLE_2 = (
     "Arthur: full beard, weathered skin, brown eyes. Mia: long dark hair, narrow face, light-olive skin. "
     "He reaches toward a glowing moth held in front of them; she turns her body beside him, dress caught mid-spin. "
     "Both faces stay camera-facing with both eyes visible. Faces take the cool garden light and last warm sky -- "
-    "not a separate studio key. Soft wonder only in the eyes, mouths relaxed. "
+    "not a separate studio key. Do not copy the reference expressions. "
+    "Small curious acting: brows slightly lifted, eyes searching, mouths barely eased. "
     "Medium shot, eye-level. One real photograph, no collage, no profile, no 3/4 face."
 )
 
@@ -116,7 +121,8 @@ FEW_SHOT_EXAMPLE_3 = (
     "Medium shot of her bracing on a rocky overlook as wind snaps the coat. "
     "Her body leans into the wind, but her face points at the camera with both eyes visible. "
     "Rain on her cheeks and hair, cool storm light on that frontal face matching the sky. "
-    "Mouth closed, no smile, eyes quietly determined and a little scared. Same child as the reference, fully relit. "
+    "Do not copy the reference expression. Small tense acting: inner brows drawn a little, "
+    "eyes wet from rain, lips softly pressed with no smile. Same child as the reference, fully relit. "
     "No cutout, no dry studio face in a wet scene, no profile, no 3/4 face."
 )
 
@@ -182,14 +188,17 @@ HARD CONSTRAINTS (HIGHEST PRIORITY)
    the right." GOOD: "reaching toward a falling leaf in front of them."
    NEVER repeat the same stance across pages.
 3) SITUATION-MATCHED MICRO-EXPRESSION (LIKENESS): The uploaded face must still
-   look like that person. Big expressions warp the mouth, cheeks, and eyes and
-   BREAK identity. Each page has one emotion_beat from:
+   look like that person. The reference locks IDENTITY, not mood. Copying the
+   studio expression onto every page makes the book lifeless -- that is a FAIL.
+   Each page has one emotion_beat from:
    wary, tense, focused, weary, curious, relieved, proud, warm.
-   Show that beat ONLY in the eyes and brows. Mouth stays closed.
+   Act that beat with a SMALL change: eyes, brows, and a tiny mouth shift.
    If the story says scared, worried, tired, or running from danger, the face
    must NOT smile. A default cheerful smile on a tense page is a FAIL.
-   BANNED: wide grin, teeth, laugh, shout, scream, grimace, clenched jaw,
-   crying, cartoon emotion. The body can act hard; the face stays recognizable.
+   Warm / proud / relieved pages get a faint closed-mouth ease, not a grin.
+   BANNED: wide grin, teeth, laugh, shout, scream, grimace, crying, cartoon
+   emotion, and also a frozen passport face. The body can act hard; the face
+   stays recognizable AND alive.
 4) IDENTITY: {IDENTITY_PHRASE}
    Each character MUST have an identity_card (age, bone structure, skin tone,
    hair, unique marks). Repeat that card in every prompt. Do not re-describe
@@ -494,7 +503,8 @@ JSON structure:
     }}}}
   ],
   "book": {{{{
-    "title": "string", "characters_in_scene": [1, 2],
+    "title": "string", "emotion_beat": "curious|warm|proud|focused",
+    "characters_in_scene": [1, 2],
     "input_images": ["input_images/char_1_face.jpeg", "generated/char_1_sheet.png"],
     "output_image": "generated/book_cover.png",
     "prompt": "string (cover prompt, single flowing sentence, 150-250 words max)"
@@ -523,7 +533,8 @@ GENERATION STEPS (internal, output JSON only):
 5) For pages 1-10: write story, pick ONE emotion_beat that matches that page's
    feeling, pick shot from arc, build a short, cohesive paragraph following
    the FEW-SHOT EXAMPLES above. The image prompt must name that beat and
-   describe the matching eyes/brows (closed mouth, no default smile).
+   describe the matching eyes, brows, and a tiny mouth change.
+   Say that the reference expression is not locked.
 5b) Start each prompt with "Photograph {{Name}} from the first image as the same
     person newly captured in this scene" plus the identity_card. If a companion
     is in the scene, name their identity_card too.
@@ -536,11 +547,14 @@ GENERATION STEPS (internal, output JSON only):
      "looking down", "over the shoulder", "turned toward". Rewrite so every
      human face points at the camera with both eyes visible.
    - EXPRESSION CHECK: Reject grin, teeth, laugh, scream, grimace, shout,
-     crying. If the story is tense/scared/tired, also reject smile and
-     cheerful. Name the emotion_beat and match it with eyes and brows only.
+     crying, AND a copied studio/neutral face. If the story is tense/scared/tired,
+     also reject smile and cheerful. Name the emotion_beat and describe a small
+     living acting note (eyes, brows, tiny mouth). Do not say "do not restyle
+     the face" -- that freezes the reference expression.
    - ACTION VARIETY CHECK: No two pages share the same stance or setup.
    - IMAGE-TEXT COHERENCE CHECK: The image shows the page's primary action
-     AND the same feeling as the story text.
+     AND the same feeling as the story text. Light, weather, and expression
+     must belong to this frame of one continuous film.
    - STORY TEXT SIMPLICITY CHECK: An 8-year-old can picture every sentence.
    - COVER REALISM CHECK: Reject 3D/CGI title effects and decorative frames.
    - COMPANION CHECK: If a named pet/sidekick/robot recurs, they have one
@@ -802,37 +816,44 @@ def anatomy_lock_suffix() -> str:
 
 _EMOTION_BEATS = {
     "wary": (
-        "Emotion beat: wary. Same uploaded face. Closed mouth, no smile. "
-        "Slightly raised inner brows, watchful eyes. Do not restyle the face."
+        "Emotion beat: wary. The reference expression is not locked. "
+        "Small acting: inner brows slightly raised, watchful eyes, lips softly closed with no smile. "
+        "Same bones, living face."
     ),
     "tense": (
-        "Emotion beat: tense. Same uploaded face. Closed mouth, no smile, no laugh. "
-        "Slightly lowered brows, alert eyes. Feeling is careful and worried. "
-        "Do not restyle the face."
+        "Emotion beat: tense. The reference expression is not locked. "
+        "Small acting: inner brows drawn a little, eyes a bit wider, lips softly pressed. "
+        "No smile. Same bones, living face."
     ),
     "focused": (
-        "Emotion beat: focused. Same uploaded face. Closed mouth, no polite smile. "
-        "Steady eyes, still brows. Do not restyle the face."
+        "Emotion beat: focused. The reference expression is not locked. "
+        "Small acting: intent eyes, level brows, mouth still -- not a polite smile. "
+        "Same bones, living face."
     ),
     "weary": (
-        "Emotion beat: weary. Same uploaded face. Closed mouth, no smile. "
-        "Tired heavier lids, soft eyes. Do not restyle the face."
+        "Emotion beat: weary. The reference expression is not locked. "
+        "Small acting: heavier lids, softer eyes, mouth barely relaxed. No smile. "
+        "Same bones, living face."
     ),
     "curious": (
-        "Emotion beat: curious. Same uploaded face. Closed mouth, no grin. "
-        "Slightly raised brows, searching eyes. Do not restyle the face."
+        "Emotion beat: curious. The reference expression is not locked. "
+        "Small acting: brows slightly lifted, searching eyes, a tiny closed-mouth interest. "
+        "No grin. Same bones, living face."
     ),
     "relieved": (
-        "Emotion beat: relieved. Same uploaded face. Closed mouth. "
-        "A faint ease only in the eyes. No teeth, no laugh. Do not restyle the face."
+        "Emotion beat: relieved. The reference expression is not locked. "
+        "Small acting: a faint closed-mouth ease that reaches the eyes. No teeth. "
+        "Same bones, living face."
     ),
     "proud": (
-        "Emotion beat: proud. Same uploaded face. Closed mouth. "
-        "Quiet pride in the eyes. No grin. Do not restyle the face."
+        "Emotion beat: proud. The reference expression is not locked. "
+        "Small acting: a quiet closed-mouth lift in the eyes and a hint of ease at the mouth. "
+        "No grin. Same bones, living face."
     ),
     "warm": (
-        "Emotion beat: warm. Same uploaded face. Closed mouth. "
-        "A very slight soft ease in the eyes. No teeth, no laugh. Do not restyle the face."
+        "Emotion beat: warm. The reference expression is not locked. "
+        "Small acting: a faint closed-mouth smile that reaches the eyes. No teeth, no laugh. "
+        "Same bones, living face."
     ),
 }
 

@@ -16,6 +16,7 @@ from storygen_v2 import (
     build_identity_card,
     anatomy_lock_suffix,
     emotion_lock_suffix,
+    infer_emotion_beat,
     scene_integration_prefix,
     sheet_anti_collage_suffix,
     sheet_companion_suffix,
@@ -1285,7 +1286,11 @@ def _ensure_story_paths_consistent_v2(
                     cis.append(idx)
         book["characters_in_scene"] = cis
         book["input_images"] = _build_input_images_for_scene(cis)
-        book["prompt"] = _finalize_scene_prompt(book.get("prompt", ""), cis, book.get("title") or "", "focused")
+        first_page = next((p for p in (story.get("pages") or []) if isinstance(p, dict)), {})
+        cover_beat = book.get("emotion_beat") or infer_emotion_beat(
+            f"{book.get('title') or ''} {first_page.get('story') or ''}"
+        )
+        book["prompt"] = _finalize_scene_prompt(book.get("prompt", ""), cis, book.get("title") or "", cover_beat)
         if not book.get("output_image"):
             book["output_image"] = "generated/book_cover.png"
 
@@ -1680,9 +1685,10 @@ def generate_ebook_html_bundle_v2(
             invented = bool(char and (char.get("source") or "") == "invented")
             if not invented:
                 labels.append(
-                    f"IDENTITY close-up of {cname}. Face identity only -- do not use this "
-                    f"crop as body scale. Photograph this same face at a normal adult size "
-                    f"on a full torso, camera-facing, both eyes visible. Relight it to the "
+                    f"IDENTITY close-up of {cname}. Face identity only -- bones, age, skin, "
+                    f"hair. Do not copy this photo's expression. Do not use this crop as "
+                    f"body scale. Photograph this same person at a normal adult size on a "
+                    f"full torso, camera-facing, both eyes visible. Relight them to the "
                     f"scene. Do not invent a side of the face."
                 )
             labels.append(

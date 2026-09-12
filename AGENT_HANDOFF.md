@@ -15,7 +15,7 @@
 2. **LaoZhang 2.5 VIP** (`gpt-image-2.5-*-vip`, $0.03/call on Default-group) is the production primary on `https://api2.laozhang.ai/v1`. Official-forward LaoZhang 2.5 (no `-vip`) still needs a **Sora2Official** token group — do not use those names on the Default-group key.
 3. **Backup** is official OpenAI (`https://api.openai.com/v1`, dated snapshots) via `IMAGE_API_FALLBACK=1`. Use **api2**, not `api.laozhang.ai`.
 4. Bind keys **per host**. A LaoZhang key on OpenAI is 401. Never drop to `gpt-image-2-vip` (older model).
-5. Likeness: frontal faces only; uploaded crop is identity not scale; ban window/hole crops (giant-head bug).
+5. Likeness: frontal faces only; uploaded crop is identity not scale; ban window/hole crops (giant-head bug). Reference locks WHO, not mood -- small living emotion per page.
 6. Do not restyle the home page. Do not commit `.env` or `graphify-out/`.
 
 ### Production image hosts (Sep 11 evening)
