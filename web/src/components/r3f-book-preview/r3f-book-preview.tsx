@@ -64,7 +64,8 @@ export function R3FBookPreview ({
   isActive?: boolean
   onBookRevealed?: () => void
 }) {
-  const [page, setPage] = useState(0)
+  // Start already open so the first motion is a page flip, not the cover splitting apart.
+  const [page, setPage] = useState(1)
   const [isMounted, setIsMounted] = useState(false)
   const [hasWebgl, setHasWebgl] = useState<boolean | null>(null)
   const [isCoverVisible, setIsCoverVisible] = useState(true)
@@ -86,12 +87,6 @@ export function R3FBookPreview ({
 
   useEffect(() => {
     if (!isMounted) return
-    // R3F now owns this slot (cover overlay, then the book). Drop the HTML poster.
-    onBookRevealed?.()
-  }, [isMounted, onBookRevealed])
-
-  useEffect(() => {
-    if (!isMounted) return
     if (!hasWebgl) return
 
     // Show the 3D canvas ASAP, but keep a lightweight cover image
@@ -108,12 +103,11 @@ export function R3FBookPreview ({
     if (!hasWebgl) return
     if (!isCanvasReady) return
 
-    // Keep the cover visible for 2.5s AFTER the first 3D frame is ready,
-    // then fade it out and start the demo from page 1.
+    // Drop the hero image as soon as the book has a frame, then flip immediately.
     const timer = window.setTimeout(() => {
       setIsCoverVisible(false)
       onBookRevealed?.()
-    }, 2500)
+    }, 120)
 
     return () => window.clearTimeout(timer)
   }, [isMounted, hasWebgl, isCanvasReady, onBookRevealed])
@@ -126,34 +120,30 @@ export function R3FBookPreview ({
     if (hasUserInteracted) return
     if (isAutoFlipPaused) return
 
+    let flipCount = 0
+    const maxFlips = Math.min(Math.max(maxPage - 1, 1), 6)
     let flipInterval = 0
-    const startDelay = window.setTimeout(() => {
-      let flipCount = 0
-      const maxFlips = Math.min(maxPage, 6)
 
-      flipInterval = window.setInterval(() => {
-        flipCount += 1
+    const flipOnce = () => {
+      flipCount += 1
+      setPage((prev) => (prev < maxPage ? prev + 1 : prev))
 
-        setPage((prev) => {
-          if (prev < maxPage) return prev + 1
-          return prev
-        })
+      if (flipCount === 2) {
+        setIsHintVisible(true)
+      }
 
-        if (flipCount === 2) {
-          setIsHintVisible(true)
-        }
+      if (flipCount >= maxFlips) {
+        window.clearInterval(flipInterval)
+        flipInterval = 0
+        setIsAutoFlipPaused(true)
+        setIsHintVisible(true)
+      }
+    }
 
-        if (flipCount >= maxFlips) {
-          window.clearInterval(flipInterval)
-          flipInterval = 0
-          setIsAutoFlipPaused(true)
-          setIsHintVisible(true)
-        }
-      }, 1600)
-    }, 400)
+    flipOnce()
+    flipInterval = window.setInterval(flipOnce, 1600)
 
     return () => {
-      window.clearTimeout(startDelay)
       window.clearInterval(flipInterval)
     }
   }, [showBook, maxPage, isCoverVisible, hasUserInteracted, isAutoFlipPaused, isActive])
@@ -183,7 +173,8 @@ export function R3FBookPreview ({
     }
 
     const audio = audioRef.current
-    if (page > 0) {
+    // Play on real page turns only — not the already-open starting spread.
+    if (!isCoverVisible && page > 1) {
       audio.currentTime = 0
       const playPromise = audio.play()
       if (playPromise && typeof playPromise.catch === 'function') {
@@ -194,7 +185,7 @@ export function R3FBookPreview ({
     return () => {
       stopFlipAudio(audio)
     }
-  }, [page, isMounted, hasWebgl, isActive])
+  }, [page, isMounted, hasWebgl, isActive, isCoverVisible])
 
   const safeSetPage = (next: number) => {
     setHasUserInteracted(true)
