@@ -14,8 +14,11 @@ from strgen import Story_content_generator_with_usage, Story_content_generator
 from storygen_v2 import (
     Story_content_generator_v2,
     build_identity_card,
+    anatomy_lock_suffix,
+    emotion_lock_suffix,
     scene_integration_prefix,
     sheet_anti_collage_suffix,
+    sheet_companion_suffix,
     strip_collage_language,
 )
 
@@ -374,6 +377,150 @@ def estimate_gemini_cost_usd(
     return result
 
 
+def estimate_story_cost_usd(
+    usage: Optional[Dict[str, Any]],
+    *,
+    model: Optional[str] = None,
+    pricing: Optional[GeminiTokenPricing] = None,
+) -> Optional[Dict[str, Any]]:
+    """USD estimate for the story LLM call. Uses explicit rates, then known model defaults."""
+    if pricing is not None:
+        out = estimate_gemini_cost_usd(usage or {}, pricing=pricing)
+        if out:
+            out["model"] = model
+            out["billing"] = "token"
+        return out
+
+    env_in = os.getenv("STORY_INPUT_USD_PER_1M") or os.getenv("GEMINI_INPUT_USD_PER_1M")
+    env_out = os.getenv("STORY_OUTPUT_USD_PER_1M") or os.getenv("GEMINI_OUTPUT_USD_PER_1M")
+    name = (model or "").lower()
+    if "terra" in name:
+        rates = GeminiTokenPricing(float(env_in or 2.0), float(env_out or 12.0))
+    elif "gpt-5.5" in name:
+        rates = GeminiTokenPricing(float(env_in or 5.0), float(env_out or 30.0))
+    elif env_in and env_out:
+        rates = GeminiTokenPricing(float(env_in), float(env_out))
+    else:
+        return None
+    out = estimate_gemini_cost_usd(usage or {}, pricing=rates)
+    if out:
+        out["model"] = model
+        out["billing"] = "token"
+    return out
+
+
+def build_book_ai_cost(
+    *,
+    story_model: Optional[str],
+    story_usage: Optional[Dict[str, Any]],
+    story_cost: Optional[Dict[str, Any]],
+    image_items: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Roll up story + every successful image call into one finished-book total."""
+    from imggen import estimate_image_call_cost_usd
+
+    story = dict(story_cost or {}) if story_cost else estimate_story_cost_usd(
+        story_usage or {}, model=story_model
+    ) or {}
+    story_usd = float(story.get("total_cost_usd") or 0.0)
+
+    image_rows: List[Dict[str, Any]] = []
+    images_usd = 0.0
+    for item in image_items:
+        cost = item.get("cost")
+        if not isinstance(cost, dict) or cost.get("usd") is None:
+            cost = estimate_image_call_cost_usd(
+                model_name=item.get("model"),
+                usage=item.get("usage") if isinstance(item.get("usage"), dict) else None,
+                api_base=item.get("api_base"),
+            )
+        usd = float(cost.get("usd") or 0.0)
+        images_usd += usd
+        image_rows.append(
+            {
+                "name": item.get("name"),
+                "type": item.get("type"),
+                "page_number": item.get("page_number"),
+                "model": item.get("model") or cost.get("model"),
+                "billing": cost.get("billing"),
+                "usd": usd,
+            }
+        )
+
+    total = round(story_usd + images_usd, 6)
+    summary = {
+        "currency": "USD",
+        "total_usd": total,
+        "story": {
+            "model": story_model,
+            "billing": story.get("billing") or "token",
+            "input_tokens": story.get("input_tokens") or (story_usage or {}).get("input_tokens"),
+            "output_tokens": story.get("output_tokens") or (story_usage or {}).get("output_tokens"),
+            "usd": round(story_usd, 6),
+        },
+        "images": {
+            "count": len(image_rows),
+            "usd": round(images_usd, 6),
+            "items": image_rows,
+        },
+        "note": (
+            "Images on LaoZhang -vip / gpt-image-2-web are $0.03 per successful call. "
+            "Story is token-billed. Failed 503s are not counted."
+        ),
+    }
+    return summary
+
+
+def _persist_ai_cost(
+    base_dir: Path,
+    cost: Dict[str, Any],
+    progress: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+) -> None:
+    try:
+        (Path(base_dir) / "cost.json").write_text(json.dumps(cost, indent=2), encoding="utf-8")
+    except Exception:
+        logger.exception("failed to write cost.json")
+    logger.info(
+        "ai_cost_total usd=%.4f story_usd=%.4f images_usd=%.4f image_calls=%d",
+        float(cost.get("total_usd") or 0),
+        float((cost.get("story") or {}).get("usd") or 0),
+        float((cost.get("images") or {}).get("usd") or 0),
+        int((cost.get("images") or {}).get("count") or 0),
+    )
+    if progress:
+        try:
+            progress("ai_cost_ready", cost)
+        except Exception:
+            logger.exception("progress_cb failed for ai_cost_ready")
+
+
+def _write_image_manifest(
+    base_dir: Path,
+    *,
+    output_type: str,
+    tasks: List[Dict[str, Any]],
+    generated: Optional[List[Dict[str, Any]]] = None,
+    image_params: Optional[Dict[str, Any]] = None,
+) -> Path:
+    """Save prompts + refs so a later hardcover order can re-render at print size."""
+    from imggen import resolve_image_model, resolve_image_quality, resolve_image_size
+
+    params = image_params or {}
+    payload = {
+        "version": 1,
+        "output_type": output_type,
+        "size": resolve_image_size(output_type, params.get("size")),
+        "print_size": resolve_image_size("LULU_BOOK"),
+        "model": resolve_image_model("cover", params.get("model"), output_type),
+        "quality": resolve_image_quality("cover", params.get("quality"), output_type),
+        "tasks": tasks,
+        "generated": generated or [],
+    }
+    path = Path(base_dir) / "image_manifest.json"
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
 def generate_story_json_with_cost(
     *,
     story_prompt: str,
@@ -472,7 +619,7 @@ def generate_story_json_with_cost(
         "story": story,
         "model": model,
         "usage": usage,
-        "cost": estimate_gemini_cost_usd(usage, pricing=pricing),
+        "cost": estimate_story_cost_usd(usage, model=model, pricing=pricing),
         "files": files,
     }
 
@@ -524,9 +671,9 @@ def generate_ebook_html_bundle(
 
     # Determine model based on provider
     if model_provider and model_provider.lower() in ("openai", "oai", "gpt"):
-        model = model or "gpt-5.5-2026-04-23"
+        model = model or os.getenv("STORY_MODEL") or "gpt-5.6-terra"
     else:
-        model = model or "gemini-3-pro-preview"
+        model = model or os.getenv("STORY_MODEL") or "gemini-3.1-pro-preview"
 
     base_dir = Path(job_dir).resolve()
     base_dir.mkdir(parents=True, exist_ok=True)
@@ -739,6 +886,10 @@ def generate_ebook_html_bundle(
             "type": task.get("type"),
             "output_image": rel_out,
             "saved_path": saved,
+            "model": res.get("model"),
+            "usage": res.get("usage"),
+            "cost": res.get("cost"),
+            "api_base": res.get("api_base"),
         }
 
     def _run_phase(tasks: List[Dict[str, Any]], *, phase_name: str) -> List[Dict[str, Any]]:
@@ -819,7 +970,12 @@ def generate_ebook_html_bundle(
         "output_type": output_type,
         "generated_count": len(generated),
         "generated": generated,
-        "cost": story_out.get("cost"),
+        "cost": build_book_ai_cost(
+            story_model=story_out.get("model"),
+            story_usage=story_out.get("usage"),
+            story_cost=story_out.get("cost"),
+            image_items=generated,
+        ),
     }
 
     if output_type == "DIGI_BOOK":
@@ -847,7 +1003,8 @@ def generate_ebook_html_bundle(
         "pdf_s": t_pdf,
         "total_s": time.time() - t0,
     }
-    _progress("pipeline_done", {"timing": result["timing"]})
+    _persist_ai_cost(base_dir, result["cost"], _progress)
+    _progress("pipeline_done", {"timing": result["timing"], "cost": result["cost"]})
 
     return result
 
@@ -901,24 +1058,122 @@ def _maybe_add_recurring_companion(story: Dict[str, Any], num_uploaded: int) -> 
         "description": lock,
         "identity_card": lock,
         "prompt": (
-            f"Create a single full-body photograph of {name}, {lock}, standing in a simple studio "
-            "with even light. One continuous photograph, no collage, no extra animals. "
-            "The uploaded human photo is style and scale only -- do not copy that person's face."
+            f"Create a two-panel studio identity sheet of ONLY {name}, {lock}. "
+            "LEFT a close-up of this companion. RIGHT a full-body of the same companion. "
+            "Zero humans. Do not copy any child's face."
         ),
     })
     logger.info("added invented companion from story text: %s mentions=%d", best, counts[best])
 
 
+COMPANION_STUDIO_REF = "input_images/companion_studio_ref.jpeg"
+PAGE_STORY_MIN_WORDS = 160
+PAGE_STORY_TARGET_WORDS = 180
+
+
+def _ensure_companion_studio_ref(base_dir: Optional[Path] = None) -> str:
+    """Blank studio plate so invented companions are not generated from the child's face."""
+    dest = (Path(base_dir) / COMPANION_STUDIO_REF) if base_dir else Path(COMPANION_STUDIO_REF)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists() and dest.stat().st_size > 800:
+        return COMPANION_STUDIO_REF
+    from PIL import Image
+    Image.new("RGB", (1024, 1024), (236, 230, 218)).save(dest, format="JPEG", quality=90)
+    return COMPANION_STUDIO_REF
+
+
+def _page_word_count(text: Any) -> int:
+    return len(str(text or "").split())
+
+
+def _expand_short_page_stories(
+    story: Dict[str, Any],
+    *,
+    model_provider: Optional[str],
+    model: Optional[str],
+    thinking_level: str = "high",
+    seed: int = 42,
+) -> Dict[str, Any]:
+    """If the model wrote sparse pages, expand them so the printed right page fills."""
+    from strgen import _build_llm
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    pages = story.get("pages") if isinstance(story.get("pages"), list) else []
+    short = [
+        p for p in pages
+        if isinstance(p, dict) and _page_word_count(p.get("story")) < PAGE_STORY_MIN_WORDS
+    ]
+    if not short:
+        return story
+
+    payload = [
+        {
+            "page_number": p.get("page_number"),
+            "story": p.get("story") or "",
+            "words": _page_word_count(p.get("story")),
+        }
+        for p in short
+    ]
+    llm = _build_llm(
+        model_provider=model_provider,
+        model=model,
+        temperature=0.4,
+        thinking_level=thinking_level,
+        seed=seed,
+    )
+    messages = [
+        SystemMessage(content=(
+            "You expand children's storybook pages so each printed right-hand page looks full. "
+            "Keep the same events, characters, and order. Simple everyday English. "
+            "Each rewritten page: 160-200 words, 12-16 sentences, 4 short paragraphs. "
+            "Return JSON only: {\"pages\": [{\"page_number\": 1, \"story\": \"...\"}]}"
+        )),
+        HumanMessage(content=json.dumps({"pages": payload}, ensure_ascii=False)),
+    ]
+    try:
+        message = llm.invoke(messages)
+        raw = _coerce_model_text_to_string(getattr(message, "content", ""))
+        expanded = parse_llm_json(raw)
+    except Exception:
+        logger.exception("short_page_expand_failed count=%d", len(short))
+        return story
+
+    by_num = {}
+    for item in (expanded.get("pages") or []):
+        if isinstance(item, dict) and item.get("page_number") is not None:
+            by_num[int(item["page_number"])] = str(item.get("story") or "").strip()
+    filled = 0
+    for page in pages:
+        if not isinstance(page, dict):
+            continue
+        try:
+            num = int(page.get("page_number"))
+        except (TypeError, ValueError):
+            continue
+        new_text = by_num.get(num)
+        if new_text and _page_word_count(new_text) > _page_word_count(page.get("story")):
+            page["story"] = new_text
+            filled += 1
+    logger.info(
+        "short_page_expand pages=%d expanded=%d",
+        len(short),
+        filled,
+    )
+    return story
+
+
 def _ensure_story_paths_consistent_v2(
     story: Dict[str, Any],
     num_characters: int,
+    *,
+    base_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """
     Enforce V2 path conventions:
       - Uploaded face photos at: input_images/char_N_face.jpeg
-      - Invented companions (pets) reuse char_1_face.jpeg as style/scale only
+      - Invented companions use a blank studio plate, never the child's face
       - Character sheets at: generated/char_N_sheet.png
-      - Cover/page input_images use costume sheets (one per character in scene)
+      - Cover/page input_images use original face then costume sheet per uploaded person
     """
     _maybe_add_recurring_companion(story, num_characters)
     # Fix character paths
@@ -949,15 +1204,31 @@ def _ensure_story_paths_consistent_v2(
             if is_invented:
                 char["source"] = "invented"
                 char["role"] = char.get("role") or "companion"
-                char["input_images"] = ["input_images/char_1_face.jpeg"]
+                char["input_images"] = [_ensure_companion_studio_ref(base_dir)]
+                char["output_image"] = f"generated/char_{i}_sheet.png"
+                char["identity_card"] = build_identity_card(char)
+                raw_prompt = strip_collage_language(str(char.get("prompt") or ""))
+                leaked_human = any(
+                    tok in raw_prompt.lower()
+                    for tok in ("uploaded face", "same person", "child's face", "two-panel identity sheet only")
+                )
+                if not raw_prompt or leaked_human:
+                    name = char.get("name") or "the companion"
+                    card = char.get("identity_card") or name
+                    raw_prompt = (
+                        f"Create a two-panel studio identity sheet of ONLY {name}, {card}. "
+                        "LEFT a close-up of this companion. RIGHT a full-body of the same companion. "
+                        "Zero humans. No child's face."
+                    )
+                char["prompt"] = raw_prompt + sheet_companion_suffix(char)
             else:
                 char["source"] = "photo"
                 char["input_images"] = [f"input_images/char_{i}_face.jpeg"]
                 if "role" not in char:
                     char["role"] = "main" if i == 1 else "supporting"
-            char["output_image"] = f"generated/char_{i}_sheet.png"
-            char["identity_card"] = build_identity_card(char)
-            char["prompt"] = strip_collage_language(str(char.get("prompt") or "")) + sheet_anti_collage_suffix()
+                char["output_image"] = f"generated/char_{i}_sheet.png"
+                char["identity_card"] = build_identity_card(char)
+                char["prompt"] = strip_collage_language(str(char.get("prompt") or "")) + sheet_anti_collage_suffix()
 
     char_list = characters if isinstance(characters, list) else []
     total_chars = len(char_list) or num_characters
@@ -975,6 +1246,10 @@ def _ensure_story_paths_consistent_v2(
     def _build_input_images_for_scene(chars_in_scene: List[int]) -> List[str]:
         imgs: List[str] = []
         for idx in chars_in_scene:
+            char = next((c for c in char_list if isinstance(c, dict) and c.get("index") == idx), None)
+            invented = bool(char and (char.get("source") or "") == "invented")
+            if not invented:
+                imgs.append(f"input_images/char_{idx}_face.jpeg")
             imgs.append(f"generated/char_{idx}_sheet.png")
         return imgs
 
@@ -992,10 +1267,10 @@ def _ensure_story_paths_consistent_v2(
                 out.append(idx)
         return out or [1]
 
-    def _finalize_scene_prompt(raw: str, cis: List[int]) -> str:
+    def _finalize_scene_prompt(raw: str, cis: List[int], story_text: str = "", emotion_beat: Optional[str] = None) -> str:
         cleaned = strip_collage_language(str(raw or ""))
         prefix = scene_integration_prefix(char_list, cis)
-        return f"{prefix}{cleaned}"
+        return f"{prefix}{cleaned}{emotion_lock_suffix(story_text, emotion_beat)}{anatomy_lock_suffix()}"
 
     # Fix book paths
     book = story.get("book")
@@ -1010,7 +1285,7 @@ def _ensure_story_paths_consistent_v2(
                     cis.append(idx)
         book["characters_in_scene"] = cis
         book["input_images"] = _build_input_images_for_scene(cis)
-        book["prompt"] = _finalize_scene_prompt(book.get("prompt", ""), cis)
+        book["prompt"] = _finalize_scene_prompt(book.get("prompt", ""), cis, book.get("title") or "", "focused")
         if not book.get("output_image"):
             book["output_image"] = "generated/book_cover.png"
 
@@ -1031,7 +1306,12 @@ def _ensure_story_paths_consistent_v2(
             )
             page["characters_in_scene"] = cis
             page["input_images"] = _build_input_images_for_scene(cis)
-            page["prompt"] = _finalize_scene_prompt(page.get("prompt", ""), cis)
+            page["prompt"] = _finalize_scene_prompt(
+                page.get("prompt", ""),
+                cis,
+                str(page.get("story") or ""),
+                page.get("emotion_beat"),
+            )
             if not page.get("output_image"):
                 page["output_image"] = f"generated/page_{page['page_number']}.png"
 
@@ -1096,9 +1376,9 @@ def generate_ebook_html_bundle_v2(
 
     # Model selection
     if model_provider and model_provider.lower() in ("openai", "oai", "gpt"):
-        model = model or "gpt-5.5-2026-04-23"
+        model = model or os.getenv("STORY_MODEL") or "gpt-5.6-terra"
     else:
-        model = model or "gemini-3-pro-preview"
+        model = model or os.getenv("STORY_MODEL") or "gemini-3.1-pro-preview"
 
     base_dir = Path(job_dir).resolve()
     base_dir.mkdir(parents=True, exist_ok=True)
@@ -1177,7 +1457,14 @@ def generate_ebook_html_bundle_v2(
         ) from e
 
     # Enforce V2 paths
-    story = _ensure_story_paths_consistent_v2(story, num_chars)
+    story = _ensure_story_paths_consistent_v2(story, num_chars, base_dir=base_dir)
+    story = _expand_short_page_stories(
+        story,
+        model_provider=model_provider,
+        model=model,
+        thinking_level=thinking_level,
+        seed=seed,
+    )
 
     # Save story_data.json
     story_json_path = str(base_dir / "story_data.json")
@@ -1224,6 +1511,7 @@ def generate_ebook_html_bundle_v2(
     _img_model = _img.get("model") or None
     _img_model_pages = _img.get("model_pages") or None
     _img_quality = _img.get("quality") or None
+    _img_quality_pages = _img.get("quality_pages") or os.getenv("IMAGE_QUALITY_PAGES") or None
     _img_size = _img.get("size") or None
 
     def _is_retryable_error(e: Exception) -> bool:
@@ -1255,9 +1543,17 @@ def generate_ebook_html_bundle_v2(
 
         max_attempts = int(os.getenv("IMAGE_MAX_ATTEMPTS") or "6")
         base_sleep_s = float(os.getenv("IMAGE_RETRY_BASE_SLEEP_S") or "2.0")
-        model_for_task = _img_model
-        if task_type == "page" and _img_model_pages:
+        is_print = (output_type or "").upper() == "LULU_BOOK"
+        if is_print:
+            model_for_task = _img.get("model_print") or _img_model
+            quality_for_task = _img.get("quality_print") or "high"
+        elif task_type == "character":
+            model_for_task = _img_model
+            quality_for_task = _img_quality or "high"
+        else:
+            # Digital cover/pages: cheaper SKU — flare + medium unless overridden.
             model_for_task = _img_model_pages
+            quality_for_task = _img_quality_pages or "medium"
 
         # Moderation blocks are deterministic for a given prompt: rewrite the scene to be
         # clearly wholesome (2 levels), then try the alternate provider before giving up.
@@ -1283,7 +1579,7 @@ def generate_ebook_html_bundle_v2(
                     image_labels=image_labels,
                     image_provider=provider_for_task,
                     image_model=model_for_task if provider_for_task == _img_provider else None,
-                    image_quality=_img_quality,
+                    image_quality=quality_for_task,
                     image_size=_img_size,
                     task_type=task_type,
                     output_type=output_type,
@@ -1345,15 +1641,18 @@ def generate_ebook_html_bundle_v2(
         is_invented = (char.get("source") or "") == "invented"
         if is_invented:
             sheet_label = (
-                f"Style and scale reference only. Do not copy this person's face. "
-                f"Create {name} as a new companion: {char.get('identity_card') or name}."
+                f"Empty studio plate only -- not a person. Do not copy any human face. "
+                f"Create {name} as a new companion: {char.get('identity_card') or name}. "
+                "Two panels of this companion only. Zero humans."
             )
         else:
             sheet_label = (
-                f"{name}'s real photograph — identity only. Photograph this same person "
-                f"as a single full-body costume reference, face pointing at the camera, "
-                f"both eyes visible. Relight them for the studio. "
-                f"No inset, no collage, no profile. Identity: {char.get('identity_card') or name}."
+                f"{name}'s real photograph — identity only. Build a two-panel identity sheet: "
+                f"LEFT a head-and-shoulders camera-facing close-up of this exact face with no "
+                f"hands in that panel, RIGHT a camera-facing full-body costume reference with "
+                f"exactly two hands at the sides. Same person, both eyes visible. Relight for "
+                f"the studio. No extra limbs, no floating hands, no profile, no 3/4, no back "
+                f"view. Identity: {char.get('identity_card') or name}."
             )
         phase1_tasks.append({
             "type": "character",
@@ -1373,20 +1672,33 @@ def generate_ebook_html_bundle_v2(
         if isinstance(char, dict):
             char_name_map[char.get("index", 0)] = char.get("name", "Unknown")
 
-    # Cover (costume sheets only -- face is embedded in the sheet)
+    def _labels_for_scene(cis: List[int]) -> List[str]:
+        labels: List[str] = []
+        for char_idx in cis:
+            cname = char_name_map.get(char_idx, f"Character {char_idx}")
+            char = next((c for c in characters if isinstance(c, dict) and c.get("index") == char_idx), None)
+            invented = bool(char and (char.get("source") or "") == "invented")
+            if not invented:
+                labels.append(
+                    f"IDENTITY close-up of {cname}. Face identity only -- do not use this "
+                    f"crop as body scale. Photograph this same face at a normal adult size "
+                    f"on a full torso, camera-facing, both eyes visible. Relight it to the "
+                    f"scene. Do not invent a side of the face."
+                )
+            labels.append(
+                f"COSTUME and body of {cname}. This sheet defines height, shoulder width, "
+                f"arm length, and outfit. Keep adult proportions: head about 1/7 of height, "
+                f"shoulders wider than the head. Face the camera with both eyes visible; "
+                f"relight face and clothes to match. Same person or companion, not a cutout."
+            )
+        return labels
+
+    # Cover: original face first (identity), then costume sheet (body)
     book = story.get("book")
     if isinstance(book, dict):
         cis = book.get("characters_in_scene") or list(range(1, num_chars + 1))
         cover_imgs = book.get("input_images") or []
-        # Build labels: natural-language description per character reference
-        cover_labels: List[str] = []
-        for i, char_idx in enumerate(cis, 1):
-            cname = char_name_map.get(char_idx, f"Character {char_idx}")
-            cover_labels.append(
-                f"{cname}'s costume and identity reference. Photograph {cname} inside the new scene; "
-                f"face the camera with both eyes visible; relight face and clothes to match the scene. "
-                f"Do not paste this image on top. Do not invent a side of the face."
-            )
+        cover_labels = _labels_for_scene(cis)
 
         phase2_tasks.append({
             "type": "cover",
@@ -1397,20 +1709,13 @@ def generate_ebook_html_bundle_v2(
             "image_labels": cover_labels,
         })
 
-    # Pages (costume sheets only -- face is embedded in the sheet)
+    # Pages: original face first (identity), then costume sheet (body)
     for page in (story.get("pages") or []):
         if not isinstance(page, dict):
             continue
         cis = page.get("characters_in_scene") or [1]
         page_imgs = page.get("input_images") or []
-        page_labels: List[str] = []
-        for i, char_idx in enumerate(cis, 1):
-            cname = char_name_map.get(char_idx, f"Character {char_idx}")
-            page_labels.append(
-                f"{cname}'s costume and identity reference. Photograph {cname} inside this page's scene; "
-                f"face the camera with both eyes visible; relight face and clothes to match. "
-                f"Same person or companion, not a cutout. Do not invent a side of the face."
-            )
+        page_labels = _labels_for_scene(cis)
 
         phase2_tasks.append({
             "type": "page",
@@ -1424,6 +1729,12 @@ def generate_ebook_html_bundle_v2(
 
     total_image_tasks = len(phase1_tasks) + len(phase2_tasks)
     images_done_counter = {"n": 0}
+    _write_image_manifest(
+        base_dir,
+        output_type=output_type,
+        tasks=phase1_tasks + phase2_tasks,
+        image_params=_img,
+    )
 
     _progress(
         "images_start",
@@ -1484,6 +1795,8 @@ def generate_ebook_html_bundle_v2(
             "elapsed_s": elapsed,
             "model": res.get("model"),
             "usage": res.get("usage"),
+            "cost": res.get("cost"),
+            "api_base": res.get("api_base"),
         }
 
     def _emit_image_ready(item: Dict[str, Any]) -> None:
@@ -1576,7 +1889,12 @@ def generate_ebook_html_bundle_v2(
         "output_type": output_type,
         "generated_count": len(generated),
         "generated": generated,
-        "cost": estimate_gemini_cost_usd(usage, pricing=pricing),
+        "cost": build_book_ai_cost(
+            story_model=model,
+            story_usage=usage,
+            story_cost=estimate_story_cost_usd(usage, model=model, pricing=pricing),
+            image_items=generated,
+        ),
         "pipeline_version": "v2",
         "num_characters": num_chars,
     }
@@ -1605,8 +1923,170 @@ def generate_ebook_html_bundle_v2(
         "pdf_s": t_pdf,
         "total_s": time.time() - t0,
     }
-    _progress("pipeline_done", {"timing": result["timing"]})
+    _write_image_manifest(
+        base_dir,
+        output_type=output_type,
+        tasks=phase1_tasks + phase2_tasks,
+        generated=generated,
+        image_params=_img,
+    )
+    _persist_ai_cost(base_dir, result["cost"], _progress)
+    _progress("pipeline_done", {"timing": result["timing"], "cost": result["cost"]})
 
+    return result
+
+
+def generate_print_edition_v2(
+    job_dir: str,
+    *,
+    progress_cb: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+    image_params: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Re-render cover + pages at print size and build Lulu PDFs.
+
+    Digital books stay at 1024. Do not send those files to the printer — this
+    regenerates the same saved prompts at ``IMAGE_SIZE_PRINT`` (2048) / high.
+    Character sheets are reused as identity refs and are not re-billed.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from imggen import image_generator, resolve_image_model, resolve_image_quality, resolve_image_size
+    from lulu_digi_book_maker import generate_lulu_pdfs
+
+    def _progress(stage: str, extra: Optional[Dict[str, Any]] = None) -> None:
+        payload = extra or {}
+        if progress_cb:
+            try:
+                progress_cb(stage, payload)
+            except Exception:
+                logger.exception("progress_cb failed for stage=%s", stage)
+
+    base_dir = Path(job_dir)
+    manifest_path = base_dir / "image_manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"Missing image_manifest.json in {base_dir}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    params = dict(manifest)
+    params.update(image_params or {})
+    print_size = resolve_image_size("LULU_BOOK", (image_params or {}).get("size"))
+    model = resolve_image_model("cover", params.get("model"), "LULU_BOOK")
+    quality = resolve_image_quality("cover", params.get("quality") or "high", "LULU_BOOK")
+    print_dir = base_dir / "generated_print"
+    print_dir.mkdir(parents=True, exist_ok=True)
+
+    tasks = [
+        t for t in (manifest.get("tasks") or [])
+        if isinstance(t, dict) and (t.get("type") or "") in ("cover", "page")
+    ]
+    if not tasks:
+        raise RuntimeError("image_manifest.json has no cover/page tasks to print")
+
+    _progress("print_images_start", {"count": len(tasks), "size": print_size, "model": model})
+    generated: List[Dict[str, Any]] = []
+    max_workers = int(os.getenv("IMAGE_CONCURRENCY") or "10")
+
+    def _run_one(task: Dict[str, Any]) -> Dict[str, Any]:
+        rel_inputs = [str(p) for p in (task.get("input_images") or [])]
+        abs_inputs = _to_abs_paths(base_dir=base_dir, rel_paths=rel_inputs)
+        rel_out = str(task.get("output_image") or "")
+        out_name = Path(rel_out).name or "page.png"
+        abs_out = str((print_dir / out_name).resolve())
+        existing = Path(abs_out)
+        if existing.exists():
+            try:
+                from PIL import Image
+                with Image.open(existing) as im:
+                    if min(im.size) >= 1800:
+                        return {
+                            "name": task.get("name"),
+                            "type": task.get("type"),
+                            "page_number": task.get("page_number"),
+                            "output_image": f"generated_print/{out_name}",
+                            "saved_path": abs_out,
+                            "skipped": True,
+                            "model": model,
+                        }
+            except Exception:
+                pass
+        res = image_generator(
+            prompt=str(task.get("prompt") or ""),
+            image_filenames=abs_inputs,
+            output_filename=abs_out,
+            image_labels=task.get("image_labels"),
+            image_model=model,
+            image_quality=quality,
+            image_size=print_size,
+            task_type=task.get("type"),
+            output_type="LULU_BOOK",
+        )
+        return {
+            "name": task.get("name"),
+            "type": task.get("type"),
+            "page_number": task.get("page_number"),
+            "output_image": f"generated_print/{out_name}",
+            "saved_path": (res.get("images") or [abs_out])[0],
+            "model": res.get("model") or model,
+            "usage": res.get("usage"),
+            "cost": res.get("cost"),
+            "api_base": res.get("api_base"),
+        }
+
+    errors: List[str] = []
+    failed_tasks: List[Dict[str, Any]] = []
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futs = {ex.submit(_run_one, task): task for task in tasks}
+        for fut in as_completed(futs):
+            task = futs[fut]
+            try:
+                item = fut.result()
+                generated.append(item)
+                _progress("print_image_ready", {"name": item.get("name"), "page_number": item.get("page_number")})
+            except Exception as e:
+                failed_tasks.append(task)
+                errors.append(f"{task.get('name')}: {e}")
+    if failed_tasks:
+        logger.warning("Retrying %d failed print images serially", len(failed_tasks))
+        still_failed: List[str] = []
+        for task in failed_tasks:
+            try:
+                time.sleep(3)
+                item = _run_one(task)
+                generated.append(item)
+                _progress("print_image_ready", {"name": item.get("name"), "page_number": item.get("page_number")})
+            except Exception as e:
+                still_failed.append(f"{task.get('name')}: {e}")
+        errors = still_failed
+    if errors:
+        raise RuntimeError("Print image generation failed: " + " | ".join(errors[:5]))
+
+    story_json_path = str(base_dir / "story_data.json")
+    pdf_result = generate_lulu_pdfs(
+        story_data_path=story_json_path,
+        images_dir=str(print_dir),
+        output_dir=str(base_dir / "book_outputs"),
+        output_type="LULU_BOOK",
+        upload_outputs=False,
+    )
+    interior_path, cover_path = pdf_result
+    result = {
+        "job_dir": str(base_dir),
+        "output_type": "LULU_BOOK",
+        "print_size": print_size,
+        "model": model,
+        "quality": quality,
+        "generated_count": len(generated),
+        "generated": generated,
+        "interior_pdf_path": str(interior_path) if interior_path else None,
+        "cover_pdf_path": str(cover_path) if cover_path else None,
+        "images_dir": str(print_dir),
+    }
+    (base_dir / "print_result.json").write_text(json.dumps({
+        k: v for k, v in result.items() if k != "generated"
+    }, indent=2), encoding="utf-8")
+    _progress("print_edition_done", {
+        "interior_pdf_path": result["interior_pdf_path"],
+        "cover_pdf_path": result["cover_pdf_path"],
+        "count": len(generated),
+    })
     return result
 
 

@@ -155,6 +155,10 @@ def admin_config() -> Dict[str, Any]:
             # Ordered failover chain (e.g. LaoZhang -> api.openai.com) without exposing keys.
             "endpoints": _image_endpoint_summary(),
             "quality": os.getenv("IMAGE_QUALITY") or _imggen.DEFAULT_IMAGE_QUALITY,
+            "qualityDigital": os.getenv("IMAGE_QUALITY_PAGES") or _imggen.DEFAULT_IMAGE_QUALITY_PAGES,
+            "qualityPrint": os.getenv("IMAGE_QUALITY_PRINT") or _imggen.DEFAULT_IMAGE_QUALITY_PRINT,
+            "modelDigitalPages": _imggen.resolve_image_model("page", None, "DIGI_BOOK"),
+            "modelPrint": _imggen.resolve_image_model("cover", None, "LULU_BOOK"),
             "sizeDigital": _imggen.resolve_image_size("DIGI_BOOK"),
             "sizePrint": _imggen.resolve_image_size("LULU_BOOK"),
             "resolution": os.getenv("IMAGE_RESOLUTION") or None,
@@ -162,8 +166,8 @@ def admin_config() -> Dict[str, Any]:
             "concurrency": os.getenv("IMAGE_CONCURRENCY") or None,
         },
         "story": {
-            "provider": os.getenv("STORY_MODEL_PROVIDER") or os.getenv("MODEL_PROVIDER") or "gemini",
-            "model": os.getenv("STORY_MODEL") or os.getenv("MODEL") or None,
+            "provider": os.getenv("STORY_MODEL_PROVIDER") or os.getenv("MODEL_PROVIDER") or "openai",
+            "model": os.getenv("STORY_MODEL") or os.getenv("MODEL") or "gpt-5.6-terra",
         },
         "keys": {
             "laozhang": bool(os.getenv("LAOZHANG_API_KEY") or os.getenv("API_KEY_LAOZHANG")),
@@ -953,11 +957,15 @@ def _run_ebook_job(
             _publish_image(extra)
             _update_stage(stage, {"done": extra.get("done"), "total": extra.get("total"), "name": extra.get("name")})
             return
+        if stage == "ai_cost_ready":
+            _JOBS[job_id]["cost"] = extra
+            _update_stage(stage, {"total_usd": extra.get("total_usd")})
+            return
         _update_stage(stage, extra)
         if stage in (
             "story_generation_start", "images_start", "images_phase_start", "images_phase_done",
-            "images_done", "pdf_generation_start", "pdf_generation_done", "upload_start",
-            "upload_done", "email_done", "email_failed",
+            "images_done", "pdf_generation_start", "pdf_generation_done", "ai_cost_ready",
+            "upload_start", "upload_done", "email_done", "email_failed",
         ):
             state.append_stage(stage, extra)
 
@@ -1186,6 +1194,15 @@ def _run_ebook_job(
 
         _JOBS[job_id]["status"] = "succeeded"
         _JOBS[job_id]["result"] = result
+        cost = result.get("cost") or {}
+        logger.info(
+            "job_id=%s ai_cost_total usd=%s story=%s images=%s calls=%s",
+            job_id,
+            cost.get("total_usd"),
+            (cost.get("story") or {}).get("usd"),
+            (cost.get("images") or {}).get("usd"),
+            (cost.get("images") or {}).get("count"),
+        )
         _gcs_write_json(job_id=job_id, name="status.json", payload={"job_id": job_id, "status": "succeeded", "result": result})
         state.succeeded(
             timing=result.get("timing"),
@@ -1451,6 +1468,7 @@ def get_job(job_id: str) -> JSONResponse:
         result.setdefault("images_total", job.get("images_total"))
         result.setdefault("created_at", job.get("created_at"))
         result.setdefault("project_id", job.get("project_id"))
+        result.setdefault("cost", job.get("cost") or (job.get("result") or {}).get("cost"))
         local_urls: Dict[str, str] = {}
         if result.get("html_path") and Path(str(result["html_path"])).exists():
             local_urls["html"] = f"/jobs/{job_id}/storybook.html?inline=true"
@@ -1474,6 +1492,7 @@ def get_job(job_id: str) -> JSONResponse:
                 "images": job.get("images") or {},
                 "images_done": job.get("images_done"),
                 "images_total": job.get("images_total"),
+                "cost": job.get("cost"),
             }
         )
 
@@ -1494,6 +1513,7 @@ def get_job(job_id: str) -> JSONResponse:
             "images": job.get("images") or {},
             "images_done": job.get("images_done"),
             "images_total": job.get("images_total"),
+            "cost": job.get("cost"),
         }
     )
 
@@ -1630,6 +1650,7 @@ async def generate_ebook_async(
     image_model: Optional[str] = Form(None),
     image_model_pages: Optional[str] = Form(None),
     image_quality: Optional[str] = Form(None),
+    image_quality_pages: Optional[str] = Form(None),
     image_size: Optional[str] = Form(None),
 ) -> JSONResponse:
     """
@@ -1800,6 +1821,7 @@ async def generate_ebook_async(
             "model": image_model,
             "model_pages": image_model_pages,
             "quality": image_quality,
+            "quality_pages": image_quality_pages,
             "size": image_size,
         }.items()
         if isinstance(v, str) and v.strip()
@@ -1860,6 +1882,49 @@ async def generate_ebook_async(
             "project_id": project_id_clean,
         }
     )
+
+
+@app.post("/jobs/{job_id}/render-print")
+def render_print_edition(job_id: str) -> JSONResponse:
+    """Re-render a finished digital book at 2048 high and build Lulu print PDFs.
+
+    Use this when the customer later orders a hardcover. Do not send 1024 digital
+    images to the printer.
+    """
+    job = _JOBS.get(job_id) or {}
+    job_dir = Path(job.get("job_dir") or (_jobs_root() / job_id))
+    if not job_dir.exists():
+        raise HTTPException(status_code=404, detail="Job directory not found")
+    if not (job_dir / "image_manifest.json").exists():
+        raise HTTPException(
+            status_code=409,
+            detail="Job has no image_manifest.json; only v2 books can be printed later",
+        )
+    if job:
+        if job.get("print_status") in ("queued", "running"):
+            return JSONResponse({"job_id": job_id, "print_status": job.get("print_status")})
+        job["print_status"] = "queued"
+        _persist_job_state(job_id)
+
+    def _run() -> None:
+        try:
+            if job:
+                job["print_status"] = "running"
+                _persist_job_state(job_id)
+            result = story_api.generate_print_edition_v2(str(job_dir))
+            if job:
+                job["print_status"] = "succeeded"
+                job["print_result"] = result
+                _persist_job_state(job_id)
+        except Exception as e:
+            logger.exception("print render failed job_id=%s", job_id)
+            if job:
+                job["print_status"] = "failed"
+                job["print_error"] = str(e)[:800]
+                _persist_job_state(job_id)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return JSONResponse({"job_id": job_id, "print_status": "queued"})
 
 
 @app.get("/jobs/{job_id}/storybook.html")

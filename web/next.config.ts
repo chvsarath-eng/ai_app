@@ -7,6 +7,18 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        source: '/gallery/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }
+        ]
+      },
+      {
+        source: '/Gallery_books/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=604800' }
+        ]
+      },
+      {
         source: '/:path*',
         headers: [
           {

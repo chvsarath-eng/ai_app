@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { getSessionUser } from '@/lib/session'
 import { canUserAccessProject, getProject } from '@/lib/projects-server'
-import { startProjectGeneration } from '@/lib/start-generation'
+import { startProjectGeneration, startProjectPrintEdition } from '@/lib/start-generation'
 
 export const runtime = 'nodejs'
 
@@ -25,6 +25,19 @@ export async function POST (
     const paid = project.status === 'paid' || project.status === 'failed' || Boolean(project.payment?.paymentId)
     if (!paid && !user.isAdmin) {
       return NextResponse.json({ error: 'Payment is required before generation can start' }, { status: 402 })
+    }
+
+    if (project.outputType === 'LULU_BOOK' && project.jobId && project.status === 'ready') {
+      const printResult = await startProjectPrintEdition(projectId)
+      if (!printResult.ok) {
+        return NextResponse.json({ error: printResult.error }, { status: 409 })
+      }
+      return NextResponse.json({
+        ok: true,
+        jobId: printResult.jobId,
+        alreadyStarted: printResult.alreadyStarted,
+        printUpgrade: true
+      })
     }
 
     const result = await startProjectGeneration(projectId)

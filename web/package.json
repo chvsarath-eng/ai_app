@@ -34,7 +34,6 @@
     "nodemailer": "^7.0.12",
     "razorpay": "^2.9.8",
     "react": "19.2.3",
-    "react-cookie-consent": "^10.0.1",
     "react-dom": "19.2.3",
     "react-hook-form": "^7.69.0",
     "stripe": "^22.6.2",

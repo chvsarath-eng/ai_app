@@ -31,19 +31,42 @@ const R3FBookPreview = dynamic(
 export function DemoLoop ({ className }: { className?: string }) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const [isReceded, setIsReceded] = useState(false)
+  const [isInView, setIsInView] = useState(true)
+  const [isPageVisible, setIsPageVisible] = useState(true)
+  const isActive = isInView && isPageVisible
 
   useEffect(() => {
-    // Use scroll position for faster, more sensitive recede trigger
     const handleScroll = () => {
-      // Recede as soon as user scrolls more than 40px — very sensitive
       setIsReceded(window.scrollY > 40)
     }
 
-    // Initial check
     handleScroll()
-
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  useEffect(() => {
+    const node = rootRef.current
+    if (!node) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsInView(Boolean(entry?.isIntersecting && entry.intersectionRatio >= 0.2))
+      },
+      { threshold: [0, 0.2, 0.5] }
+    )
+    observer.observe(node)
+
+    const handleVisibility = () => {
+      setIsPageVisible(document.visibilityState === 'visible')
+    }
+    handleVisibility()
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      observer.disconnect()
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [])
 
   return (
@@ -53,13 +76,13 @@ export function DemoLoop ({ className }: { className?: string }) {
         // No "card" container — just floating preview in the hero.
         // Keep the preview area size, but clip overflow so it never
         // spills into the form on the right.
-        'relative overflow-hidden bg-[var(--md-surface)]',
+        'relative h-full min-h-[360px] overflow-hidden bg-[var(--md-surface)] sm:min-h-0',
         className
       )}
       aria-label="Live 3D preview"
     >
       {/* Give the book real vertical space — increased for larger book */}
-      <div className="h-[340px] w-full sm:h-[420px] lg:h-[520px]" />
+      <div className="h-full min-h-[360px] w-full sm:h-[420px] sm:min-h-0 lg:h-[520px]" />
       <div className="absolute inset-0">
         {/* Very subtle halo so white pages don't merge into the page background */}
         <div
@@ -71,7 +94,7 @@ export function DemoLoop ({ className }: { className?: string }) {
         />
 
         <div className="h-full w-full -translate-x-3 sm:-translate-x-6">
-          <R3FBookPreview isReceded={isReceded} />
+          <R3FBookPreview isReceded={isReceded} isActive={isActive} />
         </div>
       </div>
     </div>

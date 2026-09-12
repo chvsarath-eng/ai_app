@@ -55,9 +55,23 @@ export async function startProjectGeneration (projectId: string): Promise<StartG
     form.append('output_type', project.outputType || 'DIGI_BOOK')
     form.append('keep_job_dir', 'false')
     form.append('project_id', project.id)
+    form.append('model_provider', settings.story.provider || 'openai')
+    form.append('model', settings.story.model || 'gpt-5.6-terra')
     for (const uri of uris) form.append('image_gcs_uris', uri)
+    const isHardcover = project.outputType === 'LULU_BOOK'
     if (settings.images.model) form.append('image_model', settings.images.model)
-    if (settings.images.modelPages) form.append('image_model_pages', settings.images.modelPages)
+    if (isHardcover) {
+      const printModel = settings.images.model || settings.images.modelPages
+      if (printModel) form.append('image_model_pages', printModel)
+      form.append('image_quality', 'high')
+      form.append('image_quality_pages', 'high')
+      if (settings.images.sizePrint) form.append('image_size', settings.images.sizePrint)
+    } else {
+      if (settings.images.modelPages) form.append('image_model_pages', settings.images.modelPages)
+      form.append('image_quality', 'high')
+      form.append('image_quality_pages', 'medium')
+      if (settings.images.sizeDigital) form.append('image_size', settings.images.sizeDigital)
+    }
 
     const headers = await getStoryAuthHeaders()
     const res = await fetch(`${getStoryServiceUrl()}/generate-ebook-async`, {
@@ -93,6 +107,44 @@ export async function startProjectGeneration (projectId: string): Promise<StartG
     const message = err instanceof Error ? err.message : 'Failed to start generation'
     console.error('startProjectGeneration error', projectId, err)
     await upsertProject(projectId, { startError: message })
+    return { ok: false, error: message }
+  }
+}
+
+/**
+ * Re-render a finished digital book at print size. Used when the customer
+ * later orders a hardcover — do not send the 1024 digital files to Lulu.
+ */
+export async function startProjectPrintEdition (projectId: string): Promise<StartGenerationResult> {
+  const project = await getProject(projectId)
+  if (!project) return { ok: false, error: 'Project not found' }
+  if (!project.jobId) return { ok: false, error: 'This book has no generated job to print' }
+
+  if (project.printStatus === 'queued' || project.printStatus === 'running' || project.printStatus === 'succeeded') {
+    return { ok: true, jobId: project.jobId, alreadyStarted: true }
+  }
+
+  try {
+    const headers = await getStoryAuthHeaders()
+    const res = await fetch(`${getStoryServiceUrl()}/jobs/${encodeURIComponent(project.jobId)}/render-print`, {
+      method: 'POST',
+      headers
+    })
+    const text = await res.text()
+    if (!res.ok) {
+      const message = text.slice(0, 400) || `Story service returned ${res.status}`
+      await upsertProject(projectId, { printStatus: 'failed', printError: message })
+      return { ok: false, error: message }
+    }
+    await upsertProject(projectId, {
+      printStatus: 'queued',
+      printError: null,
+      outputType: 'LULU_BOOK'
+    })
+    return { ok: true, jobId: project.jobId }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to start print render'
+    await upsertProject(projectId, { printStatus: 'failed', printError: message })
     return { ok: false, error: message }
   }
 }

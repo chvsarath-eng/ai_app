@@ -60,7 +60,16 @@
   transition: transform 0.9s ease;
   animation: bookSpin 22s ease-in-out infinite;
   animation-delay: calc(var(--i) * -2.2s);
-  will-change: transform;
+}
+
+.galleryPaused .book {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .book {
+    animation: none;
+  }
 }
 
 .bookContainer:hover {
@@ -134,8 +143,10 @@
 .cover {
   width: 100%;
   height: 100%;
+  background-color: var(--book-bg);
   background-size: cover;
   background-position: center;
+  background-repeat: no-repeat;
   position: relative;
 }
 
@@ -157,10 +168,14 @@
   content: '';
   position: absolute;
   inset: 0;
-  background-image: url('https://www.transparenttextures.com/patterns/felt.png');
-  opacity: 0.1;
-  mix-blend-mode: multiply;
+  background-image: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    transparent 40%,
+    rgba(0, 0, 0, 0.08) 100%
+  );
   z-index: 1;
+  pointer-events: none;
 }
 
 .modalOverlay {

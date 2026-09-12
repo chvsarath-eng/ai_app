@@ -1,15 +1,20 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import Script from 'next/script'
 import './globals.css'
 import { Providers } from '@/app/providers'
 import { SiteHeader } from '@/components/site-header'
 import { Footer } from '@/components/footer'
-import { CookieConsentBanner } from '@/components/cookie-consent'
 
 const GA_ID = 'G-Q12Z62SK1Q'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover'
+}
 
 export const metadata: Metadata = {
   title: {
@@ -166,7 +171,6 @@ export default function RootLayout({
             {children}
           </main>
           <Footer />
-          <CookieConsentBanner />
         </Providers>
       </body>
       {/* Google Analytics with Consent Mode */}
@@ -179,9 +183,8 @@ export default function RootLayout({
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
           
-          // Default consent to denied (GDPR compliant)
           gtag('consent', 'default', {
-            'analytics_storage': 'denied'
+            'analytics_storage': 'granted'
           });
           
           gtag('js', new Date());

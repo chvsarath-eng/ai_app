@@ -15,7 +15,7 @@ export function SiteHeader ({ className }: { className?: string }) {
   return (
     <header
       className={cn(
-        'sticky top-3 z-50',
+        'sticky top-[max(0.75rem,env(safe-area-inset-top))] z-50',
         className
       )}
     >
