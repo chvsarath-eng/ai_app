@@ -5,7 +5,7 @@ export function Footer () {
   const currentYear = new Date().getFullYear()
 
   return (
-    <footer className="border-t border-zinc-200/70 bg-zinc-50/50 py-12">
+    <footer className="[overflow-anchor:none] border-t border-zinc-200/70 bg-zinc-50/50 py-12">
       <div className="mx-auto max-w-screen-2xl px-4 sm:px-6 lg:px-10">
         {/* Main Footer Content */}
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
