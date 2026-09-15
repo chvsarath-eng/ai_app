@@ -19,6 +19,8 @@ import { PageHeader, Accent } from '@/components/page-header'
 import { ShippingForm } from '@/components/checkout/shipping-form'
 import { DeliveryOptions } from '@/components/checkout/delivery-options'
 import { OrderSummary } from '@/components/checkout/order-summary'
+import { useLocalizedPrices } from '@/lib/use-localized-prices'
+import { formatMinor, usdMajorToMinor } from '@/lib/money'
 
 export interface ShippingOption {
   level: string
@@ -52,6 +54,7 @@ export default function CheckoutPage () {
   const hasHandledReturnRef = useRef(false)
 
   const isHardcover = store.outputType === 'LULU_BOOK'
+  const { prices } = useLocalizedPrices()
 
   useEffect(() => {
     let isCancelled = false
@@ -418,7 +421,7 @@ export default function CheckoutPage () {
         body: JSON.stringify({
           email: effectiveEmail,
           outputType: store.outputType,
-          currency: 'INR',
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           shippingCost: store.shippingCost || 0,
           formData: {
             characters: store.characters,
@@ -469,7 +472,7 @@ export default function CheckoutPage () {
       await openRazorpayCheckout({
         key: orderData.keyId,
         amount: orderData.amount,
-        currency: orderData.currency || 'INR',
+        currency: orderData.currency || prices.currencyCode,
         name: 'img2x',
         description: isHardcover ? 'Personalized Hardcover Storybook' : 'Personalized Digital Storybook',
         order_id: orderData.orderId,
@@ -639,6 +642,12 @@ export default function CheckoutPage () {
                 shippingOptions={shippingOptions}
                 selectedShipping={selectedShipping}
                 onSelectShipping={handleSelectShipping}
+                formatCost={(usd) => formatMinor(
+                  usdMajorToMinor(usd, { usdToLocal: prices.usdToLocal, exponent: prices.exponent }),
+                  prices.currencyCode,
+                  prices.locale,
+                  prices.exponent
+                )}
               />
 
               {!selectedShipping && !shippingLoading && isAddressComplete && (
@@ -675,9 +684,9 @@ export default function CheckoutPage () {
                 isSubmitting={isSubmitting}
                 isCheckoutOpen={false}
                 canPlaceOrder={canPlaceOrder}
-                currency="INR"
-                ctaLabel="Pay with Razorpay"
-                submittingLabel="Opening Razorpay..."
+                prices={prices}
+                ctaLabel="Pay now"
+                submittingLabel="Opening payment..."
                 onPlaceOrder={handlePlaceOrder}
               />
             </div>

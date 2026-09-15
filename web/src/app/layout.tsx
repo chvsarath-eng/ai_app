@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     default: 'img2x - AI Personalized Storybooks with 4K Images | Turn Photos into Stories',
     template: '%s | img2x'
   },
-  description: 'Create personalized storybooks with AI-generated 4K illustrations. Turn photos into stories for kids, couples, pets, retirement, anniversaries & more. Digital $14.99, Hardcover $39.99. Fast delivery.',
+  description: 'Create personalized storybooks with AI-generated 4K illustrations. Turn photos into stories for kids, couples, pets, retirement, anniversaries & more. Priced in your local currency. Fast delivery.',
   keywords: [
     // Primary keywords
     'personalized storybooks',
@@ -103,7 +103,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'img2x - Turn Photos into AI Storybooks | Kids, Couples, Pets & More',
-    description: 'Create personalized storybooks for anyone: children, couples, pets, retirement, anniversaries. Ultra-realistic 4K AI illustrations. Digital $14.99, Hardcover $39.99.',
+    description: 'Create personalized storybooks for anyone: children, couples, pets, retirement, anniversaries. Ultra-realistic 4K AI illustrations. Priced in your local currency.',
     url: 'https://img2x.com',
     siteName: 'img2x',
     images: [

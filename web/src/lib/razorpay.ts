@@ -1,12 +1,19 @@
 import crypto from 'crypto'
 import Razorpay from 'razorpay'
 
+import {
+  getBookPriceMinor,
+  INR_DIGITAL_MINOR,
+  INR_HARDCOVER_MINOR,
+  USD_DIGITAL_MINOR,
+  USD_HARDCOVER_MINOR
+} from '@/lib/geo-pricing'
+
 export const RAZORPAY_AMOUNTS = {
-  // Minor units: for INR 100 paise = 1 INR, for USD 100 cents = 1 USD
-  DIGITAL_INR_MINOR: 79900, // ₹799
-  HARDCOVER_INR_MINOR: 299900, // ₹2,999
-  DIGITAL_USD_MINOR: 999, // $9.99
-  HARDCOVER_USD_MINOR: 3999 // $39.99
+  DIGITAL_INR_MINOR: INR_DIGITAL_MINOR,
+  HARDCOVER_INR_MINOR: INR_HARDCOVER_MINOR,
+  DIGITAL_USD_MINOR: USD_DIGITAL_MINOR,
+  HARDCOVER_USD_MINOR: USD_HARDCOVER_MINOR
 }
 
 export function getRazorpayKeyId (): string {
@@ -99,15 +106,7 @@ export function verifyRazorpayWebhookSignature ({
 
 export function getProductPriceMinor (
   outputType: 'DIGI_BOOK' | 'LULU_BOOK',
-  currency = 'INR'
+  currency = 'USD'
 ): number {
-  const isINR = currency.toUpperCase() === 'INR'
-  if (outputType === 'LULU_BOOK') {
-    return isINR
-      ? Number(process.env.RAZORPAY_AMOUNT_HARDCOVER_INR || RAZORPAY_AMOUNTS.HARDCOVER_INR_MINOR)
-      : Number(process.env.RAZORPAY_AMOUNT_HARDCOVER_USD || RAZORPAY_AMOUNTS.HARDCOVER_USD_MINOR)
-  }
-  return isINR
-    ? Number(process.env.RAZORPAY_AMOUNT_DIGITAL_INR || RAZORPAY_AMOUNTS.DIGITAL_INR_MINOR)
-    : Number(process.env.RAZORPAY_AMOUNT_DIGITAL_USD || RAZORPAY_AMOUNTS.DIGITAL_USD_MINOR)
+  return getBookPriceMinor(outputType, currency)
 }

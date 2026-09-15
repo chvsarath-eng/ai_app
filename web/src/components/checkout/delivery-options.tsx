@@ -12,6 +12,7 @@ interface DeliveryOptionsProps {
   shippingOptions: ShippingOption[]
   selectedShipping: ShippingOption | null
   onSelectShipping: (option: ShippingOption) => void
+  formatCost?: (usdAmount: number) => string
 }
 
 export function DeliveryOptions ({
@@ -20,7 +21,8 @@ export function DeliveryOptions ({
   shippingError,
   shippingOptions,
   selectedShipping,
-  onSelectShipping
+  onSelectShipping,
+  formatCost = (usd) => `$${usd.toFixed(2)}`
 }: DeliveryOptionsProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
@@ -76,7 +78,7 @@ export function DeliveryOptions ({
             </h2>
             {hasSelection && selectedShipping ? (
               <p className="mt-0.5 truncate text-xs text-zinc-600 sm:text-sm">
-                {selectedShipping.description} · ${selectedShipping.shipping_cost.toFixed(2)}
+                {selectedShipping.description} · {formatCost(selectedShipping.shipping_cost)}
               </p>
             ) : isDisabled ? (
               <p className="text-xs sm:text-sm text-zinc-400 mt-0.5">
@@ -175,7 +177,7 @@ export function DeliveryOptions ({
                     </div>
                   </div>
                   <p className="text-sm sm:text-base font-semibold text-zinc-900 shrink-0 ml-2">
-                    ${option.shipping_cost.toFixed(2)}
+                    {formatCost(option.shipping_cost)}
                   </p>
                 </label>
               ))}

@@ -21,9 +21,12 @@ import { PageHeader, Accent } from '@/components/page-header'
 import { cn } from '@/lib/utils'
 import { trackEvent } from '@/lib/analytics'
 import { StorylineInput } from '@/components/generator-card/storyline-input'
+import { StorylineSuggestions } from '@/components/generator-card/storyline-suggestions'
 import { GenerateButton } from '@/components/generator-card/generate-button'
 import { PaymentSuccess } from '@/components/generator-card/payment-success'
 import { CharacterCard } from '@/components/generator-card/character-card'
+import { STORYLINE_MAX } from '@/lib/story-suggestions'
+import { LocalizedPrice } from '@/components/localized-price'
 
 const characterSchema = z.object({
   imageFile: z.instanceof(File, { message: 'Please upload a photo' }),
@@ -35,7 +38,7 @@ const characterSchema = z.object({
 
 const formSchema = z.object({
   characters: z.array(characterSchema).min(1, 'At least one character is required').max(4, 'Maximum 4 characters'),
-  storyline: z.string().trim().min(1, 'Storyline is required').max(180, 'Keep it under 180 characters'),
+  storyline: z.string().trim().min(1, 'Storyline is required').max(STORYLINE_MAX, 'That story is a bit long — try shortening it a little.'),
   outputType: z.enum(outputTypes, { message: 'Please select a book type' })
 }).superRefine((data, ctx) => {
   if (data.characters.length > 1) {
@@ -187,7 +190,10 @@ export function CreatePageContent () {
     )
   }
 
-  const hasAnyPhoto = form.watch('characters')?.some((c) => c?.imageFile)
+  const watchedCharacters = form.watch('characters')
+  const hasAnyPhoto = watchedCharacters?.some((c) => c?.imageFile)
+  const characterNames = (watchedCharacters || []).map((c) => c?.name || '').filter(Boolean)
+  const storylineValue = form.watch('storyline') || ''
 
   return (
     <div className="py-10 sm:py-14">
@@ -249,13 +255,21 @@ export function CreatePageContent () {
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2" htmlFor="storyline">
                     <Wand2 className="h-4 w-4 text-zinc-500" aria-hidden="true" />
-                    Storyline
+                    Your story
                   </Label>
                   <StorylineInput
                     id="storyline"
-                    placeholder="e.g. A curious kid discovers a secret door to space…"
+                    roomy
+                    placeholder="Who is the hero, and what happens? Write a line or the whole story. Or tap a starter below."
                     isDisabled={createJobMutation.isPending}
                     {...form.register('storyline')}
+                    value={storylineValue}
+                  />
+                  <StorylineSuggestions
+                    names={characterNames}
+                    value={storylineValue}
+                    disabled={createJobMutation.isPending}
+                    onSelect={(next) => form.setValue('storyline', next, { shouldDirty: true, shouldValidate: true })}
                   />
                   {form.formState.errors.storyline?.message
                     ? (
@@ -293,7 +307,9 @@ export function CreatePageContent () {
                             <span className="text-sm font-semibold text-zinc-900">Digital Book</span>
                           </div>
                           <p className="mt-0.5 text-xs text-zinc-500">HTML flipbook</p>
-                          <p className="mt-1 text-base font-bold text-violet-600">₹799</p>
+                          <p className="mt-1 text-base font-bold text-violet-600">
+                            <LocalizedPrice kind="digital" />
+                          </p>
                           {form.watch('outputType') === 'DIGI_BOOK' && (
                             <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-violet-500 text-white">
                               <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">
@@ -324,7 +340,9 @@ export function CreatePageContent () {
                             <span className="text-sm font-semibold text-zinc-900">Hardcover</span>
                           </div>
                           <p className="mt-0.5 text-xs text-zinc-500">8.5×8.5" printed</p>
-                          <p className="mt-1 text-base font-bold text-emerald-600">₹2,999</p>
+                          <p className="mt-1 text-base font-bold text-emerald-600">
+                            <LocalizedPrice kind="hardcover" />
+                          </p>
                           {form.watch('outputType') === 'LULU_BOOK' && (
                             <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white">
                               <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">
