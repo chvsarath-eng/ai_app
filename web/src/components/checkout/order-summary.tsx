@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import type { CheckoutData } from '@/lib/checkout-store'
 import type { ShippingOption } from '@/app/checkout/page'
+import type { LocalizedPricesPayload } from '@/lib/geo-pricing'
+import { formatMinor, usdMajorToMinor } from '@/lib/money'
+import { DEFAULT_LOCALIZED_PRICES } from '@/lib/use-localized-prices'
 
 interface OrderSummaryProps {
   store: CheckoutData
@@ -14,7 +17,7 @@ interface OrderSummaryProps {
   canPlaceOrder: boolean
   ctaLabel?: string
   submittingLabel?: string
-  currency?: string
+  prices: LocalizedPricesPayload
   onPlaceOrder: () => void
 }
 
@@ -24,17 +27,20 @@ export function OrderSummary ({
   isSubmitting,
   isCheckoutOpen,
   canPlaceOrder,
-  ctaLabel = 'Pay with Razorpay',
-  submittingLabel = 'Opening Razorpay...',
-  currency = 'INR',
+  ctaLabel = 'Pay now',
+  submittingLabel = 'Opening payment...',
+  prices = DEFAULT_LOCALIZED_PRICES,
   onPlaceOrder
 }: OrderSummaryProps) {
   const isHardcover = store.outputType === 'LULU_BOOK'
-  const isINR = currency.toUpperCase() === 'INR'
-  const bookPrice = isHardcover ? (isINR ? 2999 : 39.99) : (isINR ? 799 : 9.99)
-  const shippingCost = isHardcover ? (selectedShipping?.shipping_cost || 0) : 0
-  const subtotal = bookPrice + shippingCost
-  const currencySymbol = isINR ? '₹' : '$'
+  const bookMinor = isHardcover ? prices.hardcover.priceRaw : prices.digital.priceRaw
+  const shippingUsd = isHardcover ? (selectedShipping?.shipping_cost || 0) : 0
+  const shippingMinor = usdMajorToMinor(shippingUsd, {
+    usdToLocal: prices.usdToLocal,
+    exponent: prices.exponent
+  })
+  const subtotalMinor = bookMinor + shippingMinor
+  const format = (minor: number) => formatMinor(minor, prices.currencyCode, prices.locale, prices.exponent)
 
   const characterNames = store.characters.map((c) => c.name).filter(Boolean)
   const featuredNames = characterNames.length > 0
@@ -131,13 +137,13 @@ export function OrderSummary ({
             <span className="text-zinc-600">
               {isHardcover ? 'Hardcover' : 'Digital Book'}
             </span>
-            <span className="font-semibold text-zinc-900">{currencySymbol}{bookPrice.toLocaleString()}</span>
+            <span className="font-semibold text-zinc-900">{format(bookMinor)}</span>
           </div>
           {isHardcover && (
             <div className="mt-2 flex items-center justify-between">
               <span className="text-zinc-600">Shipping</span>
               {selectedShipping ? (
-                <span className="font-semibold text-zinc-900">{currencySymbol}{shippingCost.toLocaleString()}</span>
+                <span className="font-semibold text-zinc-900">{format(shippingMinor)}</span>
               ) : (
                 <span className="text-zinc-400 text-xs italic">Select delivery</span>
               )}
@@ -152,11 +158,15 @@ export function OrderSummary ({
               <span className="text-sm font-semibold text-zinc-900">Subtotal</span>
               <div className="text-right">
                 <span className="text-lg font-bold text-zinc-900">
-                  {currencySymbol}{subtotal.toLocaleString()}
+                  {format(subtotalMinor)}
                 </span>
                 <span className="ml-1 text-xs text-zinc-400">+ tax</span>
               </div>
             </div>
+            <p className="mt-1 text-right text-[11px] text-zinc-400">
+              {prices.currencyCode}
+              {prices.countryName ? ` · ${prices.countryName}` : ''}
+            </p>
           </div>
         </div>
 

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getRazorpay, getProductPriceMinor, getRazorpayKeyId } from '@/lib/razorpay'
+import { getRazorpay, getRazorpayKeyId } from '@/lib/razorpay'
 import { getSessionUser } from '@/lib/session'
 import { getProject, newProjectId, upsertProject } from '@/lib/projects-server'
+import { resolveLocalizedPricing } from '@/lib/geo-pricing'
+import { usdMajorToMinor } from '@/lib/money'
 
 export const runtime = 'nodejs'
 
@@ -16,15 +18,27 @@ export async function POST (request: NextRequest) {
     const body = await request.json()
     const {
       outputType = 'DIGI_BOOK',
-      currency = 'INR',
       shippingCost = 0,
-      formData = {}
+      formData = {},
+      timezone = ''
     } = body
 
     const email = (typeof body.email === 'string' && body.email.trim()) || user.email || ''
     if (!email || !/\S+@\S+\.\S+/.test(email)) {
       return NextResponse.json({ error: 'A valid email address is required' }, { status: 400 })
     }
+
+    const resolvedType = outputType === 'LULU_BOOK' ? 'LULU_BOOK' : 'DIGI_BOOK'
+    const quote = await resolveLocalizedPricing({
+      headers: request.headers,
+      timezone: typeof timezone === 'string' ? timezone : ''
+    })
+    const upperCurrency = quote.currencyCode
+    const bookPriceMinor = resolvedType === 'LULU_BOOK' ? quote.hardcoverMinor : quote.digitalMinor
+    const shippingMinor = resolvedType === 'LULU_BOOK'
+      ? usdMajorToMinor(Number(shippingCost || 0), quote)
+      : 0
+    const totalMinor = bookPriceMinor + shippingMinor
 
     // Reuse the caller's projectId only if it belongs to them; otherwise mint a new one.
     let projectId: string = typeof body.projectId === 'string' ? body.projectId : ''
@@ -33,11 +47,6 @@ export async function POST (request: NextRequest) {
       if (existing && existing.uid && existing.uid !== user.uid && !user.isAdmin) projectId = ''
     }
     if (!projectId) projectId = newProjectId()
-
-    const bookPriceMinor = getProductPriceMinor(outputType, currency)
-    const shippingMinor = outputType === 'LULU_BOOK' ? Math.round(Number(shippingCost || 0) * 100) : 0
-    const totalMinor = bookPriceMinor + shippingMinor
-    const upperCurrency = String(currency).toUpperCase()
 
     const characters = Array.isArray(formData.characters) ? formData.characters : []
     const characterNames = characters
@@ -57,7 +66,7 @@ export async function POST (request: NextRequest) {
           projectId,
           uid: user.uid,
           email,
-          outputType,
+          outputType: resolvedType,
           numCharacters: String(formData.numCharacters || characters.length || 1),
           characterNames
         }
@@ -79,7 +88,7 @@ export async function POST (request: NextRequest) {
       uid: user.uid,
       email,
       status: 'awaiting_payment',
-      outputType,
+      outputType: resolvedType,
       storyline: formData.storyline || existing?.storyline || '',
       characters,
       numCharacters: formData.numCharacters || characters.length || 1,

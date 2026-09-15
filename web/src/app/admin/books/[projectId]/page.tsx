@@ -28,6 +28,7 @@ import {
   statusLabel,
   supportIssues
 } from '@/lib/admin-support'
+import { STORYLINE_MAX } from '@/lib/story-suggestions'
 import type { Project } from '@/types/project'
 import type { CharacterInfo } from '@/types/storybook'
 
@@ -344,8 +345,9 @@ export default function AdminBookPage ({
         <Textarea
           value={storyline}
           onChange={(event) => setStoryline(event.target.value)}
-          rows={6}
-          className="min-h-[140px] resize-y text-sm"
+          rows={8}
+          maxLength={STORYLINE_MAX}
+          className="min-h-[160px] max-h-[720px] resize-y overflow-y-auto text-sm leading-relaxed"
         />
         <div>
           <label className="mb-1.5 block text-xs font-semibold text-zinc-600">Internal notes (customer never sees this)</label>

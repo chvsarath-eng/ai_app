@@ -99,7 +99,7 @@ export async function openRazorpayCheckout (
   // If order is mock (e.g., local dev without live Razorpay credentials), complete via fallback test confirmation
   if (options.order_id.includes('mock') || key === 'rzp_test_placeholder' || !key.startsWith('rzp_')) {
     const shouldProceed = window.confirm(
-      `[Razorpay Test Mode]\n\nSimulate successful payment for ${options.name}?\nAmount: ₹${(options.amount / 100).toFixed(0)} ${options.currency}\n\nClick OK to simulate successful payment and generate your storybook.`
+      `[Razorpay Test Mode]\n\nSimulate successful payment for ${options.name}?\nAmount: ${(options.amount / 100).toFixed(2)} ${options.currency}\n\nClick OK to simulate successful payment and generate your storybook.`
     )
     if (shouldProceed && options.handler) {
       options.handler({

@@ -1,27 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Check, Sparkles, Book } from 'lucide-react'
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-
-interface LocalizedPrices {
-  currencyCode: string
-  currencySymbol: string
-  digital: { price: string, priceRaw: number }
-  hardcover: { price: string, priceRaw: number }
-  isLocalized: boolean
-}
-
-const DEFAULT_PRICES: LocalizedPrices = {
-  currencyCode: 'USD',
-  currencySymbol: '$',
-  digital: { price: '$9.99', priceRaw: 999 },
-  hardcover: { price: '$39.99', priceRaw: 3999 },
-  isLocalized: false
-}
+import { useLocalizedPrices } from '@/lib/use-localized-prices'
 
 // Calculate "original" price (double the sale price for 50% off display)
 function getOriginalPrice(salePrice: string, currencySymbol: string): string {
@@ -45,28 +29,7 @@ function getOriginalPrice(salePrice: string, currencySymbol: string): string {
 }
 
 export function PricingCards () {
-  const [prices, setPrices] = useState<LocalizedPrices>(DEFAULT_PRICES)
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
-    async function fetchLocalizedPrices() {
-      try {
-        // Call server-side API that detects currency from IP and converts prices
-        const response = await fetch('/api/localize-prices')
-        if (response.ok) {
-          const data = await response.json()
-          setPrices(data)
-        }
-      } catch (error) {
-        console.error('Failed to fetch localized prices:', error)
-        // Keep default USD prices on error
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    
-    fetchLocalizedPrices()
-  }, [])
+  const { prices, isLoading } = useLocalizedPrices()
 
   const products = [
     {
@@ -164,8 +127,8 @@ export function PricingCards () {
                   </div>
                   <p className="mt-1 text-xs font-medium text-orange-600">Limited time offer</p>
                   <p className="mt-1 text-xs text-zinc-500">
-                    {prices.isLocalized 
-                      ? `Price in ${prices.currencyCode}. Tax calculated at checkout.`
+                    {prices.countryName
+                      ? `Priced for ${prices.countryName} in ${prices.currencyCode}. Tax calculated at checkout.`
                       : 'Local currency & tax calculated at checkout.'
                     }
                   </p>
