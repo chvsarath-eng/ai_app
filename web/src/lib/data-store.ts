@@ -2,6 +2,7 @@ import 'server-only'
 
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { randomUUID } from 'node:crypto'
 
 /**
  * Minimal document store used by API routes.
@@ -204,4 +205,45 @@ export function deleteDocument (collection: string, id: string) {
 
 export function listDocuments (collection: string, options?: ListOptions) {
   return backend().list(collection, options)
+}
+
+/** Atomically prevent simultaneous payment callbacks from starting duplicate jobs. */
+export async function acquireGenerationLease (projectId: string): Promise<string | null> {
+  const token = randomUUID()
+  const lease = { id: projectId, token, expiresAt: Date.now() + 180_000 }
+  if (isLocalDataBackend()) {
+    return serialized(() => {
+      const docs = readCollection('generation-leases')
+      if (Number(docs[projectId]?.expiresAt || 0) > Date.now()) return null
+      docs[projectId] = lease
+      writeCollection('generation-leases', docs)
+      return token
+    })
+  }
+  const { db } = await firestore()
+  const ref = db.collection('generation-leases').doc(projectId)
+  return db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(ref)
+    if (Number(snapshot.data()?.expiresAt || 0) > Date.now()) return null
+    transaction.set(ref, lease)
+    return token
+  })
+}
+
+export async function releaseGenerationLease (projectId: string, token: string) {
+  if (isLocalDataBackend()) {
+    return serialized(() => {
+      const docs = readCollection('generation-leases')
+      if (docs[projectId]?.token === token) {
+        delete docs[projectId]
+        writeCollection('generation-leases', docs)
+      }
+    })
+  }
+  const { db } = await firestore()
+  const ref = db.collection('generation-leases').doc(projectId)
+  await db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(ref)
+    if (snapshot.data()?.token === token) transaction.delete(ref)
+  })
 }

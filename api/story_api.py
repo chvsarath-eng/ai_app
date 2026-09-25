@@ -652,7 +652,6 @@ def generate_ebook_html_bundle(
     Returns high-level paths + timing.
     """
     from imggen import image_generator
-    from create_storybook_html import create_storybook_html
     from lulu_digi_book_maker import generate_lulu_pdfs
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -672,7 +671,7 @@ def generate_ebook_html_bundle(
 
     # Determine model based on provider
     if model_provider and model_provider.lower() in ("openai", "oai", "gpt"):
-        model = model or os.getenv("STORY_MODEL") or "gpt-5.6-terra"
+        model = model or os.getenv("STORY_MODEL") or "gpt-6-luna"
     else:
         model = model or os.getenv("STORY_MODEL") or "gemini-3.1-pro-preview"
 
@@ -1094,15 +1093,20 @@ def _expand_short_page_stories(
     model: Optional[str],
     thinking_level: str = "high",
     seed: int = 42,
+    quick_book: bool = False,
+    _repair_attempt: int = 0,
 ) -> Dict[str, Any]:
     """If the model wrote sparse pages, expand them so the printed right page fills."""
     from strgen import _build_llm
     from langchain_core.messages import HumanMessage, SystemMessage
 
+    from quick_book import story_text_fits
+
     pages = story.get("pages") if isinstance(story.get("pages"), list) else []
     short = [
         p for p in pages
-        if isinstance(p, dict) and _page_word_count(p.get("story")) < PAGE_STORY_MIN_WORDS
+        if isinstance(p, dict) and ((not str(p.get("story") or "").strip() or not story_text_fits(p.get("story") or "")) if quick_book
+             else _page_word_count(p.get("story")) < PAGE_STORY_MIN_WORDS)
     ]
     if not short:
         return story
@@ -1112,6 +1116,7 @@ def _expand_short_page_stories(
             "page_number": p.get("page_number"),
             "story": p.get("story") or "",
             "words": _page_word_count(p.get("story")),
+            "fits_page": story_text_fits(p.get("story") or "") if quick_book else True,
         }
         for p in short
     ]
@@ -1125,8 +1130,9 @@ def _expand_short_page_stories(
     messages = [
         SystemMessage(content=(
             "You expand children's storybook pages so each printed right-hand page looks full. "
-            "Keep the same events, characters, and order. Simple everyday English. "
-            "Each rewritten page: 160-200 words, 12-16 sentences, 4 short paragraphs. "
+            "Keep the same events, characters, and order. Simple everyday English. " +
+            ("Repair only empty or overflowing pages. Write a complete scene in about 220 words and four natural paragraphs. This is guidance, not an exact word count. Preserve the events and dialogue; shorten overflowing text to fit one A4 story page. " if quick_book
+             else "Each rewritten page: 160-200 words, 12-16 sentences, 4 short paragraphs. ") +
             "Return JSON only: {\"pages\": [{\"page_number\": 1, \"story\": \"...\"}]}"
         )),
         HumanMessage(content=json.dumps({"pages": payload}, ensure_ascii=False)),
@@ -1137,6 +1143,8 @@ def _expand_short_page_stories(
         expanded = parse_llm_json(raw)
     except Exception:
         logger.exception("short_page_expand_failed count=%d", len(short))
+        if quick_book:
+            raise ValueError("Could not repair Quick Book story length")
         return story
 
     by_num = {}
@@ -1152,7 +1160,8 @@ def _expand_short_page_stories(
         except (TypeError, ValueError):
             continue
         new_text = by_num.get(num)
-        if new_text and _page_word_count(new_text) > _page_word_count(page.get("story")):
+        if new_text and ((story_text_fits(new_text)) if quick_book else
+                         _page_word_count(new_text) > _page_word_count(page.get("story"))):
             page["story"] = new_text
             filled += 1
     logger.info(
@@ -1160,6 +1169,23 @@ def _expand_short_page_stories(
         len(short),
         filled,
     )
+    if quick_book:
+        invalid = [p for p in pages if not str(p.get("story") or "").strip()
+                   or not story_text_fits(p.get("story") or "")]
+        if invalid and _repair_attempt < 1:
+            # Retain accepted scenes. Smaller requests give each failed scene its
+            # own output budget instead of repeating a ten-scene rewrite.
+            from concurrent.futures import ThreadPoolExecutor
+            def repair_page(page):
+                return _expand_short_page_stories(
+                    {"pages": [page]}, model_provider=model_provider, model=model,
+                    thinking_level=thinking_level, seed=seed + _repair_attempt + 1,
+                    quick_book=True, _repair_attempt=_repair_attempt + 1)
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                list(executor.map(repair_page, invalid))
+        elif invalid:
+            details = ', '.join(f"{p.get('page_number')} ({_page_word_count(p.get('story'))} words)" for p in invalid)
+            raise ValueError(f"Quick Book text could not fit the print layout after repair: scene {details}")
     return story
 
 
@@ -1323,6 +1349,28 @@ def _ensure_story_paths_consistent_v2(
     return story
 
 
+def _ensure_quick_cover_copy(story, *, model_provider, model, thinking_level='high', seed=42):
+    """One bounded repair so missing back-cover copy never needs manual authoring."""
+    from quick_book import cover_copy_valid
+    if cover_copy_valid(story.get('book') or {}):
+        return story
+    from strgen import _build_llm
+    from langchain_core.messages import SystemMessage, HumanMessage
+    llm = _build_llm(model_provider=model_provider, model=model, temperature=0.4,
+                     thinking_level=thinking_level, seed=seed)
+    result = llm.invoke([
+        SystemMessage(content='Write spoiler-free back-cover copy for this story. Return JSON only with back_cover_hook (one short line) and back_cover_blurb (one concise paragraph). Describe the actual characters and adventure, not the book-making service.'),
+        HumanMessage(content=json.dumps({'title': story['book'].get('title'),
+            'pages': [p.get('story', '') for p in story.get('pages', [])]}, ensure_ascii=False)),
+    ])
+    copy = parse_llm_json(_coerce_model_text_to_string(result.content))
+    if not cover_copy_valid(copy):
+        raise ValueError('Back-cover copy repair failed validation')
+    for key in ('back_cover_hook', 'back_cover_blurb'):
+        story['book'][key] = copy[key]
+    return story
+
+
 def generate_ebook_html_bundle_v2(
     *,
     job_dir: str,
@@ -1357,7 +1405,6 @@ def generate_ebook_html_bundle_v2(
         ``image_ready``  -> {type, name, page_number, output_image, saved_path, elapsed_s, done, total}
     """
     from imggen import image_generator
-    from create_storybook_html import create_storybook_html
     from lulu_digi_book_maker import generate_lulu_pdfs
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -1367,7 +1414,7 @@ def generate_ebook_html_bundle_v2(
         raise ValueError(f"Expected 1-4 face images, got {num_chars}")
 
     output_type = (output_type or "DIGI_BOOK").upper().strip()
-    if output_type not in ("DIGI_BOOK", "LULU_BOOK"):
+    if output_type not in ("DIGI_BOOK", "LULU_BOOK", "QUICK_BOOK"):
         output_type = "DIGI_BOOK"
 
     def _progress(stage: str, extra: Optional[Dict[str, Any]] = None) -> None:
@@ -1378,10 +1425,12 @@ def generate_ebook_html_bundle_v2(
                 progress_cb(stage, details)
             except Exception:
                 logger.exception("progress_cb failed for stage=%s", stage)
+                if output_type == "QUICK_BOOK" and stage in ("story_ready", "image_ready", "print_pdf_ready"):
+                    raise
 
     # Model selection
     if model_provider and model_provider.lower() in ("openai", "oai", "gpt"):
-        model = model or os.getenv("STORY_MODEL") or "gpt-5.6-terra"
+        model = model or os.getenv("STORY_MODEL") or "gpt-6-luna"
     else:
         model = model or os.getenv("STORY_MODEL") or "gemini-3.1-pro-preview"
 
@@ -1389,6 +1438,11 @@ def generate_ebook_html_bundle_v2(
     base_dir.mkdir(parents=True, exist_ok=True)
     (base_dir / "input_images").mkdir(parents=True, exist_ok=True)
     (base_dir / "generated").mkdir(parents=True, exist_ok=True)
+
+    if output_type == 'QUICK_BOOK':
+        thinking_level = os.getenv('QUICK_BOOK_STORY_REASONING', thinking_level).strip().lower()
+        if thinking_level not in ('low', 'medium', 'high'):
+            raise ValueError('Invalid QUICK_BOOK_STORY_REASONING')
 
     normalized_faces: List[str] = []
     for i, face_path in enumerate(face_image_paths, 1):
@@ -1434,47 +1488,91 @@ def generate_ebook_html_bundle_v2(
         },
     )
 
-    story_result = Story_content_generator_v2(
-        story_prompt=story_prompt,
-        character_inputs=character_inputs,
-        output_dir=str(base_dir / "generated"),
-        model=model,
-        model_provider=model_provider,
-        temperature=temperature,
-        thinking_level=thinking_level,
-        seed=seed,
-    )
+    cached_story = base_dir / "story_data.json"
+    if output_type == "QUICK_BOOK" and cached_story.exists():
+        story = json.loads(cached_story.read_text(encoding="utf-8"))
+        story_json_path = str(cached_story)
+        usage_path = base_dir / "story_usage.json"
+        usage = json.loads(usage_path.read_text()) if usage_path.exists() else {}
+    else:
+        draft_path = base_dir / "story_draft_result.json"
+        if output_type == "QUICK_BOOK" and draft_path.exists():
+            story_result = json.loads(draft_path.read_text(encoding="utf-8"))
+        else:
+            story_result = Story_content_generator_v2(
+                story_prompt=story_prompt,
+                character_inputs=character_inputs,
+                output_dir=str(base_dir / "generated"),
+                model=model,
+                model_provider=model_provider,
+                temperature=temperature,
+                thinking_level=thinking_level,
+                seed=seed,
+                output_type=output_type,
+            )
+            if output_type == "QUICK_BOOK":
+                draft_path.write_text(json.dumps(story_result, ensure_ascii=False, default=str), encoding="utf-8")
+                _progress("story_draft_ready")
 
-    raw_text = _coerce_model_text_to_string(story_result.get("text"))
-    usage = dict(story_result.get("usage") or {})
+        raw_text = _coerce_model_text_to_string(story_result.get("text"))
+        usage = dict(story_result.get("usage") or {})
 
-    try:
-        story = parse_llm_json(raw_text)
-    except Exception as e:
         try:
-            with (base_dir / "last_story_raw.txt").open("w", encoding="utf-8") as f:
-                f.write(raw_text or "")
-        except Exception:
-            pass
-        raise ValueError(
-            "Failed to parse V2 model output as JSON. "
-            "Saved raw output to last_story_raw.txt for inspection."
-        ) from e
+            story = parse_llm_json(raw_text)
+        except Exception as e:
+            try:
+                with (base_dir / "last_story_raw.txt").open("w", encoding="utf-8") as f:
+                    f.write(raw_text or "")
+            except Exception:
+                pass
+            raise ValueError(
+                "Failed to parse V2 model output as JSON. "
+                "Saved raw output to last_story_raw.txt for inspection."
+            ) from e
 
-    # Enforce V2 paths
-    story = _ensure_story_paths_consistent_v2(story, num_chars, base_dir=base_dir)
-    story = _expand_short_page_stories(
-        story,
-        model_provider=model_provider,
-        model=model,
-        thinking_level=thinking_level,
-        seed=seed,
-    )
+        # Enforce V2 paths
+        story = _ensure_story_paths_consistent_v2(story, num_chars, base_dir=base_dir)
+        story = _expand_short_page_stories(
+            story,
+            model_provider=model_provider,
+            model=model,
+            thinking_level=thinking_level,
+            seed=seed,
+            quick_book=output_type == "QUICK_BOOK",
+        )
 
-    # Save story_data.json
-    story_json_path = str(base_dir / "story_data.json")
-    with open(story_json_path, "w", encoding="utf-8") as f:
-        json.dump(story, f, indent=2, ensure_ascii=False)
+        if output_type == "QUICK_BOOK":
+            # Never trust model-provided filenames: each scene needs an independent cache/output.
+            story["book"]["output_image"] = "generated/book_cover.png"
+            for scene in story.get("pages") or []:
+                scene["output_image"] = f"generated/page_{scene['page_number']}.png"
+            for scene in [story.get("book", {}), *(story.get("pages") or [])]:
+                scene["prompt"] = str(scene.get("prompt") or "") + (
+                    " FINAL OUTPUT RULE: Native A4 portrait artwork. "
+                    "Keep the original cover title when this is the book cover; scene pages have no lettering. "
+                    "Keep faces and key objects inside safe margins."
+                )
+
+        # Cache only a story that can actually be printed; retries may rewrite rejected stories.
+        if output_type == "QUICK_BOOK":
+            story = _ensure_quick_cover_copy(story, model_provider=model_provider, model=model,
+                                              thinking_level=thinking_level, seed=seed)
+            from quick_book import validate_story
+            validate_story(story)
+
+        # Save story_data.json
+        story_json_path = str(base_dir / "story_data.json")
+        with open(story_json_path, "w", encoding="utf-8") as f:
+            json.dump(story, f, indent=2, ensure_ascii=False)
+
+        if output_type == "QUICK_BOOK":
+            (base_dir / "story_usage.json").write_text(json.dumps(usage), encoding="utf-8")
+    if output_type == "QUICK_BOOK":
+        from quick_book import validate_story
+        story = _ensure_quick_cover_copy(story, model_provider=model_provider, model=model,
+                                          thinking_level=thinking_level, seed=seed)
+        validate_story(story)
+        cached_story.write_text(json.dumps(story, ensure_ascii=False, indent=2), encoding='utf-8')
 
     t_story = time.time() - t0
     _progress(
@@ -1511,8 +1609,13 @@ def generate_ebook_html_bundle_v2(
     # --- Concurrency setup ---
     # Cover + 10 pages (+ extras) in one wave. 429s are retried below.
     max_image_workers = int(os.getenv("IMAGE_CONCURRENCY") or "16")
-    _img = image_params or {}
-    _img_provider = _img.get("provider") or None
+    _img = dict(image_params or {})
+    if output_type == "QUICK_BOOK":
+        from quick_book import MODEL, IMAGE_SIZE
+        _img.update(provider="openai_images", model=MODEL, model_pages=MODEL,
+                    quality="high", quality_pages="high", size=IMAGE_SIZE)
+    _img_provider = "openai_images" if output_type == "QUICK_BOOK" else (_img.get("provider") or None)
+    image_deadline = time.monotonic() + 300 if output_type == "QUICK_BOOK" else None
     _img_model = _img.get("model") or None
     _img_model_pages = _img.get("model_pages") or None
     _img_quality = _img.get("quality") or None
@@ -1546,30 +1649,34 @@ def generate_ebook_html_bundle_v2(
     ) -> Dict[str, Any]:
         from imggen import is_moderation_error, soften_prompt_for_moderation
 
-        max_attempts = int(os.getenv("IMAGE_MAX_ATTEMPTS") or "6")
+        max_attempts = 2 if output_type == "QUICK_BOOK" else int(os.getenv("IMAGE_MAX_ATTEMPTS") or "6")
         base_sleep_s = float(os.getenv("IMAGE_RETRY_BASE_SLEEP_S") or "2.0")
         is_print = (output_type or "").upper() == "LULU_BOOK"
-        if is_print:
+        if output_type == "QUICK_BOOK":
+            from quick_book import MODEL
+            model_for_task = MODEL
+            quality_for_task = "high"
+        elif is_print:
             model_for_task = _img.get("model_print") or _img_model
             quality_for_task = _img.get("quality_print") or "high"
         elif task_type == "character":
             model_for_task = _img_model
             quality_for_task = _img_quality or "high"
         else:
-            # Digital cover/pages: cheaper SKU — flare + medium unless overridden.
+            # Digital cover/pages: Sunburst + medium unless overridden.
             model_for_task = _img_model_pages
             quality_for_task = _img_quality_pages or "medium"
 
         # Moderation blocks are deterministic for a given prompt: rewrite the scene to be
-        # clearly wholesome (2 levels), then try the alternate provider before giving up.
+        # clearly wholesome within bounded retries on the same LaoZhang model.
         moderation_level = 0
         max_moderation_rewrites = int(os.getenv("IMAGE_MODERATION_REWRITES") or "3")
-        provider_for_task = _img_provider
+        provider_for_task = "openai_images"
         current_prompt = prompt
-        has_gemini = bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
-        tried_alt_provider = False
 
         for attempt in range(1, max_attempts + 1):
+            if image_deadline and time.monotonic() >= image_deadline:
+                raise TimeoutError("Quick Book image time budget exceeded")
             try:
                 logger.info(
                     "image_call_start task=%s attempt=%d/%d prompt_len=%d inputs=%d provider=%s moderation_level=%d",
@@ -1583,19 +1690,19 @@ def generate_ebook_html_bundle_v2(
                     output_filename=output_filename,
                     image_labels=image_labels,
                     image_provider=provider_for_task,
-                    image_model=model_for_task if provider_for_task == _img_provider else None,
+                    image_model=model_for_task,
                     image_quality=quality_for_task,
-                    image_size=_img_size,
+                    image_size=("1024x1024" if task_type == "character" else "2400x3392") if output_type == "QUICK_BOOK" else _img_size,
                     task_type=task_type,
                     output_type=output_type,
+                    deadline=image_deadline,
                 )
                 logger.info(
                     "image_call_done task=%s attempt=%d elapsed_s=%.2f",
                     task_name, attempt, time.time() - t_call,
                 )
-                if moderation_level or tried_alt_provider:
+                if moderation_level:
                     result["moderation_rewritten"] = moderation_level
-                    result["provider_fallback"] = provider_for_task if tried_alt_provider else None
                 return result
             except Exception as e:
                 err_msg = (str(e) or "")[:300]
@@ -1606,17 +1713,6 @@ def generate_ebook_html_bundle_v2(
                         logger.warning(
                             "image_moderation_blocked task=%s attempt=%d; retrying with softened prompt level=%d",
                             task_name, attempt, moderation_level,
-                        )
-                        continue
-                    if not tried_alt_provider and has_gemini and (provider_for_task or "") != "gemini":
-                        tried_alt_provider = True
-                        provider_for_task = "gemini"
-                        # Keep the most-softened prompt we already have for the alternate provider.
-                        if moderation_level == 0:
-                            current_prompt = soften_prompt_for_moderation(prompt, level=1)
-                        logger.warning(
-                            "image_moderation_blocked task=%s attempt=%d; falling back to provider=gemini",
-                            task_name, attempt,
                         )
                         continue
                     logger.error("image_call_failed task=%s attempt=%d error=%s", task_name, attempt, err_msg)
@@ -1772,27 +1868,49 @@ def generate_ebook_html_bundle_v2(
             )
             labels = None
 
+        cache_path = Path(abs_out + ".result.json")
+        fingerprint = None
+        if output_type == "QUICK_BOOK":
+            import hashlib
+            digest = hashlib.sha256(json.dumps({"prompt": task.get("prompt"), "labels": labels,
+                "type": task_type, "profile": "quick-a4-v1-sunburst-high"}, sort_keys=True).encode())
+            for reference in abs_inputs:
+                digest.update(Path(reference).read_bytes())
+            fingerprint = digest.hexdigest()
+            if Path(abs_out).exists() and cache_path.exists():
+                cached = json.loads(cache_path.read_text(encoding="utf-8"))
+                if cached.get("fingerprint") == fingerprint:
+                    from PIL import Image
+                    with Image.open(abs_out) as image:
+                        image.verify()
+                    if task_type != "character":
+                        from quick_book import validate_portrait
+                        validate_portrait(abs_out)
+                    return {**cached["result"], "saved_path": abs_out, "cached": True}
         task_start = time.time()
         logger.info(
             "image_task_start name=%s type=%s inputs=%d labels=%s",
             task_name, task_type, len(abs_inputs),
             "yes" if labels else "no",
         )
-        res = _call_image_with_retry_v2(
-            prompt=str(task.get("prompt") or ""),
-            image_filenames=abs_inputs,
-            output_filename=abs_out,
-            task_name=task_name,
-            image_labels=labels,
-            task_type=task_type,
-        )
+        from contextlib import nullcontext
+        from quick_book_jobs import image_slot
+        with image_slot(image_deadline) if image_deadline else nullcontext():
+            res = _call_image_with_retry_v2(
+                prompt=str(task.get("prompt") or ""),
+                image_filenames=abs_inputs,
+                output_filename=abs_out,
+                task_name=task_name,
+                image_labels=labels,
+                task_type=task_type,
+            )
         saved = (res.get("images") or [None])[0]
         elapsed = time.time() - task_start
         logger.info(
             "image_task_done name=%s type=%s elapsed_s=%.2f output=%s",
             task_name, task_type, elapsed, rel_out,
         )
-        return {
+        item = {
             "name": task.get("name"),
             "type": task.get("type"),
             "page_number": task.get("page_number"),
@@ -1804,6 +1922,12 @@ def generate_ebook_html_bundle_v2(
             "cost": res.get("cost"),
             "api_base": res.get("api_base"),
         }
+        if output_type == "QUICK_BOOK":
+            if task_type != "character":
+                from quick_book import validate_portrait
+                validate_portrait(abs_out)
+            cache_path.write_text(json.dumps({"fingerprint": fingerprint, "result": item}), encoding="utf-8")
+        return item
 
     def _emit_image_ready(item: Dict[str, Any]) -> None:
         images_done_counter["n"] += 1
@@ -1840,7 +1964,7 @@ def generate_ebook_html_bundle_v2(
                     _emit_image_ready(item)
                 except Exception as e:
                     failed.append((task, e))
-        retry_rounds = int(os.getenv("IMAGE_FAILED_TASK_RETRIES") or "2")
+        retry_rounds = 0 if output_type == "QUICK_BOOK" else int(os.getenv("IMAGE_FAILED_TASK_RETRIES") or "2")
         for round_idx in range(1, retry_rounds + 1):
             if not failed:
                 break
@@ -1878,13 +2002,17 @@ def generate_ebook_html_bundle_v2(
     images_dir = str(base_dir / "generated")
     output_dir = str(base_dir / "book_outputs")
 
-    pdf_result = generate_lulu_pdfs(
-        story_data_path=story_json_path,
-        images_dir=images_dir,
-        output_dir=output_dir,
-        output_type=output_type,
-        upload_outputs=False,
-    )
+    if output_type == "QUICK_BOOK":
+        from quick_book import generate_quick_book
+        pdf_result = generate_quick_book(story, base_dir, print_ready=lambda path: _progress("print_pdf_ready", {"pdf_path": path}))
+    else:
+        pdf_result = generate_lulu_pdfs(
+            story_data_path=story_json_path,
+            images_dir=images_dir,
+            output_dir=output_dir,
+            output_type=output_type,
+            upload_outputs=False,
+        )
 
     t_pdf = time.time() - t2
     _progress("pdf_generation_done", {"pdf_s": t_pdf})
@@ -1905,7 +2033,7 @@ def generate_ebook_html_bundle_v2(
         "num_characters": num_chars,
     }
 
-    if output_type == "DIGI_BOOK":
+    if output_type in ("DIGI_BOOK", "QUICK_BOOK"):
         pdf_path, html_path = pdf_result
         result["pdf_path"] = str(pdf_path) if pdf_path else None
         result["html_path"] = str(html_path) if html_path else None

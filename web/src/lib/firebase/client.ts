@@ -28,6 +28,7 @@ const config: FirebaseOptions = {
 }
 
 export function isFirebaseConfigured () {
+  if (process.env.NEXT_PUBLIC_AUTH_MODE === 'local') return false
   return Boolean(config.apiKey && config.projectId && config.appId)
 }
 
@@ -65,6 +66,7 @@ function isLikelyPopupBlockedEnv () {
  * is blocked at runtime.
  */
 export async function signInWithGoogle (): Promise<User | null> {
+  const startedAt = Date.now()
   const auth = getFirebaseAuth()
   await setPersistence(auth, browserLocalPersistence)
   const provider = new GoogleAuthProvider()
@@ -80,6 +82,13 @@ export async function signInWithGoogle (): Promise<User | null> {
     return result.user
   } catch (err) {
     const code = (err as { code?: string })?.code || ''
+    if (process.env.NODE_ENV === 'development') {
+      void fetch('/api/auth/diagnostic', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, elapsedMs: Date.now() - startedAt })
+      }).catch(() => {})
+    }
     if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
       await signInWithRedirect(auth, provider)
       return null

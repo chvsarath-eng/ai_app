@@ -52,34 +52,8 @@ def _env_int(key: str, default: int) -> int:
 
 
 def _resolve_image_provider(image_provider: Optional[str]) -> str:
-    """Resolve provider name.
-
-    Providers:
-      - ``openai_images``: OpenAI-compatible ``/images/edits`` (GPT-Image-2.5 flare / sunburst via LaoZhang or OpenAI).
-      - ``laozhang``: LaoZhang Gemini-style ``:generateContent`` (Nano Banana).
-      - ``gemini``: direct Google GenAI SDK.
-    """
-    provider = (image_provider or os.getenv("IMAGE_PROVIDER") or "").strip().lower()
-    if provider in ("openai_images", "openai-images", "openai", "gpt-image", "gpt_image", "gpt-image-2.5", "sunburst", "flare"):
-        return "openai_images"
-    if provider in ("laozhang", "lz", "laozhang_gemini"):
-        # If the configured model is a gpt-image model, use openai_images endpoint
-        configured_model = (os.getenv("IMAGE_MODEL") or os.getenv("LAOZHANG_IMAGE_MODEL") or "").lower()
-        if "gpt-image" in configured_model or "sunburst" in configured_model or "flare" in configured_model:
-            return "openai_images"
-        return "laozhang"
-    if provider in ("gemini", "google", "vertex", "genai"):
-        return "gemini"
-    
-    # Auto-detection based on configured keys and model
-    configured_model = (os.getenv("IMAGE_MODEL") or os.getenv("LAOZHANG_IMAGE_MODEL") or "").lower()
-    if "gpt-image" in configured_model or "sunburst" in configured_model or "flare" in configured_model:
-        return "openai_images"
-    if os.getenv("LAOZHANG_API_KEY") or os.getenv("API_KEY_LAOZHANG"):
-        if os.getenv("IMAGE_MODEL"):
-            return "openai_images"
-        return "laozhang"
-    return "gemini"
+    """All book images use LaoZhang's OpenAI-compatible Sunburst VIP API."""
+    return "openai_images"
 
 
 # ---------------------------------------------------------------------------
@@ -105,69 +79,19 @@ _OFFICIAL_IMAGE_OUTPUT_USD_PER_1M = 30.0
 DEFAULT_IMAGE_QUALITY = "high"
 # Digital is the low-price SKU: 1024 + medium pages. Hardcover is the high-price SKU:
 # Sunburst high at 2048. Do not spend hardcover compute on a digital order.
-DEFAULT_IMAGE_MODEL_PAGES = "gpt-image-2.5-flare-vip"
+DEFAULT_IMAGE_MODEL_PAGES = "gpt-image-2.5-sunburst-vip"
 DEFAULT_IMAGE_QUALITY_PAGES = "medium"
 DEFAULT_IMAGE_QUALITY_PRINT = "high"
 DEFAULT_IMAGE_SIZE = "1024x1024"
 DEFAULT_IMAGE_SIZE_PRINT = "2048x2048"
 
 
-OFFICIAL_OPENAI_API_BASE = "https://api.openai.com/v1"
-
-# Names each endpoint actually serves. LaoZhang only exposes the ``-vip`` aliases for
-# GPT-Image-2.5 (the official snapshot names return 503 "no channel"), while api.openai.com
-# serves the dated snapshots. Ordering the aliases per endpoint avoids wasted round-trips.
-# VIP first ($0.03). Official-forward 2.5 next (LaoZhang option 1). No Image-2 fallback.
-_LAOZHANG_ALIASES = {
-    "sunburst": ["gpt-image-2.5-sunburst-vip", "gpt-image-2.5-sunburst"],
-    "flare": [
-        "gpt-image-2.5-flare-vip",
-        "gpt-image-2.5-flare",
-        "gpt-image-2.5-sunburst-vip",
-        "gpt-image-2.5-sunburst",
-    ],
-}
-_GPT25_VIP_MODELS = ("gpt-image-2.5-flare-vip", "gpt-image-2.5-sunburst-vip")
-_OPENAI_ALIASES = {
-    "sunburst": ["gpt-image-2.5-sunburst-2026-09-08", "gpt-image-2.5-sunburst"],
-    "flare": ["gpt-image-2.5-flare-2026-09-08", "gpt-image-2.5-flare"],
-}
-
-
-def _model_family(model_name: str) -> Optional[str]:
-    m = model_name.lower()
-    if "sunburst" in m:
-        return "sunburst"
-    if "flare" in m:
-        return "flare"
-    return None
+# Product policy: no model aliases, official-forward routes, or provider fallback.
+_GPT25_VIP_MODELS = (DEFAULT_IMAGE_MODEL,)
 
 
 def _get_model_candidates(model_name: str, api_base: Optional[str] = None) -> List[str]:
-    """Ordered candidate model names (aliases/snapshots) for a given endpoint."""
-    family = _model_family(model_name)
-    if family is None:
-        return [model_name]
-    base = (api_base or "").lower()
-    table = _LAOZHANG_ALIASES if "laozhang" in base else _OPENAI_ALIASES
-    candidates: List[str] = []
-    is_official = "openai.com" in base
-    is_laozhang = "laozhang" in base
-    # LaoZhang 503s the dated snapshots; try vip aliases first.
-    if is_laozhang:
-        for alt in table[family]:
-            if alt not in candidates:
-                candidates.append(alt)
-        if model_name not in candidates:
-            candidates.append(model_name)
-        return candidates
-    # Keep the caller's exact name first unless we know this endpoint cannot serve it.
-    if not (is_official and model_name.endswith("-vip")):
-        candidates.append(model_name)
-    for alt in table[family]:
-        if alt not in candidates:
-            candidates.append(alt)
-    return candidates
+    return [DEFAULT_IMAGE_MODEL]
 
 
 def _normalize_api_base(base: str) -> str:
@@ -178,37 +102,8 @@ def _normalize_api_base(base: str) -> str:
 
 
 def _image_endpoints() -> List[tuple[str, str, str]]:
-    """Ordered ``(label, api_base, api_key)`` endpoints to try for the Images API.
-
-    The configured ``IMAGE_API_BASE`` is always first. Fallback is on by default: if
-    primary is LaoZhang, official ``api.openai.com`` is appended when ``OPENAI_API_KEY``
-    exists. Primary should stay on api2 VIP while LaoZhang is healthy.
-    """
-    primary_base = _normalize_api_base(os.getenv("IMAGE_API_BASE") or DEFAULT_IMAGE_API_BASE)
-    endpoints: List[tuple[str, str, str]] = [
-        ("primary", primary_base, _key_for_image_base(primary_base))
-    ]
-
-    # Default on: LaoZhang (or whichever IMAGE_API_BASE) first, official OpenAI as backup.
-    # Set IMAGE_API_FALLBACK=0 only when you want a single host with no failover.
-    if (os.getenv("IMAGE_API_FALLBACK") or "1").strip().lower() in ("0", "false", "no", "off"):
-        return endpoints
-
-    explicit_fallback = (os.getenv("IMAGE_API_FALLBACK_BASE") or "").strip()
-    explicit_key = (os.getenv("IMAGE_API_FALLBACK_KEY") or "").strip()
-    if explicit_fallback and explicit_key:
-        fb = _normalize_api_base(explicit_fallback)
-        if fb != primary_base:
-            endpoints.append(("fallback", fb, explicit_key))
-        return endpoints
-
-    openai_key = _openai_api_key()
-    laozhang_key = _laozhang_api_key()
-    if "openai.com" not in primary_base and openai_key:
-        endpoints.append(("openai", OFFICIAL_OPENAI_API_BASE, openai_key))
-    elif "laozhang" not in primary_base and laozhang_key:
-        endpoints.append(("laozhang", DEFAULT_IMAGE_API_BASE, laozhang_key))
-    return endpoints
+    """Only LaoZhang api2; legacy fallback environment settings cannot override this."""
+    return [("primary", DEFAULT_IMAGE_API_BASE, _key_for_image_base(DEFAULT_IMAGE_API_BASE))]
 
 
 # (api_base, model) -> unix time until which the pair is skipped. Populated when an
@@ -398,37 +293,14 @@ def _laozhang_api_key() -> str:
     return (os.getenv("LAOZHANG_API_KEY") or os.getenv("API_KEY_LAOZHANG") or "").strip()
 
 
-def _openai_api_key() -> str:
-    return (os.getenv("OPENAI_API_KEY") or "").strip()
-
-
 def _key_for_image_base(api_base: str) -> str:
-    """Bind each Images host to its own key so LaoZhang keys never hit api.openai.com."""
-    explicit = (os.getenv("IMAGE_API_KEY") or "").strip()
-    low = (api_base or "").lower()
-    if "openai.com" in low:
-        key = _openai_api_key()
-        if key:
-            return key
-        raise RuntimeError("Missing OPENAI_API_KEY for official OpenAI Images API.")
-    if "laozhang" in low:
-        key = _laozhang_api_key()
-        if key:
-            return key
-        raise RuntimeError("Missing LAOZHANG_API_KEY / API_KEY_LAOZHANG for LaoZhang Images API.")
-    if explicit:
-        return explicit
-    key = _laozhang_api_key() or _openai_api_key()
+    """Reject other image hosts; never use the story model's OpenAI key."""
+    if api_base != DEFAULT_IMAGE_API_BASE:
+        raise ValueError("Image generation is restricted to LaoZhang api2")
+    key = _laozhang_api_key()
     if not key:
-        raise RuntimeError(
-            "Missing API key for Images API. Set LAOZHANG_API_KEY, OPENAI_API_KEY, or IMAGE_API_KEY."
-        )
+        raise RuntimeError("Missing LAOZHANG_API_KEY / API_KEY_LAOZHANG for LaoZhang Images API.")
     return key
-
-
-def _image_api_key() -> str:
-    """Key for the configured ``IMAGE_API_BASE`` (or LaoZhang default)."""
-    return _key_for_image_base(os.getenv("IMAGE_API_BASE") or DEFAULT_IMAGE_API_BASE)
 
 
 def resolve_image_model(
@@ -436,22 +308,8 @@ def resolve_image_model(
     explicit: Optional[str] = None,
     output_type: Optional[str] = None,
 ) -> str:
-    """Pick the image model. Hardcover always uses the print/sunburst model."""
-    if explicit:
-        return explicit
-    if (output_type or "").upper() == "LULU_BOOK":
-        return (
-            os.getenv("IMAGE_MODEL_PRINT")
-            or os.getenv("IMAGE_MODEL")
-            or os.getenv("LAOZHANG_IMAGE_MODEL")
-            or DEFAULT_IMAGE_MODEL
-        ).strip()
-    if task_type in ("page", "cover"):
-        pages_model = (os.getenv("IMAGE_MODEL_PAGES") or "").strip()
-        if pages_model:
-            return pages_model
-        return DEFAULT_IMAGE_MODEL_PAGES
-    return (os.getenv("IMAGE_MODEL") or os.getenv("LAOZHANG_IMAGE_MODEL") or DEFAULT_IMAGE_MODEL).strip()
+    """Pin every book image to Sunburst VIP, including old saved overrides."""
+    return DEFAULT_IMAGE_MODEL
 
 
 def resolve_image_size(output_type: Optional[str] = None, explicit: Optional[str] = None) -> str:
@@ -601,12 +459,13 @@ def _image_generator_openai_images(
     quality: Optional[str] = None,
     task_type: Optional[str] = None,
     output_type: Optional[str] = None,
+    deadline: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Generate one image via an OpenAI-compatible ``POST {base}/images/edits``.
 
-    Works with LaoZhang (default base) and api.openai.com. Reference images are sent as
+    Uses LaoZhang api2 exclusively. Reference images are sent as
     multipart ``image[]`` parts in order; ``image_labels`` are folded into the prompt.
-    Includes smart model snapshot fallback for gpt-image-2.5 models.
+    Failures propagate to the existing bounded same-model retry in the book pipeline.
     """
     primary_model = resolve_image_model(task_type, model, output_type)
     size_val = resolve_image_size(output_type, size)
@@ -646,6 +505,9 @@ def _image_generator_openai_images(
     data: Dict[str, Any] = {}
     model_name = primary_model
     for idx, (label, api_base, api_key, model_name) in enumerate(attempts):
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError("Quick Book image time budget exceeded; retry the saved job")
+        request_timeout = min(timeout_s, max(1, deadline - time.monotonic())) if deadline else timeout_s
         is_last = idx + 1 >= len(attempts)
         url = f"{api_base}/images/edits"
         headers = {"Authorization": f"Bearer {api_key}"}
@@ -666,7 +528,7 @@ def _image_generator_openai_images(
 
         t_call = time.time()
         try:
-            response = requests.post(url, headers=headers, data=form, files=files, timeout=timeout_s)
+            response = requests.post(url, headers=headers, data=form, files=files, timeout=request_timeout)
         except Exception as e:
             last_err = e
             logger.warning("HTTP post error endpoint=%s model=%s: %s", label, model_name, e)
@@ -724,7 +586,7 @@ def _image_generator_openai_images(
         if item.get("b64_json"):
             img_bytes = base64.b64decode(item["b64_json"])
         elif item.get("url"):
-            r2 = requests.get(item["url"], timeout=120)
+            r2 = requests.get(item["url"], timeout=min(120, max(1, deadline - time.monotonic())) if deadline else 120)
             r2.raise_for_status()
             img_bytes = r2.content
         if not img_bytes:
@@ -1058,9 +920,10 @@ def image_generator(
     image_quality: Optional[str] = None,
     task_type: Optional[str] = None,
     output_type: Optional[str] = None,
+    deadline: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
-    Generate images with Gemini or GPT-Image using a prompt + reference image filenames.
+    Generate images only with LaoZhang Sunburst VIP and reference image filenames.
     """
     provider = _resolve_image_provider(image_provider)
     if provider == "openai_images":
@@ -1074,6 +937,7 @@ def image_generator(
             quality=image_quality,
             task_type=task_type,
             output_type=output_type,
+            deadline=deadline,
         )
     if provider == "laozhang":
         return _image_generator_laozhang(

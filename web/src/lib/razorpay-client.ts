@@ -65,55 +65,42 @@ export interface RazorpayCheckoutOptions {
   }
 }
 
+let razorpayScriptLoad: Promise<boolean> | null = null
+
 export function loadRazorpayScript (): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (typeof window === 'undefined') {
-      resolve(false)
-      return
+  if (typeof window === 'undefined') return Promise.resolve(false)
+  if (window.Razorpay) return Promise.resolve(true)
+  if (razorpayScriptLoad) return razorpayScriptLoad
+  razorpayScriptLoad = new Promise<boolean>((resolve) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[src="https://checkout.razorpay.com/v1/checkout.js"]')
+    const script = existing || document.createElement('script')
+    const finish = (loaded: boolean) => {
+      window.clearTimeout(timeout)
+      script.removeEventListener('load', onLoad)
+      script.removeEventListener('error', onError)
+      if (!loaded) script.remove()
+      resolve(loaded)
     }
-    if (window.Razorpay) {
-      resolve(true)
-      return
+    const onLoad = () => finish(Boolean(window.Razorpay))
+    const onError = () => finish(false)
+    const timeout = window.setTimeout(() => finish(Boolean(window.Razorpay)), 20000)
+    script.addEventListener('load', onLoad)
+    script.addEventListener('error', onError)
+    if (!existing) {
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      script.async = true
+      document.body.appendChild(script)
     }
-    const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]')
-    if (existing) {
-      existing.addEventListener('load', () => resolve(true))
-      existing.addEventListener('error', () => resolve(false))
-      return
-    }
-    const script = document.createElement('script')
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    script.async = true
-    script.onload = () => resolve(true)
-    script.onerror = () => resolve(false)
-    document.body.appendChild(script)
-  })
+  }).finally(() => { razorpayScriptLoad = null })
+  return razorpayScriptLoad
 }
 
 export async function openRazorpayCheckout (
-  options: Omit<RazorpayCheckoutOptions, 'key'> & { key?: string }
+  options: Omit<RazorpayCheckoutOptions, 'key'> & { key?: string; onFailure?: (response: RazorpayFailureResponse) => void }
 ): Promise<void> {
   const isLoaded = await loadRazorpayScript()
   const key = options.key || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_placeholder'
   
-  // If order is mock (e.g., local dev without live Razorpay credentials), complete via fallback test confirmation
-  if (options.order_id.includes('mock') || key === 'rzp_test_placeholder' || !key.startsWith('rzp_')) {
-    const shouldProceed = window.confirm(
-      `[Razorpay Test Mode]\n\nSimulate successful payment for ${options.name}?\nAmount: ${(options.amount / 100).toFixed(2)} ${options.currency}\n\nClick OK to simulate successful payment and generate your storybook.`
-    )
-    if (shouldProceed && options.handler) {
-      options.handler({
-        razorpay_payment_id: `pay_mock_${Date.now()}`,
-        razorpay_order_id: options.order_id,
-        razorpay_signature: 'test_mock_signature'
-      })
-      return
-    } else {
-      if (options.modal?.ondismiss) options.modal.ondismiss()
-      return
-    }
-  }
-
   if (!isLoaded || !window.Razorpay) {
     throw new Error('Could not load Razorpay payment SDK. Please check your internet connection.')
   }
@@ -123,8 +110,9 @@ export async function openRazorpayCheckout (
     // opens a separate browser window. Hide netbanking in test so checkout
     // stays in the overlay (card / UPI / wallet). Live keys keep netbanking.
     const isTestKey = key.startsWith('rzp_test_')
+    const { onFailure, ...checkoutOptions } = options
     const rzp = new window.Razorpay({
-      ...options,
+      ...checkoutOptions,
       key,
       image: options.image || '/brand/img2x-logo-transparent.png',
       theme: {
@@ -146,26 +134,13 @@ export async function openRazorpayCheckout (
       }
     })
 
-    if (options.modal?.ondismiss) {
-      rzp.on('payment.failed', () => {
-        options.modal?.ondismiss?.()
-      })
-    }
+    rzp.on('payment.failed', (response) => {
+      if (onFailure) onFailure(response as RazorpayFailureResponse)
+      else options.modal?.ondismiss?.()
+    })
 
     rzp.open()
   } catch (err) {
-    console.warn('Razorpay open failed, offering local test simulation:', err)
-    const shouldProceed = window.confirm(
-      `[Razorpay Simulation]\n\nCould not open live Razorpay window. Proceed with simulated test payment?\n\nClick OK to continue.`
-    )
-    if (shouldProceed && options.handler) {
-      options.handler({
-        razorpay_payment_id: `pay_mock_${Date.now()}`,
-        razorpay_order_id: options.order_id,
-        razorpay_signature: 'test_mock_signature'
-      })
-    } else {
-      if (options.modal?.ondismiss) options.modal.ondismiss()
-    }
+    throw err instanceof Error ? err : new Error('Could not open payment checkout. Please try again.')
   }
 }

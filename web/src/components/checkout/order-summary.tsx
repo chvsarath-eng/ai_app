@@ -95,7 +95,7 @@ export function OrderSummary ({
                 Personalized Storybook
               </h3>
               <p className="mt-0.5 text-xs text-zinc-500">
-                {isHardcover ? 'Hardcover · 8.5×8.5"' : 'Digital · HTML'}
+                {isHardcover ? 'Hardcover · 8.5×8.5"' : store.outputType === 'QUICK_BOOK' ? 'Quick Book · 24 A4 pages' : 'Digital · HTML'}
                 {store.characters.length > 1 && ` · ${store.characters.length} characters`}
               </p>
               <div className="mt-1 flex items-center gap-1">
@@ -117,7 +117,7 @@ export function OrderSummary ({
             </div>
             <div className="flex items-center gap-1.5 text-zinc-700">
               <CheckCircle className="h-3.5 w-3.5 shrink-0 text-violet-500" />
-              <span>AI-generated 4K illustrations</span>
+              <span>{store.outputType === 'QUICK_BOOK' ? 'High-resolution A4 portrait illustrations' : 'AI-generated 4K illustrations'}</span>
             </div>
             <div className="flex items-center gap-1.5 text-zinc-700">
               <CheckCircle className="h-3.5 w-3.5 shrink-0 text-violet-500" />
@@ -126,16 +126,22 @@ export function OrderSummary ({
             {!isHardcover && (
               <div className="flex items-center gap-1.5 text-zinc-700">
                 <CheckCircle className="h-3.5 w-3.5 shrink-0 text-violet-500" />
-                <span>Instant email delivery</span>
+                <span>Email delivery when your book is ready</span>
               </div>
             )}
           </div>
+          {store.outputType === 'QUICK_BOOK' && (
+            <p className="pt-2 text-xs leading-relaxed text-zinc-600">
+              Includes an A3 print PDF: six double-sided sheets fold into 24 A4 pages.
+              Print and staple locally; paper and printing are not included. Generation time varies.
+            </p>
+          )}
         </div>
 
         <div className="rounded-2xl border border-zinc-200/70 bg-white p-4 text-sm">
           <div className="flex items-center justify-between">
             <span className="text-zinc-600">
-              {isHardcover ? 'Hardcover' : 'Digital Book'}
+              {isHardcover ? 'Hardcover' : store.outputType === 'QUICK_BOOK' ? 'Quick Book' : 'Digital Book'}
             </span>
             <span className="font-semibold text-zinc-900">{format(bookMinor)}</span>
           </div>

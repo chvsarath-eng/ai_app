@@ -32,6 +32,7 @@ type JobPayload = {
   timing?: Record<string, number>
   cost?: Record<string, unknown>
   email_status?: string | null
+  digital_status?: string | null
 }
 
 export function newProjectId () {
@@ -196,6 +197,7 @@ function mapJobToProjectPatch (job: JobPayload, jobId: string): Record<string, u
   else if (status === 'running') patch.status = 'generating'
   else if (status === 'queued') patch.status = 'starting'
 
+  if (job.digital_status) patch.digitalStatus = job.digital_status
   if (job.error) patch.error = job.error
 
   const story = job.story

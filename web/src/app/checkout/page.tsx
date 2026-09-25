@@ -7,7 +7,7 @@ import { Mail, ShieldCheck, Truck, BookOpen } from 'lucide-react'
 import { useCheckoutStore } from '@/lib/checkout-store'
 import { useAuthStore } from '@/lib/auth-store'
 import { clearCheckoutFiles, loadCheckoutFiles, saveCheckoutFiles } from '@/lib/checkout-files'
-import { openRazorpayCheckout } from '@/lib/razorpay-client'
+import { loadRazorpayScript, openRazorpayCheckout } from '@/lib/razorpay-client'
 import { trackEvent } from '@/lib/analytics'
 import type { OutputType } from '@/types/storybook'
 
@@ -35,6 +35,8 @@ export interface ShippingOption {
 export default function CheckoutPage () {
   const router = useRouter()
   const store = useCheckoutStore()
+
+  useEffect(() => { void loadRazorpayScript() }, [])
 
   const [isLoading, setIsLoading] = useState(true)
   const [filesReady, setFilesReady] = useState(false)
@@ -474,8 +476,17 @@ export default function CheckoutPage () {
         amount: orderData.amount,
         currency: orderData.currency || prices.currencyCode,
         name: 'img2x',
-        description: isHardcover ? 'Personalized Hardcover Storybook' : 'Personalized Digital Storybook',
+        description: isHardcover ? 'Personalized Hardcover Storybook' : store.outputType === 'QUICK_BOOK' ? 'Quick Book - A3 Print PDF and Digital Book' : 'Personalized Digital Storybook',
         order_id: orderData.orderId,
+        onFailure: (response) => {
+          const error = response?.error
+          const domesticTestError = orderData.keyId?.startsWith('rzp_test_') && error?.reason === 'international_transaction_not_allowed'
+          setCheckoutError(domesticTestError
+            ? 'This test account accepts Indian cards only. Use Razorpay test Visa 4100 2800 0000 1007, any future expiry and any 3-digit CVV. Changing your phone number does not change the card country.'
+            : error?.description || 'Payment failed. Please try another payment method.')
+          setPaymentProcessing(false)
+          setIsSubmitting(false)
+        },
         prefill: {
           name: store.shippingName || user?.name || store.characters?.[0]?.name || '',
           email: effectiveEmail,
@@ -577,7 +588,7 @@ export default function CheckoutPage () {
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-zinc-800">No storybook selected yet</h2>
           <p className="mt-2 text-sm text-zinc-500">
-            Add a photo, pick Digital or Hardcover, and write a storyline first.
+            Add a photo, pick Quick Book or Hardcover, and write a storyline first.
           </p>
           <Button asChild className="mt-6 w-full font-semibold">
             <Link href="/create">Create your storybook</Link>

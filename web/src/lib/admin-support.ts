@@ -55,7 +55,7 @@ export function customerEmail (project: Project) {
 }
 
 export function bookTypeLabel (project: Project) {
-  return project.outputType === 'LULU_BOOK' ? 'Hardcover' : 'Digital'
+  return project.outputType === 'LULU_BOOK' ? 'Hardcover' : project.outputType === 'QUICK_BOOK' ? 'Quick Book' : 'Digital'
 }
 
 export function statusLabel (status: Project['status']) {

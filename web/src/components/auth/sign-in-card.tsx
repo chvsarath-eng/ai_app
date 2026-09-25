@@ -41,8 +41,9 @@ function friendlyAuthError (err: unknown): string {
   const code = (err as { code?: string })?.code || ''
   switch (code) {
     case 'auth/popup-closed-by-user':
+      return 'Google sign-in did not return a result. If you selected your account, the sign-in handoff failed; you may not have closed the window yourself.'
     case 'auth/cancelled-popup-request':
-      return 'Sign-in was closed before finishing. Please try again.'
+      return 'Another sign-in attempt interrupted this one. Close any other sign-in windows and try once more.'
     case 'auth/network-request-failed':
       return 'Network error. Check your connection and try again.'
     case 'auth/invalid-email':

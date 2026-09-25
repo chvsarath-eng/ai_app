@@ -96,7 +96,7 @@ export function GeneratorCard ({ className }: { className?: string }) {
     defaultValues: {
       characters: [{ ...defaultCharacter }],
       storyline: '',
-      outputType: 'DIGI_BOOK'
+      outputType: 'QUICK_BOOK'
     }
   })
 
@@ -330,7 +330,7 @@ export function GeneratorCard ({ className }: { className?: string }) {
                     <label
                       className={cn(
                         'relative flex cursor-pointer flex-col rounded-lg border-2 p-3 transition-all hover:border-violet-300',
-                        form.watch('outputType') === 'DIGI_BOOK'
+                        form.watch('outputType') === 'QUICK_BOOK'
                           ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-500/20'
                           : 'border-zinc-200 bg-white'
                       )}
@@ -338,20 +338,21 @@ export function GeneratorCard ({ className }: { className?: string }) {
                       <input
                         type="radio"
                         className="sr-only"
-                        value="DIGI_BOOK"
-                        checked={form.watch('outputType') === 'DIGI_BOOK'}
-                        onChange={() => form.setValue('outputType', 'DIGI_BOOK')}
+                        value="QUICK_BOOK"
+                        checked={form.watch('outputType') === 'QUICK_BOOK'}
+                        onChange={() => form.setValue('outputType', 'QUICK_BOOK')}
                         disabled={createJobMutation.isPending}
                       />
                       <div className="flex items-center gap-1.5">
                         <Sparkles className="h-4 w-4 text-violet-600" />
-                        <span className="text-sm font-semibold text-zinc-900">Digital Book</span>
+                        <span className="text-sm font-semibold text-zinc-900">Quick Book</span>
                       </div>
-                      <p className="mt-0.5 text-xs text-zinc-500">HTML flipbook</p>
+                      <p className="mt-0.5 text-xs text-zinc-500">A3 print PDF + digital book</p>
+                      <p className="mt-1 text-xs text-zinc-500">24 A4 pages · print on 6 duplex A3 sheets</p>
                       <p className="mt-1 text-base font-bold text-violet-600">
                         <LocalizedPrice kind="digital" />
                       </p>
-                      {form.watch('outputType') === 'DIGI_BOOK' && (
+                      {form.watch('outputType') === 'QUICK_BOOK' && (
                         <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-violet-500 text-white">
                           <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />

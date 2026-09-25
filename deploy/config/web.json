@@ -9,6 +9,7 @@
   "concurrency": 80,
   "timeout": "300s",
   "allowUnauthenticated": true,
+  "cpuAlwaysAllocated": false,
   "env": {
     "NODE_ENV": "production",
     "AUTH_MODE": "firebase",

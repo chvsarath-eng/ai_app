@@ -107,6 +107,7 @@ export type Project = {
   imagesDone?: number
   imagesTotal?: number
   artifacts?: Record<string, ProjectArtifact>
+  digitalStatus?: string | null
   signedUrlsExpireAt?: number | null
   timing?: Record<string, number>
   cost?: Record<string, unknown>

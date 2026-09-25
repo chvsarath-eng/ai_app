@@ -11,7 +11,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError
 from langchain_openai import ChatOpenAI
 
-DEFAULT_OPENAI_MODEL = "gpt-5.6-terra"
+DEFAULT_OPENAI_MODEL = "gpt-6-luna"
 DEFAULT_GEMINI_MODEL = "gemini-3.1-pro-preview"
 
 
@@ -162,7 +162,7 @@ def _build_llm(
             "api_key": _get_openai_api_key(),
             "model_kwargs": {"response_format": {"type": "json_object"}},
         }
-        if model_name.startswith(("gpt-5.5", "gpt-5.6")):
+        if model_name.startswith(("gpt-5.5", "gpt-5.6", "gpt-6")):
             openai_kwargs["reasoning_effort"] = effort
         else:
             openai_kwargs["temperature"] = temperature

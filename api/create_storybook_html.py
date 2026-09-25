@@ -12,13 +12,6 @@ from pathlib import Path
 from PIL import Image
 from io import BytesIO
 
-if sys.platform == 'win32':
-    try:
-        sys.stdout.reconfigure(encoding='utf-8')
-    except AttributeError:
-        pass
-
-
 def image_to_base64(image_path: str, max_dimension: int = 1400, quality: int = 85) -> str:
     """Converts image to optimized base64 data URI."""
     try:
@@ -993,4 +986,9 @@ def create_storybook_html(
 
 
 if __name__ == "__main__":
+    if sys.platform == 'win32':
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+        except (AttributeError, OSError, ValueError):
+            pass
     create_storybook_html()

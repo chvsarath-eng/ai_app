@@ -898,10 +898,14 @@ class FastLuluBookGenerator:
         self.no_crop_images = no_crop_images
         self.output_type = (output_type or 'LULU_BOOK').upper().strip()
         self.is_lulu_book = self.output_type == 'LULU_BOOK'
+        self.is_quick_book = self.output_type == 'QUICK_BOOK'
+        self.page_width, self.page_height = (210 / 25.4 * 72, 297 / 25.4 * 72) if self.is_quick_book else (INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT)
         self.upload_outputs = bool(upload_outputs)
 
         base_output_dir = Path(output_dir)
-        if self.output_type == 'DIGI_BOOK':
+        if self.is_quick_book:
+            self.output_dir = base_output_dir / 'quick-book'
+        elif self.output_type == 'DIGI_BOOK':
             self.output_dir = base_output_dir / 'digi-book'
         else:
             self.output_dir = base_output_dir / 'lulu-book'
@@ -1191,7 +1195,7 @@ class FastLuluBookGenerator:
 
         # Background - warm cream/parchment color
         page.draw_rect(
-            fitz.Rect(0, 0, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT),
+            fitz.Rect(0, 0, self.page_width, self.page_height),
             color=None,
             fill=to_rgb(BACKGROUND_COLOR)
         )
@@ -1207,8 +1211,8 @@ class FastLuluBookGenerator:
         # Outer border line
         page.draw_rect(
             fitz.Rect(outer_border, outer_border,
-                      INTERIOR_PAGE_WIDTH - outer_border,
-                      INTERIOR_PAGE_HEIGHT - outer_border),
+                      self.page_width - outer_border,
+                      self.page_height - outer_border),
             color=to_rgb(border_outer),
             width=1.2
         )
@@ -1216,8 +1220,8 @@ class FastLuluBookGenerator:
         # Inner border line (thinner)
         page.draw_rect(
             fitz.Rect(inner_border, inner_border,
-                      INTERIOR_PAGE_WIDTH - inner_border,
-                      INTERIOR_PAGE_HEIGHT - inner_border),
+                      self.page_width - inner_border,
+                      self.page_height - inner_border),
             color=to_rgb(border_inner),
             width=0.6
         )
@@ -1227,9 +1231,9 @@ class FastLuluBookGenerator:
         dot_radius = 3
         corners = [
             (corner_offset, corner_offset),
-            (INTERIOR_PAGE_WIDTH - corner_offset, corner_offset),
-            (corner_offset, INTERIOR_PAGE_HEIGHT - corner_offset),
-            (INTERIOR_PAGE_WIDTH - corner_offset, INTERIOR_PAGE_HEIGHT - corner_offset)
+            (self.page_width - corner_offset, corner_offset),
+            (corner_offset, self.page_height - corner_offset),
+            (self.page_width - corner_offset, self.page_height - corner_offset)
         ]
         for cx, cy in corners:
             page.draw_circle(fitz.Point(cx, cy), dot_radius, 
@@ -1240,8 +1244,8 @@ class FastLuluBookGenerator:
         content_rect = fitz.Rect(
             inner_border + content_padding,
             inner_border + content_padding,
-            INTERIOR_PAGE_WIDTH - inner_border - content_padding,
-            INTERIOR_PAGE_HEIGHT - inner_border - content_padding - 0.18 * inch
+            self.page_width - inner_border - content_padding,
+            self.page_height - inner_border - content_padding - 0.18 * inch
         )
 
         # Split into paragraphs for better flow
@@ -1266,8 +1270,8 @@ class FastLuluBookGenerator:
         bold_font = self._font_bold_name if self._font_bold_file else body_font
         # Auto-tune type so the story fills the page nicely (storybook style)
         # We'll pick the largest font/leading combo that still fits.
-        size_candidates = [18, 17, 16, 15]
-        leading_mult_candidates = [1.85, 1.75, 1.65, 1.55]
+        size_candidates = [18, 17] if self.is_quick_book else [18, 17, 16, 15]
+        leading_mult_candidates = [1.75, 1.65, 1.55, 1.45, 1.35, 1.25] if self.is_quick_book else [1.85, 1.75, 1.65, 1.55]
 
         # Simple storybook styling:
         # - Keep the first letter bold (inline, normal size)
@@ -1277,6 +1281,10 @@ class FastLuluBookGenerator:
         paragraph_gap = 0  # computed after we choose leading
 
         # Helper: safe text length (fallback to helv if bold font isn't available)
+        # Leading changes vertical placement, not glyph widths. Reuse exact
+        # measurements across candidates without changing wrapping or font choice.
+        from functools import lru_cache
+        @lru_cache(maxsize=8192)
         def text_len(s, fontsize):
             return self._text_length(s, fontsize, is_bold=False)
 
@@ -1312,7 +1320,7 @@ class FastLuluBookGenerator:
 
         # Wrap all paragraphs into lines for a given (body_size, leading)
         def measure_layout(body_size, leading):
-            par_gap = leading * 0.9
+            par_gap = leading * (0.6 if self.is_quick_book else 0.9)
             lines = []  # each: dict(x, y, text, is_bold=False)
             y = content_rect.y0 + body_size
 
@@ -1367,6 +1375,8 @@ class FastLuluBookGenerator:
                     if not best or score > best['score']:
                         best = {'size': s, 'leading': leading, 'lines': lines, 'par_gap': par_gap, 'score': score}
 
+        if not best and self.is_quick_book:
+            raise ValueError('Quick Book story exceeds the original bordered layout at 17pt')
         if not best:
             # fallback tiny
             s = 15
@@ -1378,6 +1388,11 @@ class FastLuluBookGenerator:
         leading = best['leading']
         paragraph_gap = best['par_gap']
         lines = best['lines']
+        if self.is_quick_book:
+            # Balance spare space above/below the story instead of padding prose.
+            spare = max(0, content_rect.height - body_size * 0.5 - best['score'])
+            for item in lines:
+                item['y'] += spare / 2
 
         # Render: centered lines for symmetrical paragraphs
         for item in lines:
@@ -1420,10 +1435,10 @@ class FastLuluBookGenerator:
             )
 
         # Page number: centered and always visible inside the outer border
-        num_baseline = INTERIOR_PAGE_HEIGHT - outer_border - 0.12 * inch
+        num_baseline = self.page_height - outer_border - 0.12 * inch
         page_num_str = f'• {page_num} •'
         num_w = text_len(page_num_str, PAGE_NUMBER_SIZE)
-        num_x = (INTERIOR_PAGE_WIDTH - num_w) / 2
+        num_x = (self.page_width - num_w) / 2
         self._draw_line(
             page,
             fitz.Point(num_x, num_baseline),
@@ -1435,7 +1450,7 @@ class FastLuluBookGenerator:
     def _draw_title_page(self, page):
         self._register_fonts_on_page(page)
         page.draw_rect(
-            fitz.Rect(0, 0, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT),
+            fitz.Rect(0, 0, self.page_width, self.page_height),
             color=None,
             fill=to_rgb(BACKGROUND_COLOR)
         )
@@ -1445,8 +1460,8 @@ class FastLuluBookGenerator:
             fitz.Rect(
                 border_inset,
                 border_inset,
-                INTERIOR_PAGE_WIDTH - border_inset,
-                INTERIOR_PAGE_HEIGHT - border_inset
+                self.page_width - border_inset,
+                self.page_height - border_inset
             ),
             color=to_rgb(ACCENT_COLOR),
             width=2
@@ -1454,9 +1469,9 @@ class FastLuluBookGenerator:
 
         title_rect = fitz.Rect(
             1 * inch,
-            INTERIOR_PAGE_HEIGHT * 0.45,
-            INTERIOR_PAGE_WIDTH - 1 * inch,
-            INTERIOR_PAGE_HEIGHT * 0.75
+            self.page_height * 0.45,
+            self.page_width - 1 * inch,
+            self.page_height * 0.75
         )
         page.insert_textbox(
             title_rect,
@@ -1471,9 +1486,9 @@ class FastLuluBookGenerator:
         page.insert_textbox(
             fitz.Rect(
                 1 * inch,
-                INTERIOR_PAGE_HEIGHT * 0.35,
-                INTERIOR_PAGE_WIDTH - 1 * inch,
-                INTERIOR_PAGE_HEIGHT * 0.45
+                self.page_height * 0.35,
+                self.page_width - 1 * inch,
+                self.page_height * 0.45
             ),
             f'Featuring {main_char["name"]}',
             fontsize=18,
@@ -1488,7 +1503,7 @@ class FastLuluBookGenerator:
     def _draw_copyright_page(self, page):
         self._register_fonts_on_page(page)
         page.draw_rect(
-            fitz.Rect(0, 0, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT),
+            fitz.Rect(0, 0, self.page_width, self.page_height),
             color=None,
             fill=to_rgb(BACKGROUND_COLOR)
         )
@@ -1508,9 +1523,9 @@ class FastLuluBookGenerator:
         page.insert_textbox(
             fitz.Rect(
                 1 * inch,
-                INTERIOR_PAGE_HEIGHT - 2.5 * inch,
-                INTERIOR_PAGE_WIDTH - 1 * inch,
-                INTERIOR_PAGE_HEIGHT - 1 * inch
+                self.page_height - 2.5 * inch,
+                self.page_width - 1 * inch,
+                self.page_height - 1 * inch
             ),
             text,
             fontsize=10,
@@ -1530,15 +1545,15 @@ class FastLuluBookGenerator:
         border_inner = Color(0.78, 0.75, 0.68)
         page.draw_rect(
             fitz.Rect(outer_border, outer_border,
-                      INTERIOR_PAGE_WIDTH - outer_border,
-                      INTERIOR_PAGE_HEIGHT - outer_border),
+                      self.page_width - outer_border,
+                      self.page_height - outer_border),
             color=to_rgb(border_outer),
             width=1.2
         )
         page.draw_rect(
             fitz.Rect(inner_border, inner_border,
-                      INTERIOR_PAGE_WIDTH - inner_border,
-                      INTERIOR_PAGE_HEIGHT - inner_border),
+                      self.page_width - inner_border,
+                      self.page_height - inner_border),
             color=to_rgb(border_inner),
             width=0.6
         )
@@ -1547,9 +1562,9 @@ class FastLuluBookGenerator:
         dot_radius = 3
         corners = [
             (corner_offset, corner_offset),
-            (INTERIOR_PAGE_WIDTH - corner_offset, corner_offset),
-            (corner_offset, INTERIOR_PAGE_HEIGHT - corner_offset),
-            (INTERIOR_PAGE_WIDTH - corner_offset, INTERIOR_PAGE_HEIGHT - corner_offset)
+            (self.page_width - corner_offset, corner_offset),
+            (corner_offset, self.page_height - corner_offset),
+            (self.page_width - corner_offset, self.page_height - corner_offset)
         ]
         for cx, cy in corners:
             page.draw_circle(fitz.Point(cx, cy), dot_radius,
@@ -1559,7 +1574,7 @@ class FastLuluBookGenerator:
         self._register_fonts_on_page(page)
 
         page.draw_rect(
-            fitz.Rect(0, 0, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT),
+            fitz.Rect(0, 0, self.page_width, self.page_height),
             color=None,
             fill=to_rgb(BACKGROUND_COLOR)
         )
@@ -1569,9 +1584,9 @@ class FastLuluBookGenerator:
         inner_border = BLEED + 0.5 * inch
         content_padding = 0.35 * inch
         content_left = inner_border + content_padding
-        content_right = INTERIOR_PAGE_WIDTH - inner_border - content_padding
+        content_right = self.page_width - inner_border - content_padding
         content_top = inner_border + content_padding
-        content_bottom = INTERIOR_PAGE_HEIGHT - inner_border - content_padding
+        content_bottom = self.page_height - inner_border - content_padding
 
         # Defensive normalization: some pipelines (or stale kernels) may still load
         # story_data["characters"] as a list (V2). Ensure dict shape before using .get().
@@ -1853,7 +1868,7 @@ class FastLuluBookGenerator:
         self._register_fonts_on_page(page)
 
         page.draw_rect(
-            fitz.Rect(0, 0, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT),
+            fitz.Rect(0, 0, self.page_width, self.page_height),
             color=None,
             fill=to_rgb(BACKGROUND_COLOR)
         )
@@ -1863,11 +1878,23 @@ class FastLuluBookGenerator:
         inner_border = BLEED + 0.5 * inch
         content_padding = 0.5 * inch
         content_left = inner_border + content_padding
-        content_right = INTERIOR_PAGE_WIDTH - inner_border - content_padding
+        content_right = self.page_width - inner_border - content_padding
         content_top = inner_border + content_padding
-        content_bottom = INTERIOR_PAGE_HEIGHT - inner_border - content_padding
+        content_bottom = self.page_height - inner_border - content_padding
         content_height = content_bottom - content_top
-        center_x = INTERIOR_PAGE_WIDTH / 2
+        center_x = self.page_width / 2
+
+        if self.is_quick_book:
+            names = ', '.join(c.get('name', '') for c in self.characters.get('all_characters', []) if c.get('name')) or 'you'
+            self._draw_box(page, fitz.Rect(content_left, self.page_height*0.35, content_right, self.page_height*0.35+55),
+                           'The End', 30, to_rgb(TEXT_COLOR), bold=True)
+            line_y = self.page_height*0.35+65
+            page.draw_line(fitz.Point(center_x-32, line_y), fitz.Point(center_x+32, line_y),
+                           color=(0.62, 0.60, 0.54), width=1)
+            self._draw_box(page, fitz.Rect(content_left, line_y+40, content_right, line_y+125),
+                           f'For {names}—\nmay your next adventure begin with curiosity.',
+                           18, to_rgb(TEXT_COLOR), italic=True)
+            return
 
         # =================================================================
         # BALANCED LAYOUT: Divide content area into proportional sections
@@ -2084,16 +2111,16 @@ class FastLuluBookGenerator:
     def _draw_end_page(self, page):
         self._register_fonts_on_page(page)
         page.draw_rect(
-            fitz.Rect(0, 0, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT),
+            fitz.Rect(0, 0, self.page_width, self.page_height),
             color=None,
             fill=to_rgb(BACKGROUND_COLOR)
         )
         page.insert_textbox(
             fitz.Rect(
                 1 * inch,
-                INTERIOR_PAGE_HEIGHT * 0.45,
-                INTERIOR_PAGE_WIDTH - 1 * inch,
-                INTERIOR_PAGE_HEIGHT * 0.6
+                self.page_height * 0.45,
+                self.page_width - 1 * inch,
+                self.page_height * 0.6
             ),
             'The End',
             fontsize=36,
@@ -2121,7 +2148,7 @@ class FastLuluBookGenerator:
         page.draw_rect(safe_rect, color=to_rgb(Color(0.6, 0.6, 0.6)), width=0.5)
 
         # Bleed edge
-        bleed_rect = fitz.Rect(0, 0, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT)
+        bleed_rect = fitz.Rect(0, 0, self.page_width, self.page_height)
         page.draw_rect(bleed_rect, color=to_rgb(Color(0.0, 0.7, 0.7)), width=0.5)
     def generate_interior_pdf(self):
         output_path = self.output_dir / f'interior_8.5x8.5_casewrap_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
@@ -2130,7 +2157,7 @@ class FastLuluBookGenerator:
         print('Generating Interior PDF')
         print(f'{"="*60}')
         print(f'Output: {output_path}')
-        print(f'Page size: {INTERIOR_PAGE_WIDTH/inch:.3f} x {INTERIOR_PAGE_HEIGHT/inch:.3f} inches')
+        print(f'Page size: {self.page_width/inch:.3f} x {self.page_height/inch:.3f} inches')
         print('\n  Building PDF pages...')
 
         start_time = time.time()
@@ -2140,7 +2167,7 @@ class FastLuluBookGenerator:
 
         # Title page
         current_page += 1
-        page = doc.new_page(width=INTERIOR_PAGE_WIDTH, height=INTERIOR_PAGE_HEIGHT)
+        page = doc.new_page(width=self.page_width, height=self.page_height)
         self._draw_title_page(page)
 
         # Story spreads
@@ -2150,29 +2177,29 @@ class FastLuluBookGenerator:
 
             # Image page
             current_page += 1
-            page = doc.new_page(width=INTERIOR_PAGE_WIDTH, height=INTERIOR_PAGE_HEIGHT)
+            page = doc.new_page(width=self.page_width, height=self.page_height)
             image_path = self._get_image_path(image_rel_path) if image_rel_path else None
             if image_path and image_path.exists():
                 if self.no_crop_images:
                     # Draw white background, then fit image to page without cropping
                     page.draw_rect(
-                        fitz.Rect(0, 0, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT),
+                        fitz.Rect(0, 0, self.page_width, self.page_height),
                         color=None,
                         fill=to_rgb(Color(1, 1, 1))
                     )
-                    image_rect = self._fit_image_rect(image_path, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT)
+                    image_rect = self._fit_image_rect(image_path, self.page_width, self.page_height)
                     page.insert_image(image_rect, filename=str(image_path), keep_proportion=False)
                 else:
                     # Full-bleed, may crop if aspect ratio differs
                     page.insert_image(
-                        fitz.Rect(0, 0, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT),
+                        fitz.Rect(0, 0, self.page_width, self.page_height),
                         filename=str(image_path),
                         keep_proportion=True
                     )
             else:
                 self._register_fonts_on_page(page)
                 page.insert_textbox(
-                    fitz.Rect(0, 0, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT),
+                    fitz.Rect(0, 0, self.page_width, self.page_height),
                     'Image Not Found',
                     fontsize=24,
                     fontname=self._font_body_name if self._font_body_file else 'helv',
@@ -2185,7 +2212,7 @@ class FastLuluBookGenerator:
 
             # Text page
             current_page += 1
-            page = doc.new_page(width=INTERIOR_PAGE_WIDTH, height=INTERIOR_PAGE_HEIGHT)
+            page = doc.new_page(width=self.page_width, height=self.page_height)
             self._draw_text_page(page, story_text, current_page, is_right_page=True)
             if self.show_guides:
                 self._draw_interior_guides(page)
@@ -2197,31 +2224,31 @@ class FastLuluBookGenerator:
             back_matter_pages = 2
             while (current_page + back_matter_pages + 1) < MIN_HARDCOVER_PAGES:
                 current_page += 1
-                blank_page = doc.new_page(width=INTERIOR_PAGE_WIDTH, height=INTERIOR_PAGE_HEIGHT)
+                blank_page = doc.new_page(width=self.page_width, height=self.page_height)
                 if self.show_guides:
                     self._draw_interior_guides(blank_page)
 
         # Back matter: hero page + end/promo page
         current_page += 1
-        page = doc.new_page(width=INTERIOR_PAGE_WIDTH, height=INTERIOR_PAGE_HEIGHT)
+        page = doc.new_page(width=self.page_width, height=self.page_height)
         self._draw_character_page_main(page)
 
         current_page += 1
-        page = doc.new_page(width=INTERIOR_PAGE_WIDTH, height=INTERIOR_PAGE_HEIGHT)
+        page = doc.new_page(width=self.page_width, height=self.page_height)
         self._draw_app_promo_page(page)
 
         # Pad to minimum pages (leave the last page blank as requested) - Lulu only
         if self.is_lulu_book:
             while current_page < MIN_HARDCOVER_PAGES:
                 current_page += 1
-                blank_page = doc.new_page(width=INTERIOR_PAGE_WIDTH, height=INTERIOR_PAGE_HEIGHT)
+                blank_page = doc.new_page(width=self.page_width, height=self.page_height)
                 if self.show_guides:
                     self._draw_interior_guides(blank_page)
 
         # Ensure even page count
         if self.is_lulu_book and (current_page % 2 != 0):
             current_page += 1
-            blank_page = doc.new_page(width=INTERIOR_PAGE_WIDTH, height=INTERIOR_PAGE_HEIGHT)
+            blank_page = doc.new_page(width=self.page_width, height=self.page_height)
             if self.show_guides:
                 self._draw_interior_guides(blank_page)
 
@@ -2239,15 +2266,15 @@ class FastLuluBookGenerator:
 
         return output_path
 
-    def generate_digi_pdf(self):
+    def generate_digi_pdf(self, *, in_memory=False):
         """Generate a single PDF for digital reading: cover image as first page + interior pages."""
-        output_path = self.output_dir / f'digi_book_8.5x8.5_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        output_path = self.output_dir / ('quick-book-a4-reader.pdf' if self.is_quick_book else f'digi_book_8.5x8.5_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf')
 
         print(f'\n{"="*60}')
         print('Generating Digi Book PDF')
         print(f'{"="*60}')
         print(f'Output: {output_path}')
-        print(f'Page size: {INTERIOR_PAGE_WIDTH/inch:.3f} x {INTERIOR_PAGE_HEIGHT/inch:.3f} inches')
+        print(f'Page size: {self.page_width/inch:.3f} x {self.page_height/inch:.3f} inches')
 
         start_time = time.time()
         doc = fitz.open()
@@ -2255,12 +2282,12 @@ class FastLuluBookGenerator:
 
         # Page 1: Cover image (full page)
         current_page += 1
-        page = doc.new_page(width=INTERIOR_PAGE_WIDTH, height=INTERIOR_PAGE_HEIGHT)
+        page = doc.new_page(width=self.page_width, height=self.page_height)
         cover_image_path = self._get_image_path(self.story_data['book'].get('output_image', ''))
         if cover_image_path.exists():
             from io import BytesIO
             from PIL import Image
-            target_ar = INTERIOR_PAGE_WIDTH / INTERIOR_PAGE_HEIGHT
+            target_ar = self.page_width / self.page_height
             with Image.open(cover_image_path) as _img:
                 _img = _img.convert('RGB')
                 iw, ih = _img.size
@@ -2285,16 +2312,16 @@ class FastLuluBookGenerator:
                     except ValueError:
                         dpi_val = 0
                     if dpi_val > 0:
-                        target_w_px = int(INTERIOR_PAGE_WIDTH / inch * dpi_val)
-                        target_h_px = int(INTERIOR_PAGE_HEIGHT / inch * dpi_val)
+                        target_w_px = int(self.page_width / inch * dpi_val)
+                        target_h_px = int(self.page_height / inch * dpi_val)
                         cropped = cropped.resize((target_w_px, target_h_px), Image.LANCZOS)
                 buf = BytesIO()
                 cropped.save(buf, format='PNG')
-                page.insert_image(fitz.Rect(0, 0, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT), stream=buf.getvalue(), keep_proportion=False)
+                page.insert_image(fitz.Rect(0, 0, self.page_width, self.page_height), stream=buf.getvalue(), keep_proportion=False)
         else:
             self._register_fonts_on_page(page)
             page.insert_textbox(
-                fitz.Rect(0, 0, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT),
+                fitz.Rect(0, 0, self.page_width, self.page_height),
                 'Cover Image Not Found',
                 fontsize=24,
                 fontname=self._font_body_name if self._font_body_file else 'helv',
@@ -2310,35 +2337,44 @@ class FastLuluBookGenerator:
             story_text = story_page['story']
 
             current_page += 1
-            page = doc.new_page(width=INTERIOR_PAGE_WIDTH, height=INTERIOR_PAGE_HEIGHT)
+            page = doc.new_page(width=self.page_width, height=self.page_height)
             image_path = self._get_image_path(image_rel_path) if image_rel_path else None
             if image_path and image_path.exists():
                 if self.no_crop_images:
                     page.draw_rect(
-                        fitz.Rect(0, 0, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT),
+                        fitz.Rect(0, 0, self.page_width, self.page_height),
                         color=None,
                         fill=to_rgb(Color(1, 1, 1))
                     )
-                    image_rect = self._fit_image_rect(image_path, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT)
+                    image_rect = self._fit_image_rect(image_path, self.page_width, self.page_height)
                     page.insert_image(image_rect, filename=str(image_path), keep_proportion=False)
                 else:
                     page.insert_image(
-                        fitz.Rect(0, 0, INTERIOR_PAGE_WIDTH, INTERIOR_PAGE_HEIGHT),
+                        fitz.Rect(0, 0, self.page_width, self.page_height),
                         filename=str(image_path),
                         keep_proportion=True
                     )
 
             current_page += 1
-            page = doc.new_page(width=INTERIOR_PAGE_WIDTH, height=INTERIOR_PAGE_HEIGHT)
+            page = doc.new_page(width=self.page_width, height=self.page_height)
             self._draw_text_page(page, story_text, current_page, is_right_page=True)
 
         current_page += 1
-        page = doc.new_page(width=INTERIOR_PAGE_WIDTH, height=INTERIOR_PAGE_HEIGHT)
+        page = doc.new_page(width=self.page_width, height=self.page_height)
         self._draw_character_page_main(page)
 
         current_page += 1
-        page = doc.new_page(width=INTERIOR_PAGE_WIDTH, height=INTERIOR_PAGE_HEIGHT)
+        page = doc.new_page(width=self.page_width, height=self.page_height)
         self._draw_app_promo_page(page)
+
+        if self.is_quick_book:
+            # Complete the six-sheet signature with the existing cover artwork.
+            page = doc.new_page(width=self.page_width, height=self.page_height)
+            self._draw_quick_back_cover(page, cover_image_path)
+            current_page += 1
+
+        if in_memory:
+            return doc
 
         doc.save(str(output_path), garbage=4, deflate=True, clean=True)
         doc.close()
@@ -2348,6 +2384,90 @@ class FastLuluBookGenerator:
         print(f'  Total pages: {current_page}')
 
         return output_path
+
+    def _draw_quick_back_cover(self, page, cover_image_path):
+        """Back-cover treatment using the existing hardcover blur and branded QR."""
+        from io import BytesIO
+        self._register_fonts_on_page(page)
+        # Keep the scenery recognizable; remove the front-cover lettering.
+        background = self._make_blurred_background(
+            cover_image_path, self.page_width, self.page_height,
+            blur_radius=18, crop_top=0.25)
+        image_bytes = BytesIO()
+        background.save(image_bytes, format='JPEG', quality=95)
+        page.insert_image(page.rect, stream=image_bytes.getvalue())
+        page.draw_rect(page.rect, color=None, fill=(0.04, 0.08, 0.07), fill_opacity=0.60)
+        cream = (0.98, 0.96, 0.92)
+        gold = (0.80, 0.72, 0.52)
+        center = self.page_width / 2
+        left, right = 65, self.page_width-65
+        book = self.story_data['book']
+        hook = book.get('back_cover_hook') or book['title']
+        blurb = book.get('back_cover_blurb') or 'A personalized adventure, made especially for the star of this story.'
+        self._draw_box(page, fitz.Rect(left, 85, right, 185), hook, 24, cream, bold=True)
+        page.draw_line(fitz.Point(center-30, 194), fitz.Point(center+30, 194), color=gold, width=1)
+        self._draw_box(page, fitz.Rect(left, 217, right, 340), blurb, 17, cream)
+        # One compact footer, with a single QR and aligned typography.
+        self._draw_box(page, fitz.Rect(left, 570, right, 607), 'img2x', 23, cream, bold=True)
+        qr_path = ensure_img2x_qr_png()
+        if not qr_path or not Path(qr_path).is_file():
+            raise ValueError('The branded img2x QR code is required for the back cover')
+        qr_size = 80
+        card = fitz.Rect(center-qr_size/2-7, 620, center+qr_size/2+7, 714)
+        page.draw_rect(card, color=None, fill=(1, 1, 1))
+        page.insert_image(fitz.Rect(center-qr_size/2, 627, center+qr_size/2, 707),
+                          filename=str(qr_path), keep_proportion=True)
+        self._draw_box(page, fitz.Rect(left, 728, right, 749), 'Create your own story', 11, cream)
+        self._draw_box(page, fitz.Rect(left, 755, right, 780), 'img2x.com', 12, cream)
+
+    @staticmethod
+    def _make_blurred_background(img_path, target_w_pt, target_h_pt, blur_radius=4.5, crop_top=0.0):
+        from PIL import Image, ImageFilter, ImageChops, ImageOps
+        """
+        Banding-safe background for print:
+        - Keep blur modest
+        - Add a separate paper-grain texture layer using OVERLAY blend (not plain blend)
+        This is a common prepress trick to break up 8-bit gradient steps.
+        """
+        # Target at 300 DPI
+        target_w_px = int((target_w_pt / inch) * 300)
+        target_h_px = int((target_h_pt / inch) * 300)
+
+        with Image.open(img_path) as img:
+            img = img.convert('RGB')
+            if crop_top:
+                img = img.crop((0, int(img.height * crop_top), img.width, img.height))
+
+            # 1. Resize to target
+            scale = max(target_w_px / img.width, target_h_px / img.height)
+            new_w = int(img.width * scale)
+            new_h = int(img.height * scale)
+            img = img.resize((new_w, new_h), Image.LANCZOS)
+
+            left = (new_w - target_w_px) // 2
+            top = (new_h - target_h_px) // 2
+            img = img.crop((left, top, left + target_w_px, top + target_h_px))
+
+            # 2. Slight blur (keep some structure; big smooth gradients make banding obvious)
+            img = img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+
+            # 3. Paper-grain texture layer (fine + low-frequency grain), then OVERLAY blend.
+            # Plain Image.blend() shifts tones; overlay creates micro-contrast that hides bands.
+            fine = Image.effect_noise(img.size, 12).convert('L')
+            coarse = Image.effect_noise(img.size, 48).convert('L').filter(ImageFilter.GaussianBlur(radius=4))
+            tex = ImageChops.add(fine, coarse, scale=2.0)  # keep around mid-gray
+            tex = ImageOps.autocontrast(tex)
+
+            # Reduce texture amplitude so it is invisible but effective in gradients.
+            # Map to mid-gray range around 128.
+            tex = tex.point(lambda p: int(128 + (p - 128) * 0.22))
+            tex_rgb = Image.merge('RGB', (tex, tex, tex))
+
+            over = ImageChops.overlay(img, tex_rgb)
+            img = Image.blend(img, over, alpha=0.35)
+
+            return img
+
 
     def generate_cover_pdf(self):
         self.spine_width = get_spine_width(self.total_pages)
@@ -2388,51 +2508,7 @@ class FastLuluBookGenerator:
             from io import BytesIO
             from PIL import Image, ImageFilter, ImageChops, ImageOps, ImageDraw
 
-            def make_blurred_background(img_path, target_w_pt, target_h_pt):
-                """
-                Banding-safe background for print:
-                - Keep blur modest
-                - Add a separate paper-grain texture layer using OVERLAY blend (not plain blend)
-                This is a common prepress trick to break up 8-bit gradient steps.
-                """
-                # Target at 300 DPI
-                target_w_px = int((target_w_pt / inch) * 300)
-                target_h_px = int((target_h_pt / inch) * 300)
-                
-                with Image.open(img_path) as img:
-                    img = img.convert('RGB')
-                    
-                    # 1. Resize to target
-                    scale = max(target_w_px / img.width, target_h_px / img.height)
-                    new_w = int(img.width * scale)
-                    new_h = int(img.height * scale)
-                    img = img.resize((new_w, new_h), Image.LANCZOS)
-                    
-                    left = (new_w - target_w_px) // 2
-                    top = (new_h - target_h_px) // 2
-                    img = img.crop((left, top, left + target_w_px, top + target_h_px))
-                    
-                    # 2. Slight blur (keep some structure; big smooth gradients make banding obvious)
-                    img = img.filter(ImageFilter.GaussianBlur(radius=4.5))
-
-                    # 3. Paper-grain texture layer (fine + low-frequency grain), then OVERLAY blend.
-                    # Plain Image.blend() shifts tones; overlay creates micro-contrast that hides bands.
-                    fine = Image.effect_noise(img.size, 12).convert('L')
-                    coarse = Image.effect_noise(img.size, 48).convert('L').filter(ImageFilter.GaussianBlur(radius=4))
-                    tex = ImageChops.add(fine, coarse, scale=2.0)  # keep around mid-gray
-                    tex = ImageOps.autocontrast(tex)
-
-                    # Reduce texture amplitude so it is invisible but effective in gradients.
-                    # Map to mid-gray range around 128.
-                    tex = tex.point(lambda p: int(128 + (p - 128) * 0.22))
-                    tex_rgb = Image.merge('RGB', (tex, tex, tex))
-
-                    over = ImageChops.overlay(img, tex_rgb)
-                    img = Image.blend(img, over, alpha=0.35)
-                    
-                    return img
-
-            bg_img = make_blurred_background(
+            bg_img = self._make_blurred_background(
                 str(cover_image_path),
                 cover_total_width,
                 cover_total_height
@@ -2871,8 +2947,10 @@ class FastLuluBookGenerator:
         try:
             from build_cssflip_flipbook import pdf_to_html_flipbook
             # Self-contained HTML via base64 images (current flipbook generator default).
-            html_path = pdf_to_html_flipbook(digi_path)
+            html_path = pdf_to_html_flipbook(digi_path, title=self.book_title, dpi=150 if self.is_quick_book else 300)
         except Exception as err:
+            if self.is_quick_book:
+                raise
             print(f'[WARN] HTML flipbook generation failed: {err}')
 
         total_elapsed = time.time() - total_start

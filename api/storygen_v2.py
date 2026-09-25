@@ -67,8 +67,10 @@ SCENE_INTEGRATION_PHRASE = (
     "Rain, dust, sun, sweat, and color must hit the face the same way they hit the body. "
     "Every human face points at the camera with both eyes visible -- the model only knows the "
     "uploaded front of the face, so profile or three-quarter heads invent a different person. "
-    "Body does the action; head stays camera-facing. Put props between them and the lens "
-    "so they do not have to turn away. "
+    "Stage the camera, upper chest and action together so the face stays frontal without "
+    "twisting or craning the neck. Keep shoulders naturally below the jaw; the neck connects "
+    "the skull to the upper chest with believable anatomy. Put props in front at a comfortable "
+    "working height so the person can act without hunching the shoulders into the head. "
     "The uploaded photo is WHO they are, not how they feel in this frame. "
     "Keep age, bone structure, skin, hair, and unique marks. "
     "Do not copy the reference expression -- that studio face is identity only. "
@@ -182,7 +184,13 @@ HARD CONSTRAINTS (HIGHEST PRIORITY)
    the shoulder FORCES the model to invent a new face. That is identity loss.
    Every human face points at the camera. Both eyes visible. No profile.
    No 3/4. No head turn away from the lens.
-2c) ACTION GEOMETRY: The BODY does the story action. The HEAD stays frontal.
+2c) ACTION GEOMETRY: The face stays frontal; plan the camera and upper torso
+   together instead of attaching a frontal head to an incompatible bent body.
+   Choose a stable stance, comfortable reach and camera height that keep the
+   neck naturally aligned with the upper spine. Show a readable jaw-to-neck
+   contour, neck base and shoulder slope appropriate to age and build. Clothing
+   follows this anatomy; do not invent a long neck or expose skin unnaturally.
+   Heavy effort comes from stance, arms and grip, not shoulders jammed into ears.
    Put the object between the person and the camera (rope in front, map held
    toward lens, lantern in front of the chest). BAD: "looking at a bird to
    the right." GOOD: "reaching toward a falling leaf in front of them."
@@ -410,7 +418,8 @@ If the answer is NO for any sentence, rewrite that sentence with a simpler, more
 CHARACTER SHEET PROMPT FORMAT (two-panel identity card, front only):
 "Create a professional two-panel identity sheet of the same person as the
 uploaded reference. No text. Thin divider. Even studio light.
-LEFT panel: head-and-shoulders close-up only, face filling most of the panel,
+LEFT panel: close-up framed from the upper chest, including the neck base and
+both shoulder slopes, with a level chin and relaxed shoulders; face remains
 camera-facing, both eyes visible -- the exact uploaded face, not a new person.
 No hands and no extra limbs in the left panel.
 RIGHT panel: front full-body in {{COSTUME_DETAILS}}, camera-facing, same
@@ -587,6 +596,7 @@ def Story_content_generator_v2(
     temperature: float = 0.4,
     thinking_level: str = "high",
     seed: int = 42,
+    output_type: str = "DIGI_BOOK",
 ) -> Dict[str, Any]:
     """
     Generate a multi-character storybook JSON.
@@ -626,6 +636,23 @@ def Story_content_generator_v2(
     model_name = model or _default_model_for_provider(provider)
 
     system_template = _build_v2_system_prompt(num_chars)
+    if output_type == "QUICK_BOOK":
+        system_template = system_template.replace("160-200", "about 220-260").replace(
+            "under 160 words", "unfinished or sparse").replace("12-16 sentences", "18-24 sentences").replace(
+            "4 short paragraphs", "4-5 paragraphs")
+        system_template += (
+            "\nQUICK BOOK FORMAT: Ten complete story scenes, roughly 220-260 words each as guidance only. Do not count words or pad the story to meet a quota. "
+            "Write richer action, dialogue, and sensory detail, never repetitive filler. "
+            "Every scene image and cover is native A4 PORTRAIT, not square. "
+            "Compose all faces and essential objects comfortably inside the frame with safe margins. "
+            "The illustration occupies the LEFT page; its complete story is typeset on the RIGHT. "
+            "Story scene illustrations have no text or page numbers. "
+            "Keep the original cover-title treatment: integrate the book title into the cover image. "
+            "Keep character reference sheets two-panel."
+            " Include book.back_cover_hook (8-14 words) and book.back_cover_blurb (30-45 words): "
+            "story-specific, spoiler-free back-cover copy about these characters and this adventure, "
+            "not advertising for the book-making service."
+        )
 
     # Build user message parts with interleaved face images
     user_parts: List[Dict[str, Any]] = []
@@ -807,7 +834,15 @@ def anatomy_lock_suffix() -> str:
         " Adult body scale: the first reference is FACE IDENTITY only -- do not "
         "enlarge that close-up. Use the costume sheet for height and limb length. "
         "Head is about one-seventh of standing height. Shoulders wider than the "
-        "head. Two normal-length arms, two hands, a real torso. Never crop through "
+        "head. The jaw, natural-length neck, collarbones and upper chest form one "
+        "continuous body: preserve a readable jaw-to-neck contour and the shoulder slope. "
+        "Keep the head centered over the neck base, shoulders below the jaw, and "
+        "neck aligned with the upper spine. Position the camera for this frontal "
+        "pose rather than stretching or compressing the neck to reach the lens. "
+        "Collars and scarves sit around the neck with natural folds; they do not "
+        "replace it. Use scene-matched shading beneath the jaw and along the neck. "
+        "Do not lengthen the neck or change the person's age or build. "
+        "Two normal-length arms, two hands, a real torso. Never crop through "
         "a window or hole so the head fills the opening. If the story has a climb "
         "or window, photograph from outside so chest, both arms, and the window "
         "are all visible."
@@ -910,6 +945,9 @@ def sheet_anti_collage_suffix() -> str:
         " Two-panel identity sheet only: LEFT a head-and-shoulders camera-facing "
         "close-up of the uploaded face with no hands in that panel, RIGHT a "
         "camera-facing full-body in costume with exactly two hands at the sides. "
+        "Both panels show the same natural jaw-to-neck transition, neck length "
+        "and shoulder slope. Include the neck base and upper chest in the close-up; "
+        "use relaxed shoulders, a level chin and a collar that follows the body. "
         "Same person. No extra limbs. No floating hands. No text. No profile. "
         "No 3/4. No back view. Thin divider."
     )

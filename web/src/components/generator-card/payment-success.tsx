@@ -7,7 +7,7 @@ import { Check, Sparkles, ArrowRight, Clock, PlusCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 
-type OutputType = 'DIGI_BOOK' | 'LULU_BOOK'
+type OutputType = 'DIGI_BOOK' | 'QUICK_BOOK' | 'LULU_BOOK'
 
 export function PaymentSuccess ({
   transactionId,
@@ -20,8 +20,8 @@ export function PaymentSuccess ({
   outputType: OutputType
   onCreateAnother: () => void
 }) {
-  const isDigital = outputType === 'DIGI_BOOK'
-  const productName = isDigital ? 'Digital Storybook' : 'Premium Hardcover Book'
+  const isDigital = outputType !== 'LULU_BOOK'
+  const productName = outputType === 'QUICK_BOOK' ? 'Quick Book' : isDigital ? 'Digital Storybook' : 'Premium Hardcover Book'
 
   return (
     <Card className="relative mx-auto w-full max-w-md overflow-hidden lg:max-w-4xl">
