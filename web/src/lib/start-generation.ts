@@ -3,6 +3,7 @@ import 'server-only'
 import { getAppSettings } from '@/lib/app-settings'
 import { getStoryAuthHeaders, getStoryServiceUrl } from '@/lib/storyApiServer'
 import { getProject, upsertProject } from '@/lib/projects-server'
+import { acquireGenerationLease, releaseGenerationLease } from '@/lib/data-store'
 import type { Project } from '@/types/project'
 
 const ACTIVE_STATUSES = new Set(['starting', 'generating', 'ready'])
@@ -28,10 +29,27 @@ export async function startProjectGeneration (
   projectId: string,
   options?: { force?: boolean }
 ): Promise<StartGenerationResult> {
+  const lease = await acquireGenerationLease(projectId)
+  if (!lease) {
+    const project = await getProject(projectId)
+    return { ok: true, jobId: project?.jobId || undefined, alreadyStarted: true }
+  }
+  try {
+    return await startProjectGenerationWithLease(projectId, options)
+  } finally {
+    await releaseGenerationLease(projectId, lease)
+  }
+}
+
+async function startProjectGenerationWithLease (
+  projectId: string,
+  options?: { force?: boolean }
+): Promise<StartGenerationResult> {
   const project = await getProject(projectId)
   if (!project) return { ok: false, error: 'Project not found' }
 
-  if (!options?.force && project.jobId && ACTIVE_STATUSES.has(project.status)) {
+  const retryDigital = project.outputType === 'QUICK_BOOK' && project.status === 'ready' && ['failed', 'interrupted'].includes(project.digitalStatus || '')
+  if (!options?.force && project.jobId && ACTIVE_STATUSES.has(project.status) && !retryDigital) {
     return { ok: true, jobId: project.jobId, alreadyStarted: true }
   }
 
@@ -59,11 +77,17 @@ export async function startProjectGeneration (
     form.append('keep_job_dir', 'false')
     form.append('project_id', project.id)
     form.append('model_provider', settings.story.provider || 'openai')
-    form.append('model', settings.story.model || 'gpt-5.6-terra')
+    form.append('model', settings.story.model || 'gpt-6-luna')
     for (const uri of uris) form.append('image_gcs_uris', uri)
     const isHardcover = project.outputType === 'LULU_BOOK'
     if (settings.images.model) form.append('image_model', settings.images.model)
-    if (isHardcover) {
+    if (project.outputType === 'QUICK_BOOK') {
+      form.set('image_model', 'gpt-image-2.5-sunburst-vip')
+      form.set('image_model_pages', 'gpt-image-2.5-sunburst-vip')
+      form.set('image_quality', 'high')
+      form.set('image_quality_pages', 'high')
+      form.set('image_size', '2400x3392')
+    } else if (isHardcover) {
       const printModel = settings.images.model || settings.images.modelPages
       if (printModel) form.append('image_model_pages', printModel)
       form.append('image_quality', 'high')
@@ -77,7 +101,9 @@ export async function startProjectGeneration (
     }
 
     const headers = await getStoryAuthHeaders()
-    const res = await fetch(`${getStoryServiceUrl()}/generate-ebook-async`, {
+    const resume = !options?.force && project.outputType === 'QUICK_BOOK' && project.jobId
+    const endpoint = resume ? `/jobs/${encodeURIComponent(project.jobId!)}/resume` : '/generate-ebook-async'
+    const res = await fetch(`${getStoryServiceUrl()}${endpoint}`, {
       method: 'POST',
       headers,
       body: form

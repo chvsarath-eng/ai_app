@@ -277,7 +277,7 @@ export default function ProjectsPage () {
                   <div className="absolute bottom-3 left-3">
                     <span className="inline-flex items-center gap-1 rounded-full bg-black/60 backdrop-blur px-2.5 py-0.5 text-[10px] font-medium text-white">
                       {isHardcover ? <Truck className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
-                      {isHardcover ? 'Hardcover' : 'Digital'}
+                      {isHardcover ? 'Hardcover' : project.outputType === 'QUICK_BOOK' ? 'Quick Book' : 'Digital'}
                     </span>
                   </div>
                 </div>
@@ -345,7 +345,7 @@ export default function ProjectsPage () {
                             variant="outline"
                             size="sm"
                             className="h-8 px-2.5 text-xs text-zinc-700"
-                            title="Download PDF"
+                            title={project.outputType === 'QUICK_BOOK' ? 'Download A3 Print PDF' : 'Download PDF'}
                           >
                             <a href={project.artifacts.pdf.url} target="_blank" rel="noopener noreferrer">
                               <Download className="h-3.5 w-3.5" />

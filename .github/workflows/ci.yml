@@ -100,6 +100,8 @@ jobs:
           cache-dependency-path: api/requirements.txt
       - run: pip install -r requirements.txt
       - run: python -m compileall -q .
+      - name: Quick Book geometry and pipeline tests
+        run: python -m unittest test_quick_book test_quick_book_pipeline test_print_first_delivery test_pdf_lossless test_import_safety test_laozhang_only -v
       - name: Import smoke test
         run: python -c "import story_fastapi; import story_api; import imggen"
         env:

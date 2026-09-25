@@ -56,11 +56,18 @@ export async function POST (request: Request) {
         const size = isHardcover ? settings.images.sizePrint : settings.images.sizeDigital
         if (size) form.append('image_size', size)
       }
+      if (outputType === 'QUICK_BOOK') {
+        form.set('image_model', 'gpt-image-2.5-sunburst-vip')
+        form.set('image_model_pages', 'gpt-image-2.5-sunburst-vip')
+        form.set('image_quality', 'high')
+        form.set('image_quality_pages', 'high')
+        form.set('image_size', '2400x3392')
+      }
       if (!incoming.has('model_provider')) {
         form.append('model_provider', settings.story.provider || 'openai')
       }
       if (!incoming.has('model')) {
-        form.append('model', settings.story.model || 'gpt-5.6-terra')
+        form.append('model', settings.story.model || 'gpt-6-luna')
       }
     } catch (settingsErr) {
       console.warn('Could not load app settings; using story service defaults:', settingsErr)

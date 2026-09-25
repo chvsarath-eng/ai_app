@@ -28,7 +28,10 @@ export async function POST (request: NextRequest) {
       return NextResponse.json({ error: 'A valid email address is required' }, { status: 400 })
     }
 
-    const resolvedType = outputType === 'LULU_BOOK' ? 'LULU_BOOK' : 'DIGI_BOOK'
+    if (!['DIGI_BOOK', 'QUICK_BOOK', 'LULU_BOOK'].includes(outputType)) {
+      return NextResponse.json({ error: 'Invalid book type' }, { status: 400 })
+    }
+    const resolvedType = outputType as 'DIGI_BOOK' | 'QUICK_BOOK' | 'LULU_BOOK'
     const quote = await resolveLocalizedPricing({
       headers: request.headers,
       timezone: typeof timezone === 'string' ? timezone : ''
@@ -72,14 +75,8 @@ export async function POST (request: NextRequest) {
         }
       }) as typeof order
     } catch (rzpErr: unknown) {
-      console.warn('Razorpay API call failed, using local simulated order:', rzpErr instanceof Error ? rzpErr.message : rzpErr)
-      order = {
-        id: `order_${Date.now()}_mock`,
-        amount: totalMinor,
-        currency: upperCurrency,
-        receipt: projectId.slice(0, 40),
-        status: 'created'
-      }
+      console.error('Razorpay order creation failed:', rzpErr instanceof Error ? rzpErr.message : 'Provider error')
+      return NextResponse.json({ error: 'Payment is temporarily unavailable. Please try again.' }, { status: 502 })
     }
 
     const existing = await getProject(projectId)

@@ -2,7 +2,7 @@ export const themes = ['Cowboy', 'Space', 'Princess', 'Superhero', 'Custom'] as 
 
 export type Theme = (typeof themes)[number]
 
-export const outputTypes = ['DIGI_BOOK', 'LULU_BOOK'] as const
+export const outputTypes = ['DIGI_BOOK', 'QUICK_BOOK', 'LULU_BOOK'] as const
 
 export type OutputType = (typeof outputTypes)[number]
 

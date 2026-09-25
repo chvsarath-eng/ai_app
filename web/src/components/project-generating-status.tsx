@@ -85,19 +85,21 @@ export function ProjectGeneratingStatus ({
   const elapsedMs = Math.max(0, now - startedMs)
   const pct = feltProgress({ stage, imagesDone, imagesTotal, elapsedMs })
   const label = friendlyStageLabel(stage)
-  const hint = liveHint(elapsedMs, imagesDone)
+  const hint = imagesDone === 0 && !/image|pdf|upload/.test(stage || '')
+    ? 'Checking story length and print layout before illustration begins.'
+    : liveHint(elapsedMs, imagesDone)
   const total = imagesTotal || 12
   const inFlight = Math.max(0, total - imagesDone)
 
   return (
-    <div className="mt-4 border-t border-zinc-100 pt-4 sm:mt-6 sm:pt-6">
+    <div className="mt-2 border-t border-zinc-100 pt-2">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <p className="flex items-center gap-1.5 text-sm font-semibold text-zinc-800">
           <Sparkles className="h-4 w-4 shrink-0 animate-spin text-violet-500" />
           <span>{label}</span>
         </p>
         <p className="text-xs font-medium text-zinc-500">
-          {imagesDone} / {total} ready · {inFlight > 0 ? `${inFlight} painting now` : 'wrapping up'}
+          {imagesDone} / {total} ready · {imagesDone === 0 && !/image|pdf|upload/.test(stage || '') ? 'Preparing story' : inFlight > 0 ? `${inFlight} remaining` : 'Preparing downloads'}
         </p>
       </div>
 

@@ -295,7 +295,7 @@ export function countryName (countryCode: string) {
   }
 }
 
-export function getBookPriceMinor (outputType: 'DIGI_BOOK' | 'LULU_BOOK', currency: string) {
+export function getBookPriceMinor (outputType: 'DIGI_BOOK' | 'QUICK_BOOK' | 'LULU_BOOK', currency: string) {
   const row = CURATED[currency.toUpperCase()]
   if (!row) return outputType === 'LULU_BOOK' ? USD_HARDCOVER_MINOR : USD_DIGITAL_MINOR
   return outputType === 'LULU_BOOK' ? row.hardcover : row.digital
@@ -358,6 +358,11 @@ export async function resolveLocalizedPricing (opts: {
   currencyOverride?: string | null
   timezone?: string | null
 }): Promise<LocalizedQuote> {
+  // Explicit local sandbox option; never affects production or live-key orders.
+  if (process.env.NODE_ENV === 'development' && process.env.LOCAL_RAZORPAY_INR === 'true' &&
+      (process.env.RAZORPAY_KEY_ID || '').startsWith('rzp_test_')) {
+    opts = { ...opts, countryOverride: 'IN', currencyOverride: 'INR' }
+  }
   const currencyOverride = opts.currencyOverride?.trim().toUpperCase()
   const countryCode = await detectCountry(opts)
   const detectedCurrency = currencyForCountry(countryCode)

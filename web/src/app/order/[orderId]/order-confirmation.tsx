@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Eyebrow, Accent } from '@/components/page-header'
 
-type OutputType = 'DIGI_BOOK' | 'LULU_BOOK'
+type OutputType = 'DIGI_BOOK' | 'QUICK_BOOK' | 'LULU_BOOK'
 
 export function OrderConfirmation ({
   orderId,
@@ -19,7 +19,7 @@ export function OrderConfirmation ({
   outputType: OutputType
   transactionId?: string
 }) {
-  const isDigital = outputType === 'DIGI_BOOK'
+  const isDigital = outputType !== 'LULU_BOOK'
   const tone = isDigital ? 'violet' : 'emerald'
   const iconBox = isDigital
     ? 'bg-gradient-to-br from-violet-500 to-pink-500 text-white'
@@ -31,7 +31,7 @@ export function OrderConfirmation ({
   const deliverables = isDigital
     ? [
         { icon: Sparkles, title: 'Interactive HTML flipbook', description: 'Beautiful flipbook you can view on any device' },
-        { icon: FileText, title: 'PDF download', description: 'High-quality PDF to save and share' }
+        { icon: FileText, title: outputType === 'QUICK_BOOK' ? 'A3 print PDF' : 'PDF download', description: outputType === 'QUICK_BOOK' ? 'Six duplex A3 sheets fold into a 24-page A4 book' : 'High-quality PDF to save and share' }
       ]
     : [
         { icon: FileText, title: 'PDF download', description: 'High-quality PDF sent to your email' },
@@ -44,7 +44,7 @@ export function OrderConfirmation ({
         <div className="flex flex-col items-center gap-3 text-center">
           <Eyebrow tone={tone}>
             <Check className="h-3 w-3" aria-hidden="true" />
-            {isDigital ? 'Digital book' : 'Premium hardcover'} ordered
+            {outputType === 'QUICK_BOOK' ? 'Quick Book' : isDigital ? 'Digital book' : 'Premium hardcover'} ordered
           </Eyebrow>
           <h1 className="text-3xl font-bold tracking-tight text-zinc-800 sm:text-4xl">
             Your storybook is <Accent tone={tone}>on its way</Accent>
@@ -64,7 +64,7 @@ export function OrderConfirmation ({
             <div>
               <h3 className="font-semibold text-zinc-900">Check your inbox</h3>
               <p className="mt-1 text-sm text-zinc-500">
-                {isDigital
+                {outputType === 'QUICK_BOOK' ? <>We will email your A3 print PDF and digital reader when all pages are ready.</> : isDigital
                   ? <>Your digital book will arrive within <span className="font-medium text-zinc-700">10–15 minutes</span>.</>
                   : <>Your PDF will arrive within <span className="font-medium text-zinc-700">10–15 minutes</span>. The printed book ships in <span className="font-medium text-zinc-700">5–7 business days</span>.</>}
               </p>

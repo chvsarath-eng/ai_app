@@ -106,7 +106,7 @@ export async function sendCustomerOrderConfirmation (payload: {
   const isHardcover = payload.outputType === 'LULU_BOOK'
   const currency = payload.currencyCode || 'USD'
   const subtotal = Math.max((payload.totalAmount || 0) - (payload.taxAmount || 0), 0)
-  const productName = isHardcover ? 'Personalized Hardcover Storybook' : 'Personalized Digital Storybook'
+  const productName = isHardcover ? 'Personalized Hardcover Storybook' : payload.outputType === 'QUICK_BOOK' ? 'Quick Book - A3 Print PDF and Digital Book' : 'Personalized Digital Storybook'
   const charLabel = payload.characterNames || 'your characters'
   const receiptUrl = `https://img2x.com/api/payments/${payload.paymentId}/invoice`
   const supportEmail = 'team@img2x.com'

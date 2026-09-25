@@ -9,7 +9,7 @@ export default async function OrderPage ({
 }) {
   const { orderId } = await params
   const { type, payment, txn, tx } = await searchParams
-  const outputType = type === 'LULU_BOOK' ? 'LULU_BOOK' : 'DIGI_BOOK'
+  const outputType = type === 'LULU_BOOK' ? 'LULU_BOOK' : type === 'QUICK_BOOK' ? 'QUICK_BOOK' : 'DIGI_BOOK'
   const paymentId = payment || txn || tx
 
   return <OrderConfirmation orderId={orderId} outputType={outputType} transactionId={paymentId} />

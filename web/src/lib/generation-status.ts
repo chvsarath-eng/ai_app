@@ -1,7 +1,8 @@
 const STAGE_LABELS: Array<[RegExp, string]> = [
+  [/story_draft_ready/, 'Checking story and page layout'],
   [/story_generation_start|job_started/, 'Writing your story'],
   [/story_generation_done|story_ready/, 'Story is ready — painting every scene'],
-  [/images_phase_start/, 'Painting all scenes at once'],
+  [/images_phase_start/, 'Creating your illustrations'],
   [/images_start|images_phase/, 'Painting cover and pages together'],
   [/image_ready/, 'New scenes are landing'],
   [/images_done/, 'Illustrations are in — binding your book'],
@@ -11,8 +12,8 @@ const STAGE_LABELS: Array<[RegExp, string]> = [
 ]
 
 const LIVE_HINTS = [
-  'Every page is rendering at the same time — nothing is waiting in a queue of 6.',
-  'Cover, scenes, and extras are all in flight together.',
+  'Illustrations are generated in parallel as capacity becomes available.',
+  'The cover and scenes use your character photos as references.',
   'Finished pages pop in here as soon as each one lands.',
   'This usually takes a few minutes. You can stay on this screen.',
   'Matching faces from your photo across every scene.'

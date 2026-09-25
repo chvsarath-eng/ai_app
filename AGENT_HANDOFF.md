@@ -1,19 +1,54 @@
+> September 25 release validation: Fresh Quick Book `ba813cecda6f4f63bd781294150f6af1` verified its cloud A3 download at 302.63 seconds from submission; HTML completed at 321.42 seconds. Native high-quality artwork, original borders, and frontal neck/shoulder prompt corrections retained. Full API regressions, production web build/typecheck, desktop/mobile create-to-checkout and reader tests passed. A3-first delivery and lossless compression are ready for PR/CI deployment; no five-minute guarantee or physical print proof. See [efficiency plan](docs/QUICK_BOOK_EFFICIENCY_PLAN.md). Earlier notes below are historical; strict word quotas and image fallback no longer apply.
+
 # Agent Handoff — img2x (Sep 11, 2026)
 
 > **Purpose:** Next agent / developer can continue without re-discovering context.  
 > **Product:** [img2x.com](https://img2x.com) — AI personalized storybooks (digital flipbook + Lulu hardcover).  
 > **Canonical GitHub (private):** https://github.com/chvsarath-eng/ai_app — clone this on any laptop.  
-> **Status:** GitHub Actions CI/CD live. **Image pipeline:** LaoZhang 2.5 VIP is primary (`api2`, `$0.03/call`); official OpenAI 2.5 is backup. Full rules: [`docs/IMAGE_GENERATION.md`](./docs/IMAGE_GENERATION.md).
+> **Status:** GitHub Actions CI/CD live. **Image pipeline:** LaoZhang 2.5 VIP is primary (`api2`, `$0.03/call`); no image fallback is permitted. Full rules: [`docs/IMAGE_GENERATION.md`](./docs/IMAGE_GENERATION.md).
 
 ---
 
 ## 0. Current work (Sep 11, 2026) — read first
 
+### Quick Book implementation (Sep 24, 2026, local branch)
+
+LaoZhang-only routing is enforced at the image request boundary, including stale
+saved provider/model overrides. Removed model aliases, official OpenAI routing,
+and the V2 Gemini fallback. Four routing/output-preservation tests passed.
+Two real A4 high-quality VIP calls failed upstream with HTTP 502 after 115.98s
+and 61.80s; neither fell back. New live visual-quality verification is therefore
+blocked by the provider. Local API was restarted with these changes; not deployed.
+The broader five-minute model/orchestration/PDF optimization remains unimplemented.
+
+Generation recovery/layout repair: the live local Quick Book failed before images
+because the bulk story rewrite left scenes outside 240–280 words. Invalid scenes
+now receive bounded individual repairs; raw drafts are checkpointed for resume.
+The resume endpoint accepts the actual 32-character job IDs as well as UUIDs.
+The generating/failed project view uses a compact viewport-sized workspace,
+desktop scene sidebar and mobile horizontal scene strip. Responsive checks are
+in `web/tests/generation-layout.mjs` (1440×900, 390×844, 360×640).
+The local paid job `61c10b1067a1421398b874fe6288103f` was resumed after this repair
+and generated all 12 image assets, the A3 PDF and original HTML reader. Pipeline
+time was 598.56s before artifact uploads (story 224.07s, images 266.77s, PDF 105.43s).
+Seven offline pipeline tests and all three viewport checks passed; source
+TypeScript check passed using the isolated dev build types. No deployment performed.
+
+New UI purchases now select `QUICK_BOOK`, using V2 with 240–280 words per story
+page, native A4 high-quality Sunburst artwork, 24 pages, a pre-imposed six-sheet
+A3 PDF and matching HTML reader. Legacy digital and Lulu paths remain available.
+See [Quick Book implementation and acceptance checks](docs/QUICK_BOOK.md).
+Real Quick Book generation completed with Sunburst VIP, including three resumed
+images; it did not meet the ten-minute target. The original V2 digital agent also
+completed a comparison book in 332.66 seconds. Quick Book now reuses the original
+decorated renderer and 3D flipbook; see docs/QUICK_BOOK.md. Not deployed; a physical
+duplex print trial is still required.
+
 ### Decisions (do not undo without asking)
 
-1. **Digital vs hardcover cost** — Digital is the cheap SKU (HTML + PDF). Use **1024 + Flare medium** for cover/pages, Sunburst high only for the identity sheet. Hardcover is the expensive SKU: **2048 + Sunburst high** for every image. Never upscale 1024 for print; re-render via `render-print`.
+1. **Digital vs hardcover cost** — Use **Sunburst VIP for all images**. Digital uses **1024 + medium** for cover/pages and high for identity sheets. Hardcover uses **2048 + high** for every image. Never upscale 1024 for print; re-render via `render-print`.
 2. **LaoZhang 2.5 VIP** (`gpt-image-2.5-*-vip`, $0.03/call on Default-group) is the production primary on `https://api2.laozhang.ai/v1`. Official-forward LaoZhang 2.5 (no `-vip`) still needs a **Sora2Official** token group — do not use those names on the Default-group key.
-3. **Backup** is official OpenAI (`https://api.openai.com/v1`, dated snapshots) via `IMAGE_API_FALLBACK=1`. Use **api2**, not `api.laozhang.ai`.
+3. **No image fallback** (September 24 user decision). All images are pinned to LaoZhang api2 Sunburst VIP; stale alternate model/provider settings cannot override this. Keep same-model bounded retries and print quality.
 4. Bind keys **per host**. A LaoZhang key on OpenAI is 401. Never drop to `gpt-image-2-vip` (older model).
 5. Likeness: frontal faces only; uploaded crop is identity not scale; ban window/hole crops (giant-head bug). Reference locks WHO, not mood -- small living emotion per page.
 6. Do not restyle the home page. Do not commit `.env` or `graphify-out/`.
@@ -25,9 +60,9 @@ Set in Cloud Run / `deploy/config/api.json`:
 ```
 IMAGE_API_BASE=https://api2.laozhang.ai/v1
 IMAGE_MODEL=gpt-image-2.5-sunburst-vip
-IMAGE_MODEL_PAGES=gpt-image-2.5-flare-vip
+IMAGE_MODEL_PAGES=gpt-image-2.5-sunburst-vip
 IMAGE_MODEL_PRINT=gpt-image-2.5-sunburst-vip
-IMAGE_API_FALLBACK=1
+IMAGE_API_FALLBACK=0
 IMAGE_CONCURRENCY=16
 ```
 
@@ -161,7 +196,7 @@ Local: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
 - `POST /jobs/{job_id}/render-print` — hardcover upgrade from a finished digital job
 - Images: `IMAGE_PROVIDER=openai_images` (OpenAI-compatible). See `docs/IMAGE_GENERATION.md`
 - Primary: LaoZhang `api2` VIP. Backup: `api.openai.com`. Keys per host.
-- Digital: 1024 / Flare medium pages. Hardcover: 2048 / Sunburst high
+- Digital: 1024 / Sunburst medium pages. Hardcover: 2048 / Sunburst high
 - Jobs: background thread + GCS `JOBS_BUCKET`; v2 writes `image_manifest.json`
 - Never commit `invoker.json` / `.env`
 

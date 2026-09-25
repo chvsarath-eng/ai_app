@@ -84,7 +84,11 @@ else
 fi
 
 if [[ "${CPU_ALWAYS}" == "true" ]]; then
+  # story-api: keep CPU on between requests so background book jobs finish.
   DEPLOY_ARGS+=(--cpu-boost --no-cpu-throttling)
+else
+  # img2x-web: bill CPU only while serving a request so idle/bot gaps are free.
+  DEPLOY_ARGS+=(--cpu-boost --cpu-throttling)
 fi
 
 if [[ -n "${ENV_VARS}" ]]; then

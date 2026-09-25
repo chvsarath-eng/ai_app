@@ -6,6 +6,7 @@ Fully responsive, white background with realistic shadows below the book.
 
 import argparse
 import base64
+from html import escape
 import fitz  # PyMuPDF
 from pathlib import Path
 
@@ -35,9 +36,10 @@ def pdf_to_base64_images(pdf_path, dpi=300, image_format='jpeg', jpeg_quality=95
     return images
 
 
-def generate_html(images, title="Flipbook"):
+def generate_html(images, title="Flipbook", page_ratio=1.0):
     """Generate the complete HTML for the flipbook."""
     total_pages = len(images)
+    has_last_back_page = total_pages % 2 == 0
     cover_image = images[0] if images else None
     ambient_bg_style = ""
     if isinstance(cover_image, str) and cover_image:
@@ -57,7 +59,7 @@ def generate_html(images, title="Flipbook"):
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
-    <title>{title}</title>
+    <title>{escape(title)}</title>
     <style>
 * {{
     box-sizing: border-box;
@@ -314,8 +316,8 @@ body {{
     transition: transform 0.6s ease-out;
     
     /* Use available space optimally */
-    height: min(85vh, calc(46vw));
-    width: min(calc(85vh * 2), 92vw);
+    height: min(85vh, calc(46vw / {page_ratio}));
+    width: min(calc(85vh * 2 * {page_ratio}), 92vw);
 }}
 
 .book.opened {{
@@ -624,7 +626,7 @@ body {{
             const sheets = document.querySelectorAll('.sheet');
             const leftPage = document.getElementById('leftPage');
             const totalSheets = sheets.length;
-            const maxSheetIndex = Math.max(0, totalSheets - 1);
+            const maxSheetIndex = Math.max(0, totalSheets - {0 if has_last_back_page else 1});
             
             const frontImages = [];
             const backImages = [];
@@ -1041,7 +1043,9 @@ def pdf_to_html_flipbook(pdf_path, output_html_path=None, title="Flipbook", dpi=
     print(f"Converted {len(images)} pages")
     
     print(f"Generating flipbook HTML...")
-    html = generate_html(images, title)
+    with fitz.open(pdf_path) as source:
+        page_ratio = source[0].rect.width / source[0].rect.height
+    html = generate_html(images, title, page_ratio=page_ratio)
     
     output_html_path.write_text(html, encoding='utf-8')
     print(f"HTML flipbook created: {output_html_path}")

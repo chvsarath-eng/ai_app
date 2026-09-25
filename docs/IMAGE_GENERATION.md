@@ -2,6 +2,11 @@
 
 Read this before changing models, quality, size, or LaoZhang vs OpenAI.
 
+**Quick Book update:** New purchases offer `QUICK_BOOK`: Sunburst VIP **high** for
+all images, native **2400×3392** A4 cover/scenes, 1024-square identity references,
+24 reader pages and a six-sheet A3 duplex PDF. See [QUICK_BOOK.md](QUICK_BOOK.md).
+The digital profile below applies to legacy `DIGI_BOOK` orders only.
+
 ## Two SKUs, two cost profiles
 
 | | Digital (`DIGI_BOOK`) | Hardcover (`LULU_BOOK`) |
@@ -10,7 +15,7 @@ Read this before changing models, quality, size, or LaoZhang vs OpenAI.
 | Outputs | HTML flipbook + PDF | Lulu interior + cover PDFs |
 | Size | `1024x1024` | `2048x2048` (~240 DPI on 8.5") |
 | Identity sheet | Sunburst **high** (one call — likeness) | Sunburst **high** |
-| Cover + pages | Flare **medium** | Sunburst **high** |
+| Cover + pages | Sunburst **medium** | Sunburst **high** |
 | Why | Cheap SKU must stay cheap | Print files cannot be 1024 upscales |
 
 **Do not** send digital 1024 files to Lulu. If the customer buys digital first, then a hardcover later, re-render cover + pages at 2048 via `POST /jobs/{job_id}/render-print` (`generate_print_edition_v2`). Character sheets are reused as identity refs.
@@ -21,23 +26,23 @@ Web hooks:
 - `POST /api/user/projects/{id}/print` → story-api `render-print`
 - `POST /api/user/projects/{id}/start` on a **ready digital** project that is now `LULU_BOOK` also triggers print upgrade
 
-## Hosts (LaoZhang VIP primary, OpenAI backup)
+## Image routing (LaoZhang Sunburst VIP only)
 
 LaoZhang **GPT Image 2.5 VIP** (`*-vip`, ~$0.03/call on Default-group) is the production primary. Official-forward LaoZhang names (`gpt-image-2.5-sunburst` without `-vip`) **cannot** run on a Default-group token — they need a LaoZhang token with group **Sora2Official**.
 
 **Production primary:** `https://api2.laozhang.ai/v1`  
-**Backup:** official OpenAI `https://api.openai.com/v1` (`IMAGE_API_FALLBACK=1`)  
+**No fallback:** all images are pinned to `gpt-image-2.5-sunburst-vip` on api2.
 Use **api2**, not `api.laozhang.ai` (their DNS-pollution notice).
 
 ```
 IMAGE_API_BASE=https://api2.laozhang.ai/v1
 IMAGE_MODEL=gpt-image-2.5-sunburst-vip
-IMAGE_MODEL_PAGES=gpt-image-2.5-flare-vip
+IMAGE_MODEL_PAGES=gpt-image-2.5-sunburst-vip
 IMAGE_MODEL_PRINT=gpt-image-2.5-sunburst-vip
-IMAGE_API_FALLBACK=1
+IMAGE_API_FALLBACK=0
 ```
 
-Keep OpenAI as backup. Each host must use **its own key** (`OPENAI_API_KEY` vs `LAOZHANG_API_KEY` / `API_KEY_LAOZHANG`). A LaoZhang key on `api.openai.com` returns 401.
+September 24 user decision: remove alternate models and providers. The image request boundary ignores legacy provider/model/fallback overrides. Only the LaoZhang key is used for images. Existing bounded retries stay on the same model; an exhausted request fails resumably instead of switching providers. Resolution, quality, prompts and reference inputs are unchanged. OpenAI may still be used for story text.
 
 Do **not** fall back to `gpt-image-2-vip` (older Image 2, not 2.5).
 

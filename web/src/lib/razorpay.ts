@@ -56,22 +56,8 @@ export function verifyRazorpaySignature ({
 }): boolean {
   if (!orderId || !paymentId || !signature) return false
 
-  // In local test / mock mode, allow instant simulated completion
-  if (
-    signature === 'test_mock_signature' ||
-    signature.startsWith('test_') ||
-    orderId.includes('_mock') ||
-    paymentId.startsWith('pay_mock')
-  ) {
-    return true
-  }
-
   const secret = getRazorpayKeySecret()
-  if (!secret || secret === 'rzp_secret_placeholder' || secret.includes('placeholder')) {
-    if (process.env.NODE_ENV === 'development') {
-      return true
-    }
-  }
+  if (!secret || secret.includes('placeholder')) return false
 
   try {
     const expected = crypto
@@ -105,7 +91,7 @@ export function verifyRazorpayWebhookSignature ({
 }
 
 export function getProductPriceMinor (
-  outputType: 'DIGI_BOOK' | 'LULU_BOOK',
+  outputType: 'DIGI_BOOK' | 'QUICK_BOOK' | 'LULU_BOOK',
   currency = 'USD'
 ): number {
   return getBookPriceMinor(outputType, currency)

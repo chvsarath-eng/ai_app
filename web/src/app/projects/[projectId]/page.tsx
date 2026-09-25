@@ -26,6 +26,7 @@ import { friendlyStageLabel } from '@/lib/generation-status'
 import { useAuthStore } from '@/lib/auth-store'
 import { cn } from '@/lib/utils'
 import type { Project } from '@/types/project'
+import { BookGenerationWorkspace } from '@/components/book-generation-workspace'
 
 function resolveMedia (jobId: string | null | undefined, url: string | null | undefined) {
   if (!url) return null
@@ -45,12 +46,14 @@ function resolveMedia (jobId: string | null | undefined, url: string | null | un
 
 function mobileLayoutPreview (): Project {
   const now = Date.now()
+  const printReady = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('printReady')
   return {
     id: '__mobile_preview__',
     uid: 'preview',
     email: null,
     status: 'generating',
-    outputType: 'DIGI_BOOK',
+    outputType: printReady ? 'QUICK_BOOK' : 'DIGI_BOOK',
+    artifacts: printReady ? { pdf: { url: '/print-ready-test.pdf', gcsPath: null } } : undefined,
     storyline: 'A curious kid discovers a secret door to space and meets a friendly robot.',
     characters: [],
     numCharacters: 1,
@@ -394,7 +397,13 @@ export default function ProjectDetailsPage ({
 
   const flipbookUrl =
     project.artifacts?.html?.url ||
-    (project.jobId ? `/api/storybook/jobs/${project.jobId}/storybook.html` : null)
+    (project.jobId && project.outputType !== 'QUICK_BOOK' ? `/api/storybook/jobs/${project.jobId}/storybook.html` : null)
+
+  if (isGenerating || isFailed) {
+    return <BookGenerationWorkspace project={project} selected={selectedPage} onSelect={setSelectedPage}
+      imageUrl={(page) => page === 0 ? coverImage : resolveMedia(project.jobId, project.images?.[`page_${page}`]?.url)}
+      onResume={() => void startGeneration()} resuming={isStarting} resumeError={startError} />
+  }
 
   return (
     <div id="live-generation" className="min-w-0 overflow-x-hidden px-0 py-3 sm:py-12">
@@ -447,7 +456,7 @@ export default function ProjectDetailsPage ({
                   </span>
                 )}
                 <span className="inline-flex items-center rounded-full bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200/70">
-                  {isHardcover ? 'Hardcover edition' : 'Digital edition'}
+                  {isHardcover ? 'Hardcover edition' : project.outputType === 'QUICK_BOOK' ? 'Quick Book · 24 A4 pages' : 'Digital edition'}
                 </span>
               </div>
 
@@ -460,9 +469,15 @@ export default function ProjectDetailsPage ({
               {isFailed && (
                 <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-rose-200/80 bg-rose-50/90 px-4 py-3 text-sm text-rose-800">
                   <span>{project.error?.message || 'Something went wrong while generating this book.'}</span>
-                  <Button asChild size="sm" variant="outline" className="h-8 border-rose-300 bg-white text-rose-800 hover:bg-rose-100">
+                  {project.outputType === 'QUICK_BOOK' && project.jobId ? (
+                    <Button size="sm" variant="outline" disabled={isStarting} onClick={() => void startGeneration()}
+                      className="h-8 border-rose-300 bg-white text-rose-800 hover:bg-rose-100">
+                      {isStarting ? 'Resuming…' : 'Resume this book'}
+                    </Button>
+                  ) : <Button asChild size="sm" variant="outline" className="h-8 border-rose-300 bg-white text-rose-800 hover:bg-rose-100">
                     <Link href="/#create">Create another storybook</Link>
-                  </Button>
+                  </Button>}
+                  {startError && <p role="alert" className="w-full">{startError}</p>}
                 </div>
               )}
               {isPaidStuck && (
@@ -496,16 +511,21 @@ export default function ProjectDetailsPage ({
                 <Button asChild className="font-semibold">
                   <a href={flipbookUrl} target="_blank" rel="noopener noreferrer">
                     <BookOpen className="mr-1.5 h-4 w-4" />
-                    Open flipbook
+                    {project.outputType === 'QUICK_BOOK' ? 'Read digital book' : 'Open flipbook'}
                   </a>
                 </Button>
               )}
 
+              {project.outputType === 'QUICK_BOOK' && ['failed', 'interrupted'].includes(project.digitalStatus || '') && (
+                <Button variant="outline" disabled={isStarting} onClick={() => void startGeneration()}>
+                  {isStarting ? 'Retrying…' : 'Retry digital book'}
+                </Button>
+              )}
               {project.artifacts?.pdf?.url && (
                 <Button asChild variant="outline" className="bg-white/80">
                   <a href={project.artifacts.pdf.url} target="_blank" rel="noopener noreferrer">
                     <Download className="mr-1.5 h-4 w-4" />
-                    Download PDF
+                    {project.outputType === 'QUICK_BOOK' ? 'Download A3 Print PDF' : 'Download PDF'}
                   </a>
                 </Button>
               )}
@@ -521,6 +541,27 @@ export default function ProjectDetailsPage ({
             />
           )}
         </Card>
+
+        {project.outputType === 'QUICK_BOOK' && isReady && (
+          <Card className="p-5 text-sm text-zinc-700">
+            <h2 className="font-semibold text-zinc-900">Print your six-sheet Quick Book</h2>
+            <p className="mt-2">Your PDF has 12 A3 sides, already arranged to fold into 24 A4 pages.
+              Pages appear out of reading order intentionally. Use the digital book to read the story.</p>
+            <dl className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-zinc-50 p-4 sm:grid-cols-4">
+              <div><dt className="text-xs text-zinc-500">Paper</dt><dd className="font-medium">A3 · landscape</dd></div>
+              <div><dt className="text-xs text-zinc-500">Scale</dt><dd className="font-medium">Actual size · 100%</dd></div>
+              <div><dt className="text-xs text-zinc-500">Double-sided</dt><dd className="font-medium">Flip on short edge</dd></div>
+              <div><dt className="text-xs text-zinc-500">Pages per sheet</dt><dd className="font-medium">1 · booklet mode off</dd></div>
+            </dl>
+            <ol className="mt-4 list-decimal space-y-1 pl-5">
+              <li>Test PDF pages 1–2 on one sheet to check the front and back orientation.</li>
+              <li>Print all 12 sides in order, once. Nest the six sheets with the cover on the outside.</li>
+              <li>Fold in half and staple twice along the centre fold using a long-arm stapler.</li>
+            </ol>
+            <p className="mt-3 text-xs text-zinc-500">The artwork reaches the PDF edges. Most office printers
+              leave an unprinted edge; check your printer’s printable area before printing the full book.</p>
+          </Card>
+        )}
 
         {/* Page viewer: image first on phones, filmstrip beside on desktop */}
         <div className="grid min-w-0 gap-3 lg:grid-cols-12 lg:gap-8">
@@ -572,7 +613,7 @@ export default function ProjectDetailsPage ({
 
               <div className="grid min-w-0 grid-cols-1 gap-3">
                 {selectedPage === 0 ? (
-                  <PageFrame>
+                  <PageFrame className={project.outputType === 'QUICK_BOOK' ? 'aspect-[210/297]' : undefined}>
                     {coverImage ? (
                       <ContainedImage src={coverImage} alt="Cover" />
                     ) : (
@@ -583,7 +624,7 @@ export default function ProjectDetailsPage ({
                     )}
                   </PageFrame>
                 ) : (
-                  <PageFrame>
+                  <PageFrame className={project.outputType === 'QUICK_BOOK' ? 'aspect-[210/297]' : undefined}>
                     {activePageImage ? (
                       <ContainedImage src={activePageImage} alt={`Page ${selectedPage}`} />
                     ) : (
@@ -633,7 +674,7 @@ export default function ProjectDetailsPage ({
                   </div>
 
                   {/* Lulu Hardcover Print CTA for digital books */}
-                  {!isHardcover && !isGenerating && (
+                  {project.outputType === 'DIGI_BOOK' && !isGenerating && (
                     <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/70 to-teal-50/40 p-4">
                       <div className="flex items-center gap-2 text-xs font-semibold text-emerald-900">
                         <Truck className="h-4 w-4 text-emerald-600" />

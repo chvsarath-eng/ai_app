@@ -82,6 +82,9 @@ def _load_jobs_from_disk() -> int:
         if job_id in _JOBS:
             continue
         job["job_dir"] = str(state_path.parent)
+        if job.get("status") in ("queued", "running") and job.get('print_ready_at'):
+            job['status'] = 'succeeded'
+            job.setdefault('result', {})['digital_status'] = 'interrupted'
         if job.get("status") in ("queued", "running"):
             # The worker thread died with the old process; the job cannot resume.
             job["status"] = "failed"
@@ -167,7 +170,7 @@ def admin_config() -> Dict[str, Any]:
         },
         "story": {
             "provider": os.getenv("STORY_MODEL_PROVIDER") or os.getenv("MODEL_PROVIDER") or "openai",
-            "model": os.getenv("STORY_MODEL") or os.getenv("MODEL") or "gpt-5.6-terra",
+            "model": os.getenv("STORY_MODEL") or os.getenv("MODEL") or "gpt-6-luna",
         },
         "keys": {
             "laozhang": bool(os.getenv("LAOZHANG_API_KEY") or os.getenv("API_KEY_LAOZHANG")),
@@ -362,7 +365,13 @@ def _gcs_upload_file(*, job_id: str, name: str, local_path: str, content_type: s
     client = _gcs_client()
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(f"{_gcs_job_prefix(job_id)}/{name}")
+    upload_started = time.time()
     blob.upload_from_filename(local_path, content_type=content_type)
+    event = {'name': name, 'started_at': upload_started, 'finished_at': time.time(),
+             'duration_s': time.time()-upload_started, 'bytes': Path(local_path).stat().st_size}
+    _JOBS.get(job_id, {}).setdefault('upload_timings', []).append(event)
+    logger.info('artifact_upload job_id=%s name=%s seconds=%.3f bytes=%s',
+                job_id, name, event['duration_s'], event['bytes'])
     return f"gs://{bucket_name}/{blob.name}"
 
 
@@ -375,7 +384,7 @@ def _gcs_signing_kwargs() -> Dict[str, str]:
     import google.auth
     from google.auth.transport.requests import Request as GoogleAuthRequest
 
-    credentials, _project = google.auth.default()
+    credentials, _project = google.auth.default(scopes=['https://www.googleapis.com/auth/cloud-platform'])
     request = GoogleAuthRequest()
     try:
         credentials.refresh(request)
@@ -878,16 +887,24 @@ def _run_ebook_job(
             raise e
 
 
+    print_delivery = {}
+    from concurrent.futures import ThreadPoolExecutor
+    preview_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='quick-preview') if output_type == 'QUICK_BOOK' else None
+    preview_futures = []
+
     def _update_stage(stage: str, extra: Optional[Dict[str, Any]] = None) -> None:
         now = time.time()
         _JOBS[job_id]["stage"] = stage
         _JOBS[job_id]["stage_at"] = now
+        _JOBS[job_id].setdefault('stage_timings', []).append({'stage': stage, 'at': now})
         payload: Dict[str, Any] = {
             "job_id": job_id,
             "status": _JOBS[job_id].get("status"),
             "stage": stage,
             "updated_at": now,
         }
+        if print_delivery:
+            payload.update(print_delivery)
         if extra:
             payload.update(extra)
         try:
@@ -912,11 +929,21 @@ def _run_ebook_job(
         gcs_uri: Optional[str] = None
         try:
             if _jobs_bucket_name():
+                upload_path = saved
+                if output_type == 'QUICK_BOOK':
+                    from PIL import Image
+                    thumb = job_dir / 'previews' / (Path(saved).stem + '.jpg')
+                    thumb.parent.mkdir(exist_ok=True)
+                    with Image.open(saved) as image:
+                        image = image.convert('RGB')
+                        image.thumbnail((720, 1020))
+                        image.save(thumb, quality=85)
+                    upload_path = str(thumb)
                 gcs_uri = _gcs_upload_file(
                     job_id=job_id,
                     name=name,
-                    local_path=saved,
-                    content_type="image/png" if saved.lower().endswith(".png") else "image/jpeg",
+                    local_path=upload_path,
+                    content_type="image/png" if upload_path.lower().endswith(".png") else "image/jpeg",
                 )
                 try:
                     url = _gcs_generate_signed_url(
@@ -948,6 +975,48 @@ def _run_ebook_job(
     def _on_progress(stage: str, extra: Optional[Dict[str, Any]] = None) -> None:
         """Progress hook: legacy stage tracking + live Firestore mirroring."""
         extra = extra or {}
+        if stage == "print_pdf_ready":
+            path = extra['pdf_path']
+            upload_start = time.time()
+            urls, artifacts = {}, {}
+            if _jobs_bucket_name():
+                uri = _gcs_upload_file(job_id=job_id, name='storybook.pdf',
+                    local_path=path, content_type='application/pdf')
+                url = _gcs_generate_signed_url(job_id=job_id, name='storybook.pdf',
+                    expires_days=_signed_url_expires_days(), filename=Path(path).name)
+                urls['pdf'] = url
+                artifacts['pdf'] = uri
+                state.artifacts_ready(artifacts={'pdf': {'gcsPath': uri, 'url': url}},
+                    expires_days=_signed_url_expires_days())
+            now = time.time()
+            print_delivery.update(pdf_path=path, signed_urls=urls, gcs_artifacts=artifacts,
+                print_ready_at=now, print_ready_s=now-started_at,
+                print_upload_s=now-upload_start, digital_status='pending',
+                local_urls={'pdf': f'/jobs/{job_id}/storybook.pdf'})
+            _JOBS[job_id]['result'] = dict(print_delivery)
+            _JOBS[job_id]['print_ready_at'] = now
+            _update_stage('print_ready', {'print_ready_s': now-started_at})
+            return
+        if preview_pool is not None and stage == 'image_ready':
+            # Keep original recovery writes durable, but off the render critical path.
+            def publish(item=dict(extra)):
+                from quick_book_jobs import checkpoint
+                path = Path(item['saved_path'])
+                checkpoint(job_id, job_dir, [path, Path(str(path) + '.result.json')])
+                _publish_image(item)
+            preview_futures.append(preview_pool.submit(publish))
+            return
+        if output_type == "QUICK_BOOK" and stage in ("story_draft_ready", "story_ready", "image_ready"):
+            from quick_book_jobs import checkpoint
+            if stage == "story_draft_ready":
+                files = [job_dir / "story_draft_result.json"]
+            elif stage == "story_ready":
+                files = [job_dir / "story_data.json", job_dir / "story_usage.json",
+                         *list((job_dir / "input_images").glob("*"))]
+            else:
+                image_path = Path(str(extra["saved_path"]))
+                files = [image_path, Path(str(image_path) + ".result.json")]
+            checkpoint(job_id, job_dir, [f for f in files if f.is_file()])
         if stage == "story_ready":
             _JOBS[job_id]["story"] = extra
             state.story_ready(extra)
@@ -984,7 +1053,24 @@ def _run_ebook_job(
     state.job_started(output_type=output_type, num_characters=len(face_image_paths or [face_image_path]))
 
     try:
-        if use_v2 and face_image_paths:
+        saved_print = job_dir / 'book_outputs' / 'quick-book' / 'quick-book-a3-duplex.pdf'
+        if output_type == 'QUICK_BOOK' and saved_print.exists():
+            # Resume publication/HTML from the finished print file, with no model calls.
+            import fitz
+            from quick_book import generate_quick_html
+            with fitz.open(saved_print) as document:
+                if len(document) != 12:
+                    raise ValueError('Saved A3 file is incomplete')
+                title = document.metadata.get('title') or 'Your storybook'
+            _on_progress('print_pdf_ready', {'pdf_path': str(saved_print)})
+            html = None
+            try:
+                html = generate_quick_html(saved_print, title)
+            except Exception:
+                logger.exception('HTML retry failed; A3 remains available')
+            result = {'pdf_path': str(saved_print), 'html_path': str(html) if html else None,
+                      'timing': {'reused_print': 1}, 'story_json_path': str(job_dir / 'story_data.json')}
+        elif use_v2 and face_image_paths:
             logger.info("job_id=%s using V2 multi-character pipeline (%d characters)", job_id, len(face_image_paths))
             result = story_api.generate_ebook_html_bundle_v2(
                 job_dir=str(job_dir),
@@ -1009,15 +1095,27 @@ def _run_ebook_job(
                 model=model,
                 progress_cb=_on_progress,
             )
+        # Observe every upload failure; no orphan background work after job completion.
+        for future in preview_futures:
+            try:
+                future.result()
+            except Exception:
+                logger.exception('Quick Book checkpoint/preview delivery failed')
         result["job_id"] = job_id
         result["email"] = email
         result["output_type"] = output_type
         result["status"] = "succeeded"
 
         # Upload all artifacts to GCS based on output_type
-        gcs_artifacts = {}
+        result.update(print_delivery)
+        if output_type == "QUICK_BOOK":
+            result['digital_status'] = 'ready' if result.get('html_path') else 'failed'
+        gcs_artifacts = dict(print_delivery.get('gcs_artifacts') or {})
         signed_items: List[Dict[str, str]] = []
-        signed_urls: Dict[str, str] = {}
+        if print_delivery.get('signed_urls', {}).get('pdf'):
+            signed_items.append({'label': 'Download A3 Print PDF',
+                'url': print_delivery['signed_urls']['pdf'], 'kind': 'pdf'})
+        signed_urls: Dict[str, str] = dict(print_delivery.get('signed_urls') or {})
         signed_url_errors: List[Dict[str, str]] = []
         expires_days = _signed_url_expires_days()
         _update_stage("upload_start", {"output_type": output_type})
@@ -1066,9 +1164,9 @@ def _run_ebook_job(
                         signed_url_errors.append({"type": e.__class__.__name__, "message": str(e)})
 
                 # Upload PDF(s) based on output_type
-                if output_type == "DIGI_BOOK":
+                if output_type in ("DIGI_BOOK", "QUICK_BOOK"):
                     pdf_path = str(result.get("pdf_path") or "")
-                    if pdf_path and Path(pdf_path).exists():
+                    if pdf_path and Path(pdf_path).exists() and not print_delivery:
                         gcs_uri = _gcs_upload_file(
                             job_id=job_id,
                             name="storybook.pdf",
@@ -1085,7 +1183,7 @@ def _run_ebook_job(
                                 filename=Path(pdf_path).name,
                             )
                             signed_urls["pdf"] = signed_url
-                            signed_items.append({"label": "Download PDF", "url": signed_url, "kind": "pdf"})
+                            signed_items.append({"label": "Download A3 Print PDF" if output_type == "QUICK_BOOK" else "Download PDF", "url": signed_url, "kind": "pdf"})
                         except Exception as e:
                             logger.exception("Failed to sign PDF URL for job_id=%s: %s", job_id, e)
                             signed_url_errors.append({"type": e.__class__.__name__, "message": str(e)})
@@ -1156,6 +1254,10 @@ def _run_ebook_job(
             logger.exception("Failed to upload artifacts to GCS for job_id=%s: %s", job_id, e)
             result["gcs_upload_error"] = {"type": e.__class__.__name__, "message": str(e)}
             _update_stage("upload_failed", {"error_type": e.__class__.__name__})
+            if output_type == "QUICK_BOOK" and not print_delivery:
+                raise
+            if print_delivery:
+                result['digital_status'] = 'failed'
 
         # Optional email delivery (only if SMTP is configured)
         to_email = (email or "").strip()
@@ -1217,6 +1319,16 @@ def _run_ebook_job(
             "message": str(e),
             "stage": _JOBS[job_id].get("stage"),
         }
+        if print_delivery:
+            # Once printing is possible, secondary failures cannot revoke that outcome.
+            _JOBS[job_id]['status'] = 'succeeded'
+            _JOBS[job_id]['result'] = {**print_delivery, 'digital_status': 'failed',
+                                     'digital_error': str(e)}
+            state.succeeded(timing={'print_ready_s': print_delivery['print_ready_s']},
+                            cost=None, email_status='skipped')
+            _gcs_write_json(job_id=job_id, name='status.json',
+                payload={'job_id': job_id, 'status': 'succeeded', 'result': _JOBS[job_id]['result']})
+            return
         state.failed(error=_JOBS[job_id]["error"])
         # Best-effort: upload raw story output if present (helps debug JSON parsing failures).
         try:
@@ -1238,13 +1350,15 @@ def _run_ebook_job(
             payload={"job_id": job_id, "status": "failed", "error": _JOBS[job_id]["error"]},
         )
     finally:
+        if preview_pool is not None:
+            preview_pool.shutdown(wait=True)
         _JOBS[job_id]["finished_at"] = time.time()
         _JOBS[job_id]["duration_s"] = _JOBS[job_id]["finished_at"] - started_at
         _persist_job_state(job_id)
 
         # Without a GCS bucket the job dir is the only copy of the finished book
         # (served by /jobs/{id}/storybook.html + /storybook.pdf), so never delete it.
-        if not keep_job_dir and _jobs_bucket_name() and _JOBS[job_id].get("status") != "running":
+        if not keep_job_dir and _jobs_bucket_name() and _JOBS[job_id].get("status") != "running" and output_type != "QUICK_BOOK":
             try:
                 shutil.rmtree(job_dir, ignore_errors=True)
             except Exception:
@@ -1451,6 +1565,8 @@ def get_job(job_id: str) -> JSONResponse:
                 "status": status or "unknown",
                 "stage": gcs.get("stage"),
                 "updated_at": gcs.get("updated_at"),
+                "signed_urls": gcs.get("signed_urls"),
+                "print_ready_at": gcs.get("print_ready_at"),
             }
         )
 
@@ -1501,6 +1617,9 @@ def get_job(job_id: str) -> JSONResponse:
         {
             "job_id": job_id,
             "status": status,
+            "signed_urls": (job.get("result") or {}).get("signed_urls"),
+            "local_urls": (job.get("result") or {}).get("local_urls"),
+            "print_ready_at": job.get("print_ready_at"),
             "stage": job.get("stage"),
             "stage_at": job.get("stage_at"),
             "created_at": job.get("created_at"),
@@ -1545,7 +1664,7 @@ def get_job_image(job_id: str, name: str):
 def get_job_pdf(job_id: str) -> FileResponse:
     """Serve the finished PDF from the local job dir (no-GCS fallback)."""
     job = _JOBS.get(job_id)
-    if not job or job.get("status") != "succeeded":
+    if not job or (job.get("status") != "succeeded" and not job.get("print_ready_at")):
         raise HTTPException(status_code=404, detail="PDF not ready")
     result = job.get("result") or {}
     pdf_path = result.get("pdf_path") or result.get("interior_pdf_path")
@@ -1719,7 +1838,7 @@ async def generate_ebook_async(
             )
 
     # Detect pipeline version: V2 if >1 image OR metadata provided OR GCS refs, else V1
-    use_v2 = len(upload_files) > 1 or parsed_metadata is not None or bool(gcs_refs)
+    use_v2 = len(upload_files) > 1 or parsed_metadata is not None or bool(gcs_refs) or output_type.upper() == "QUICK_BOOK"
 
     job_id = uuid4().hex
     email = (email or "").strip() or None
@@ -1811,7 +1930,7 @@ async def generate_ebook_async(
 
     # Normalize output_type
     output_type_normalized = (output_type or "DIGI_BOOK").upper().strip()
-    if output_type_normalized not in ("DIGI_BOOK", "LULU_BOOK"):
+    if output_type_normalized not in ("DIGI_BOOK", "LULU_BOOK", "QUICK_BOOK"):
         output_type_normalized = "DIGI_BOOK"
 
     image_params: Dict[str, Any] = {
@@ -1848,9 +1967,7 @@ async def generate_ebook_async(
         payload={"job_id": job_id, "status": "queued", "created_at": _JOBS[job_id]["created_at"]},
     )
 
-    t = threading.Thread(
-        target=_run_ebook_job,
-        kwargs=dict(
+    job_args = dict(
             job_id=job_id,
             job_dir=job_dir,
             story_prompt=story_prompt,
@@ -1866,10 +1983,19 @@ async def generate_ebook_async(
             use_v2=use_v2,
             project_id=project_id_clean,
             image_params=image_params or None,
-        ),
-        daemon=True,
-    )
-    t.start()
+        )
+    if output_type_normalized == "QUICK_BOOK":
+        from quick_book_jobs import acquire, checkpoint
+        request_data = {k: v for k, v in job_args.items() if k not in ("job_dir", "pricing")}
+        request_path = job_dir / "quick_request.json"
+        request_path.write_text(json.dumps(request_data), encoding="utf-8")
+        checkpoint(job_id, job_dir, [request_path, *list((job_dir / "input_images").glob("*"))])
+        acquired, lease = acquire(job_id)
+        if not acquired:
+            raise HTTPException(status_code=409, detail="Quick Book is already running")
+        threading.Thread(target=_run_quick_job, args=(job_args, lease), daemon=True).start()
+    else:
+        threading.Thread(target=_run_ebook_job, kwargs=job_args, daemon=True).start()
 
     return JSONResponse(
         {
@@ -1882,6 +2008,62 @@ async def generate_ebook_async(
             "project_id": project_id_clean,
         }
     )
+
+
+def _run_quick_job(job_args, lease):
+    from quick_book_jobs import release
+    try:
+        _run_ebook_job(**job_args)
+    finally:
+        try:
+            release(job_args["job_id"], lease)
+        except Exception:
+            logger.exception("Could not release Quick Book lease")
+
+
+@app.post("/jobs/{job_id}/resume")
+def resume_quick_book(job_id: str, project_id: str = Form(...)):
+    """Private service endpoint; the web route verifies project ownership/payment."""
+    import re
+    if not re.fullmatch(r"(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})", job_id):
+        raise HTTPException(status_code=400, detail="Invalid job id")
+    from quick_book_jobs import acquire, release, restore
+    acquired, lease = acquire(job_id)
+    if not acquired:
+        return JSONResponse({"job_id": job_id, "status": "running"})
+    try:
+        job_dir = _jobs_root() / job_id
+        restore(job_id, job_dir)
+        request_path = job_dir / "quick_request.json"
+        if not request_path.exists():
+            raise HTTPException(status_code=404, detail="Quick Book checkpoint not found")
+        request_data = json.loads(request_path.read_text(encoding="utf-8"))
+        if request_data.get("project_id") != project_id or request_data.get("output_type") != "QUICK_BOOK":
+            raise HTTPException(status_code=403, detail="Job does not belong to this Quick Book project")
+        # Rebase paths because the retry may run on another Cloud Run instance.
+        # The final print artifact is already durable even if this instance has no PDF.
+        previous = _gcs_read_json(job_id=job_id, name='status.json') or {}
+        delivered = previous.get('result') or previous
+        if delivered.get('print_ready_at') and _jobs_bucket_name():
+            printed = job_dir / 'book_outputs' / 'quick-book' / 'quick-book-a3-duplex.pdf'
+            if not printed.exists():
+                printed.parent.mkdir(parents=True, exist_ok=True)
+                _gcs_client().bucket(_jobs_bucket_name()).blob(
+                    f'{_gcs_job_prefix(job_id)}/storybook.pdf').download_to_filename(str(printed))
+        request_data["job_dir"] = job_dir
+        request_data["pricing"] = None
+        request_data["face_image_paths"] = [str(job_dir / "input_images" / Path(p).name)
+                                            for p in request_data["face_image_paths"]]
+        request_data["face_image_path"] = request_data["face_image_paths"][0]
+        _JOBS[job_id] = {"job_id": job_id, "job_dir": str(job_dir), "status": "queued",
+                         "output_type": "QUICK_BOOK", "project_id": project_id,
+                         "created_at": time.time(), "pipeline_version": "v2"}
+        _persist_job_state(job_id)
+        threading.Thread(target=_run_quick_job, args=(request_data, lease), daemon=True).start()
+        return JSONResponse({"job_id": job_id, "status": "queued"})
+    except Exception:
+        release(job_id, lease)
+        raise
 
 
 @app.post("/jobs/{job_id}/render-print")

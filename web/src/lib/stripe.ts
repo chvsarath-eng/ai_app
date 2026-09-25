@@ -35,13 +35,13 @@ export function getStripeWebhookSecret () {
 }
 
 export function getStripePriceId (outputType: OutputType) {
-  return outputType === 'DIGI_BOOK'
+  return outputType !== 'LULU_BOOK'
     ? STRIPE_PRICE_IDS.DIGITAL
     : STRIPE_PRICE_IDS.HARDCOVER
 }
 
 export function getStripeAmountCents (outputType: OutputType) {
-  return outputType === 'DIGI_BOOK'
+  return outputType !== 'LULU_BOOK'
     ? STRIPE_AMOUNTS.DIGITAL_CENTS
     : STRIPE_AMOUNTS.HARDCOVER_CENTS
 }
@@ -69,7 +69,7 @@ export function buildBookLineItem (outputType: OutputType): Stripe.Checkout.Sess
     }
   }
 
-  const isDigital = outputType === 'DIGI_BOOK'
+  const isDigital = outputType !== 'LULU_BOOK'
   const unitAmount = getStripeAmountCents(outputType)
 
   return {
@@ -79,7 +79,7 @@ export function buildBookLineItem (outputType: OutputType): Stripe.Checkout.Sess
       unit_amount: unitAmount,
       tax_behavior: 'exclusive',
       product_data: {
-        name: isDigital
+        name: outputType === 'QUICK_BOOK' ? 'Quick Book - A3 Print PDF and Digital Book' : isDigital
           ? 'Personalized Digital Storybook'
           : 'Personalized Hardcover Storybook',
         description: isDigital
